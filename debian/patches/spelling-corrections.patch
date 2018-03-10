@@ -1,0 +1,38 @@
+From f844637a800d5ce792ae226fdb41c863bde5a4ab Mon Sep 17 00:00:00 2001
+From: Scarlett Clark <sgclark@kde.org>
+Date: Tue, 6 Mar 2018 11:13:08 -0700
+Subject: [PATCH] minor spelling corrections
+Forwarded: https://bugs.kde.org/show_bug.cgi?id=391474
+Last-Update: 2018-03-04
+
+---
+ app/dockview.cpp  | 2 +-
+ app/settingsdialog.cpp | 3 +--
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/app/dockview.cpp b/app/dockview.cpp
+index 8b4d9675..ee52d9dd 100644
+--- a/app/dockview.cpp
++++ b/app/dockview.cpp
+@@ -856,7 +856,7 @@ inline void DockView::syncGeometry()
+     //! before updating the positioning and geometry of the dock
+     //! we make sure that the dock is at the correct screen
+     if (this->screen() != m_screenToFollow) {
+-        qDebug() << "Sync Geometry screens incosistent!!!!";
++        qDebug() << "Sync Geometry screens inconsistent!!!!";
+         m_screenSyncTimer.start();
+     } else {
+         found = true;
+diff --git a/app/layoutconfigdialog.cpp b/app/layoutconfigdialog.cpp
+index b5e2dba6..5fc8d12c 100644
+--- a/app/layoutconfigdialog.cpp
++++ b/app/layoutconfigdialog.cpp
+@@ -500,7 +500,7 @@ void SettingsDialog::on_exportButton_clicked()
+
+     QStringList filters;
+     QString filter1(i18nc("export layout", "Latte Dock Layout file v0.2") + "(*.layout.latte)");
+-    QString filter2(i18nc("export full configuraion", "Latte Dock Full Configuration file v0.2") + "(*.latterc)");
++    QString filter2(i18nc("export full configuration", "Latte Dock Full Configuration file v0.2") + "(*.latterc)");
+
+     filters << filter1
+             << filter2;
