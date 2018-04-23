@@ -1,7 +1,8 @@
 latte-dock (0.7.5-1) UNRELEASED; urgency=medium
 
-  * New upstream release. 
-  * Remove patch applied upstream. 
+  * New upstream release.
+  * Remove patch applied upstream.
+  * Cleanup whitespace, wrap-and-sort. 
 
  -- Scarlett Clark <sgclark@kde.org>  Mon, 23 Apr 2018 06:11:51 -0700
 
