@@ -1,5 +1,11 @@
+latte-dock (0.7.5-1) UNRELEASED; urgency=medium
+
+  * New upstream release. 
+
+ -- Scarlett Clark <sgclark@kde.org>  Mon, 23 Apr 2018 06:11:51 -0700
+
 latte-dock (0.7.4-1) unstable; urgency=medium
 
-  * Initial release ( Closes: #859642 )
+  * Initial release (Closes: #859642)
 
  -- Scarlett Clark <sgclark@kde.org>  Mon, 05 Mar 2018 20:12:05 +0000
