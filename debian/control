@@ -25,8 +25,8 @@ Build-Depends: cmake (>= 3.1~),
                qtdeclarative5-dev (>= 5.7.0~)
 Standards-Version: 4.1.4
 Homepage: https://github.com/psifidotos/Latte-Dock
-Vcs-Browser: https://salsa.debian.org//git/pkg-kde/kde-extras/latte-dock.git
-Vcs-Git: https://salsa.debian.org/git/pkg-kde/kde-extras/latte-dock.git
+Vcs-Browser: https://salsa.debian.org/qt-kde-team/extras/latte-dock
+Vcs-Git: https://salsa.debian.org/qt-kde-team/extras/latte-dock.git
 
 Package: latte-dock
 Architecture: any
