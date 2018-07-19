@@ -1,8 +1,10 @@
-latte-dock (0.7.5-1) UNRELEASED; urgency=medium
+latte-dock (0.8.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
-  * Remove patch applied upstream.
-  * Cleanup whitespace, wrap-and-sort. 
+   - Remove patch applied upstream.
+   - Cleanup whitespace, wrap-and-sort. 
+   - Add new build dependency knewstuff. 
+   - Add new patch to correct another spelling error in binary. 
 
  -- Scarlett Clark <sgclark@kde.org>  Mon, 23 Apr 2018 06:11:51 -0700
 
