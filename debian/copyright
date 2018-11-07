@@ -52,12 +52,28 @@ Files: applets/*
 Copyright: 2016-2017 Smith AR <audoban@openmailbox.org>
         2016-2017 Michail Vourlakos <mvourlakos@gmail.com>
 License: GPL-3+
+Comments: This license can be found in applets/spacer/COPYING
 
 Files: icons/*
 Copyright: 2017 Alexey Varfolomeev <https://github.com/varlesh>
 License: GPL-2+
-Comments: The icons were created by @varlesh (https://github.com/varlesh).
- The creator then confirmed that GPL would be enough for his artwork.
+Comments: This license can be found here:
+ https://cgit.kde.org/latte-dock.git/diff/icons \
+ /COPYING?id=05732f3c50a89ba645d5ac12a2ccf97e2e75f2fd
+
+Files: containment/package/contents/icons/*
+Copyright: 2017 Michail Vourlakos <mvourlakos@gmail.com>
+License: GPL-2+
+Comments: This license can be found here:
+ https://cgit.kde.org/latte-dock.git/tree/containment/package/contents \
+ /icons/COPYING?id=05732f3c50a89ba645d5ac12a2ccf97e2e75f2fd
+
+Files: shell/package/contents/images/*
+Copyright: 2017 Michail Vourlakos <mvourlakos@gmail.com>
+License: LGPL-2.1+
+Comments: This license can be found here:
+ https://cgit.kde.org/latte-dock.git/diff/shell/package/contents/ \
+ images/COPYING?id=05732f3c50a89ba645d5ac12a2ccf97e2e75f2fd
 
 Files: po/ca/*
        po/ca@valencia/*
