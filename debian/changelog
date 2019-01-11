@@ -1,13 +1,3 @@
-latte-dock (0.7.4-2) unstable; urgency=medium
-
-  [ Scarlett Clark ]
-  * Fix license statements as per FTP Master's request.
-
-  [ Lisandro Damián Nicanor Pérez Meyer ]
-  * Increase Debian revision as per FTP Master's request.
-
- -- Scarlett Clark <sgclark@kde.org>  Thu, 10 Jan 2019 21:42:22 -0300
-
 latte-dock (0.7.4-1) unstable; urgency=medium
 
   * Initial release (Closes: #859642)
