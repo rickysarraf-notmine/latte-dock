@@ -1,4 +1,4 @@
-latte-dock (0.7.4-2) UNRELEASED; urgency=medium
+latte-dock (0.7.4-2) unstable; urgency=medium
 
   [ Scarlett Clark ]
   * Fix license statements as per FTP Master's request.
@@ -6,7 +6,7 @@ latte-dock (0.7.4-2) UNRELEASED; urgency=medium
   [ Lisandro Damián Nicanor Pérez Meyer ]
   * Increase Debian revision as per FTP Master's request.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 10 Jan 2019 21:37:18 -0300
+ -- Scarlett Clark <sgclark@kde.org>  Thu, 10 Jan 2019 21:42:22 -0300
 
 latte-dock (0.7.4-1) unstable; urgency=medium
 
