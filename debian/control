@@ -23,7 +23,7 @@ Build-Depends: cmake (>= 3.1~),
                pkg-config,
                pkg-kde-tools (>= 0.12),
                qtbase5-dev (>= 5.7.0~),
-               qtdeclarative5-dev (>= 5.7.0~)
+               qtdeclarative5-dev (>= 5.7.0~),
 Standards-Version: 4.1.4
 Homepage: https://github.com/psifidotos/Latte-Dock
 Vcs-Browser: https://salsa.debian.org/qt-kde-team/extras/latte-dock
@@ -35,7 +35,7 @@ Depends: plasma-desktop,
          plasma-pa,
          plasma-workspace (>= 4:5.9.0~),
          ${misc:Depends},
-         ${shlibs:Depends}
+         ${shlibs:Depends},
 Description: Dock based on plasma frameworks
  Latte is a dock based on plasma frameworks that provides an elegant and
  intuitive experience for your tasks and plasmoids. It animates it's
