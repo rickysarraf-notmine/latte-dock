@@ -1,8 +1,9 @@
 latte-dock (0.8.4-1) UNRELEASED; urgency=medium
 
-  * Add back LGPL-2.1+ to the copyright file,
-	it is still actually used.
+  * Add back LGPL-2.1+ to the copyright file, it is still actually used.
   * New upstream release.
+  * Remove patch applied upstream.
+  *
 
  -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
 
