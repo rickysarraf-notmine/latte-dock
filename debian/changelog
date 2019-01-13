@@ -4,6 +4,7 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
   * New upstream release.
   * Remove patch applied upstream.
   * Update my name in Uploaders.
+  * Move away from dhmk.
 
  -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
 

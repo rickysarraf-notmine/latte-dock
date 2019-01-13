@@ -2,10 +2,11 @@
 
 export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow
 
-include /usr/share/pkg-kde-tools/qt-kde-team/3/debian-qt-kde.mk
+%:
+	dh $@ --buildsystem=cmake
 
 override_dh_auto_clean:
 	rm -f  containment/package/metadata.desktop
 	rm -f plasmoid/package/metadata.desktop
 	rm -f shell/package/metadata.desktop
-	$(overridden_command)
+	dh_auto_clean
