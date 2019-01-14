@@ -1,15 +1,14 @@
 latte-dock (0.8.4-1) UNRELEASED; urgency=medium
 
+  [ Pino Toscano ]
+  * Remove unused (and wrong) autopkgtest tests.
+
+  [ Scarlett Moore ]
   * Add back LGPL-2.1+ to the copyright file, it is still actually used.
   * New upstream release.
   * Remove patch applied upstream.
   * Update my name in Uploaders.
   * Move away from dhmk.
-
-  [ Pino Toscano ]
-  * Remove unused (and wrong) autopkgtest tests.
-
-  [ Scarlett Moore ]
   * Remove unused clean override.
   * Fix file(s) location in copyright.
   * Add upstream patch for spelling errors, adjusted for this release.
