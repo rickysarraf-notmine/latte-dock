@@ -4,9 +4,3 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow
 
 %:
 	dh $@ --with kf5
-
-override_dh_auto_clean:
-	rm -f  containment/package/metadata.desktop
-	rm -f plasmoid/package/metadata.desktop
-	rm -f shell/package/metadata.desktop
-	dh_auto_clean
