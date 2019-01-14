@@ -2,6 +2,7 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * Remove unused (and wrong) autopkgtest tests.
+  * Link is as-needed mode.
 
   [ Scarlett Moore ]
   * Add back LGPL-2.1+ to the copyright file, it is still actually used.
