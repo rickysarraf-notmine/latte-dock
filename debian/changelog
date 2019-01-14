@@ -12,6 +12,7 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
   [ Scarlett Moore ]
   * Remove unused clean override.
   * Fix file(s) location in copyright.
+  * Add upstream patch for spelling errors, adjusted for this release.
 
  -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
 
