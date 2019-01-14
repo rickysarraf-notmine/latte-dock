@@ -42,8 +42,8 @@ Files: app/alternativeshelper.cpp
   app/screenpool.cpp
   app/screenpool.h
   app/plasmaquick/configview.h
-  app/panelshadows.cpp
-  app/panelshadows_p.h
+  app/dock/panelshadows.cpp
+  app/dock/panelshadows_p.h
 Copyright: 2013, 2014, 2016 Marco Martin <mart@kde.org>
            2011 Aaron Seigo <aseigo@kde.org>
 License: LGPL-2+
