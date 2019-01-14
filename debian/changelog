@@ -6,6 +6,9 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
   * Update my name in Uploaders.
   * Move away from dhmk.
 
+  [ Pino Toscano ]
+  * Remove unused (and wrong) autopkgtest tests.
+
  -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
 
 latte-dock (0.7.4-1) unstable; urgency=medium
