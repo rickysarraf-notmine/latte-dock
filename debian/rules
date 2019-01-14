@@ -3,7 +3,7 @@
 export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow
 
 %:
-	dh $@ --buildsystem=cmake
+	dh $@ --with kf5
 
 override_dh_auto_clean:
 	rm -f  containment/package/metadata.desktop
