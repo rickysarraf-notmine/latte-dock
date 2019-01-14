@@ -14,6 +14,7 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
   * Add upstream patch for spelling errors, adjusted for this release.
   * Bump compat to 12.
   * Bump standards-version to 4.3.0, No remaining changes.
+  * Bump minimum required kf5 frameworks to 5.38.0~ 
 
  -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
 
