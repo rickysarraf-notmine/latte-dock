@@ -1,4 +1,6 @@
-latte-dock (0.8.4-1) UNRELEASED; urgency=medium
+latte-dock (0.8.4-1) unstable; urgency=medium
+
+  * Team upload.
 
   [ Pino Toscano ]
   * Remove unused (and wrong) autopkgtest tests.
@@ -17,7 +19,7 @@ latte-dock (0.8.4-1) UNRELEASED; urgency=medium
   * Bump standards-version to 4.3.0, No remaining changes.
   * Bump minimum required kf5 frameworks to 5.38.0~
 
- -- Scarlett Moore <sgclark@kde.org>  Sat, 12 Jan 2019 11:16:41 -0700
+ -- Lisandro Damián Nicanor Pérez Meyer <lisandro@debian.org>  Thu, 24 Jan 2019 20:56:22 -0300
 
 latte-dock (0.7.4-1) unstable; urgency=medium
 
