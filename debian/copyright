@@ -5,7 +5,7 @@ Source: https://github.com/psifidotos/Latte-Dock
 Files: *
 Copyright: 2014 David Edmundson <davidedmudnson@kde.org>
         2016-2017 Smith AR <audoban@openmailbox.org>
-        2016-2017 Michail Vourlakos <mvourlakos@gmail.com>
+        2016-2019 Michail Vourlakos <mvourlakos@gmail.com>
         2012 Marco Martin <mart@kde.org>
         2017 Vít Pelčák <vit@pelcak.org>
         2017 scootergrisen
@@ -19,7 +19,7 @@ Copyright: 2014 David Edmundson <davidedmudnson@kde.org>
         2018 Geoffray Levasseur <geoffray.levasseurbrandin@numericable.fr>
         2018 Matthieu Robin <kde@macolu.org>
         2017 Ivan Bordoni <ivan.mail@fastwebnet.it>
-        2017,2018 Paolo Zamponi <zapaolo@email.it>
+        2017-2019 Paolo Zamponi <zapaolo@email.it>
         2017 Japanese KDE translation team <kde-jp@kde.org>
         2017 Freek de Kruijf <freekdekruijf@kde.nl>
         2016 Damian Kopeć <damikope@gmail.com>
@@ -31,10 +31,14 @@ Copyright: 2014 David Edmundson <davidedmudnson@kde.org>
         2016 Viorel-Cătălin Răpițeanu <rapiteanu.catalin@gmail.com>
         2017 Vladislav Gorevoy <vladislavgorevoy@gmail.com>
         2017 Alexander Potashev <aspotashev@gmail.com>
+        2018,2019 Alexander Yavorsky <kekcuha@gmail.com>
         2017 Roman Paholik <wizzardsk@gmail.com>
         2017,2018 Stefan Asserhäll <stefan.asserhall@bredband.net>
-        2017 guoyunhebrave <guoyunhebrave@gmail.com>
+        2017-2019 guoyunhebrave <guoyunhebrave@gmail.com>
         2016,2017 Jeff Huang <s8321414@gmail.com>
+        2018,2019 Tommi Nieminen <translator@legisign.org>
+        2018,2019 Adrian Chaves <adrian@chaves.io>
+        2018,2019 pan93412 <pan93412@gmail.com>
 License: GPL-2+
 
 Files: app/alternativeshelper.cpp
