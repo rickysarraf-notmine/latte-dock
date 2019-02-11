@@ -1,4 +1,4 @@
-latte-dock (0.8.5-1) UNRELEASED; urgency=medium
+latte-dock (0.8.5-1) unstable; urgency=medium
 
   * New upstream release.
   * Update my email address.
@@ -6,7 +6,7 @@ latte-dock (0.8.5-1) UNRELEASED; urgency=medium
   * Refresh copyright - new 2019 PO entries.
   * Bump Qt depend version as per cmake.
 
- -- Scarlett Moore <sgmoore@kde.org>  Thu, 07 Feb 2019 11:35:39 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Mon, 11 Feb 2019 16:27:09 -0300
 
 latte-dock (0.8.4-1) unstable; urgency=medium
 
