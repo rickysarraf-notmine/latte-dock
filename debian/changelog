@@ -1,8 +1,7 @@
 latte-dock (0.8.9-1) UNRELEASED; urgency=medium
 
   * New upstream release.
-  * Remove patch applied upstream for spelling errors.
-  * Add new build dependency libkf5sysguard.
+  * Remove patch applied upstream for spelling errors. 
 
  -- Scarlett Moore <sgmoore@kde.org>  Mon, 25 Feb 2019 17:56:09 +0000
 
