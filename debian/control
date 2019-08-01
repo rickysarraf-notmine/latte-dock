@@ -8,9 +8,15 @@ Build-Depends: cmake (>= 3.1~),
                extra-cmake-modules (>= 5.38.0~),
                libkf5activities-dev (>= 5.38.0~),
                libkf5archive-dev (>= 5.38.0~),
+               libkf5coreaddons-dev (>= 5.38.0~),
                libkf5crash-dev (>= 5.38.0~),
+               libkf5dbusaddons-dev (>= 5.38.0~),
                libkf5declarative-dev (>= 5.38.0~),
+               libkf5guiaddons-dev (>= 5.38.0~),
                libkf5iconthemes-dev (>= 5.38.0~),
+               libkf5i18n-dev (>= 5.38.0~),
+               libkf5sysguard-dev (>= 5.38.0~),
+               libkf5globalaccel-dev (>= 5.38.0~),
                libkf5newstuff-dev (>= 5.38.0~),
                libkf5notifications-dev (>= 5.38.0~),
                libkf5plasma-dev (>= 5.38.0~),
@@ -32,10 +38,8 @@ Vcs-Git: https://salsa.debian.org/qt-kde-team/extras/latte-dock.git
 Package: latte-dock
 Architecture: any
 Depends: plasma-desktop,
-         plasma-pa,
-         plasma-workspace (>= 4:5.9.0~),
-         ${misc:Depends},
-         ${shlibs:Depends},
+                ${shlibs:Depends},
+                ${misc:Depends}
 Description: Dock based on plasma frameworks
  Latte is a dock based on plasma frameworks that provides an elegant and
  intuitive experience for your tasks and plasmoids. It animates it's
