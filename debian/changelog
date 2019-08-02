@@ -3,6 +3,8 @@ latte-dock (0.9.0-1) UNRELEASED; urgency=medium
   * New upstream release.
   * Remove patch applied upstream for spelling errors.
   * Update dependencies per cmake.
+  * Refresh copyright file for moved files and remove
+    extra COPYING files listed in debian/copyright.
 
  -- Scarlett Moore <sgmoore@kde.org>  Mon, 25 Feb 2019 17:56:09 +0000
 
