@@ -1,4 +1,4 @@
-latte-dock (0.9.0-1) UNRELEASED; urgency=medium
+latte-dock (0.9.0-2) unstable; urgency=medium
 
   * New upstream release.
   * Remove patch applied upstream for spelling errors.
@@ -9,8 +9,9 @@ latte-dock (0.9.0-1) UNRELEASED; urgency=medium
     Removed extra dependencies not listed anywhere as needed.
     Commit: c71f2689d81f27f0623324a4a273dca9a5ffaf86
     (Closes: #933543)
+  * Release to unstable.
 
- -- Scarlett Moore <sgmoore@kde.org>  Sun, 04 Aug 2019 07:30:44 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Sun, 04 Aug 2019 07:32:28 -0700
 
 latte-dock (0.8.5-1) unstable; urgency=medium
 
