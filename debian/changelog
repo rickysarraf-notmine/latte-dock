@@ -1,6 +1,7 @@
 latte-dock (0.9.1-1) UNRELEASED; urgency=medium
 
   * New upstream Release.
+  * Bump standards version to 4.4.0; No changes needed.
 
  -- Scarlett Moore <sgmoore@kde.org>  Sat, 10 Aug 2019 11:51:06 -0700
 
