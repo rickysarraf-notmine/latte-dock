@@ -1,9 +1,10 @@
-latte-dock (0.9.1-1) UNRELEASED; urgency=medium
+latte-dock (0.9.1-1) unstable; urgency=medium
 
   * New upstream Release.
   * Bump standards version to 4.4.0; No changes needed.
+  * Release to unstable.
 
- -- Scarlett Moore <sgmoore@kde.org>  Sat, 10 Aug 2019 11:51:06 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Sat, 10 Aug 2019 17:58:18 -0700
 
 latte-dock (0.9.0-2) unstable; urgency=medium
 
