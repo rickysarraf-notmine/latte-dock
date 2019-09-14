@@ -1,3 +1,9 @@
+latte-dock (0.9.2-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Scarlett Moore <sgmoore@kde.org>  Sat, 14 Sep 2019 04:19:25 -0700
+
 latte-dock (0.9.1-1) unstable; urgency=medium
 
   * New upstream Release.
