@@ -7,6 +7,7 @@ latte-dock (0.9.5-0r1) UNRELEASED; urgency=medium
     - explicitly add gettext
   * Switch from debian/compat to debhelper-compat.
   * Simplify removal of installed COPYING files.
+  * Bump Standards-Version to 4.4.1, no changes required.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sat, 07 Dec 2019 17:58:44 +0100
 
