@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>
 Uploaders: Scarlett Moore <sgmoore@kde.org>
 Build-Depends: cmake (>= 3.1~),
-               debhelper (>= 12),
+               debhelper-compat (= 12),
                extra-cmake-modules (>= 5.38.0~),
                gettext,
                libkf5activities-dev (>= 5.38.0~),
