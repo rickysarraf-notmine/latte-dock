@@ -2,6 +2,9 @@ latte-dock (0.9.5-0r1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * New upstream release.
+  * Update the build dependencies:
+    - bump libkf5coreaddons-dev to 5.62.0, so libkf5sysguard-dev can be dropped
+    - explicitly add gettext
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sat, 07 Dec 2019 17:58:44 +0100
 
