@@ -6,6 +6,7 @@ latte-dock (0.9.5-0r1) UNRELEASED; urgency=medium
     - bump libkf5coreaddons-dev to 5.62.0, so libkf5sysguard-dev can be dropped
     - explicitly add gettext
   * Switch from debian/compat to debhelper-compat.
+  * Simplify removal of installed COPYING files.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sat, 07 Dec 2019 17:58:44 +0100
 

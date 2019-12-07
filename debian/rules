@@ -8,5 +8,4 @@ export DEB_LDFLAGS_MAINT_APPEND := -Wl,--as-needed
 
 override_dh_auto_install:
 	dh_auto_install
-	rm -f $(CURDIR)/debian/latte-dock/usr/share/plasma/plasmoids/org.kde.latte.containment/contents/icons/COPYING
-	rm -f $(CURDIR)/debian/latte-dock/usr/share/plasma/shells/org.kde.latte.shell/contents/images/COPYING
+	find debian/latte-dock -name COPYING -print -delete
