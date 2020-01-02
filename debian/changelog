@@ -2,6 +2,7 @@ latte-dock (0.9.7-0r1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * New upstream release.
+  * Explictly add the libx11-xcb-dev, and libxcb-randr0-dev build dependencies.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 02 Jan 2020 14:55:55 +0100
 
