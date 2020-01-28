@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: latte-dock
-Source: https://github.com/psifidotos/Latte-Dock
+Source: https://userbase.kde.org/LatteDock
 
 Files: *
 Copyright: 2014 David Edmundson <davidedmudnson@kde.org>

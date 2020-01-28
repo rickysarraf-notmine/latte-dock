@@ -33,7 +33,7 @@ Build-Depends: cmake (>= 3.1~),
                qtbase5-dev (>= 5.9.0~),
                qtdeclarative5-dev (>= 5.9.0~),
 Standards-Version: 4.5.0
-Homepage: https://github.com/KDE/latte-dock
+Homepage: https://userbase.kde.org/LatteDock
 Vcs-Browser: https://salsa.debian.org/qt-kde-team/extras/latte-dock
 Vcs-Git: https://salsa.debian.org/qt-kde-team/extras/latte-dock.git
 

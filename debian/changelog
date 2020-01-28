@@ -3,6 +3,7 @@ latte-dock (0.9.8-0r1) UNRELEASED; urgency=medium
   [ Pino Toscano ]
   * New upstream release.
   * Bump Standards-Version to 4.5.0, no changes required.
+  * Set Homepage and Source to https://userbase.kde.org/LatteDock.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 28 Jan 2020 21:45:03 +0100
 
