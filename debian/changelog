@@ -2,6 +2,9 @@ latte-dock (0.9.10-1) UNRELEASED; urgency=medium
 
   * Add some team variables to salsa-ci config.
   * New upstream release.
+  * Update hardening build flags.
+    - Update deb_build_maint_options to add +fortify hardening flag
+      in order to pass blhc ci test.
 
  -- Scarlett Moore <sgmoore@kde.org>  Fri, 27 Mar 2020 07:33:32 -0700
 
