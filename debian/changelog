@@ -7,6 +7,8 @@ latte-dock (0.9.10-1) UNRELEASED; urgency=medium
       in order to pass blhc ci test.
     - Add the export and include for dpkg buildflags as
       fortify needs it according to wiki.
+    - Explicitly append CFLAGS to CPPFLAGS to address
+      bug #653916 which breaks fortify with cmake.
   * Refresh copyright information.
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
