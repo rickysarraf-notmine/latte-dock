@@ -1,11 +1,6 @@
 #!/usr/bin/make -f
 
 export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow,+fortify
-DPKG_EXPORT_BUILDFLAGS = 1
-include /usr/share/dpkg/buildflags.mk
-export CPPFLAGS CFLAGS LDFLAGS
-CFLAGS+=$(CPPFLAGS)
-CXXFLAGS+=$(CPPFLAGS)
 export DEB_LDFLAGS_MAINT_APPEND := -Wl,--as-needed
 
 %:
