@@ -1,12 +1,11 @@
 #!/usr/bin/make -f
 
-export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow,+fortify
+export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow
 export DEB_LDFLAGS_MAINT_APPEND := -Wl,--as-needed
 
 %:
 	dh $@ --with kf5
-  
+
 override_dh_auto_install:
 	dh_auto_install
 	find debian/latte-dock -name COPYING -print -delete
-  

@@ -2,9 +2,6 @@ latte-dock (0.9.10-1) UNRELEASED; urgency=medium
 
   * Add some team variables to salsa-ci config.
   * New upstream release.
-  * Update hardening build flags.
-    - Update deb_build_maint_options to add +fortify hardening flag
-      in order to pass blhc ci test.
   * Refresh copyright information.
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
