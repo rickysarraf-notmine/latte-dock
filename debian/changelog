@@ -1,12 +1,13 @@
-latte-dock (0.9.10-1) UNRELEASED; urgency=medium
+latte-dock (0.9.11-1) UNRELEASED; urgency=medium
 
   * Add some team variables to salsa-ci config.
   * New upstream release.
   * Refresh copyright information.
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
+  * Update to newest release.
 
- -- Scarlett Moore <sgmoore@kde.org>  Fri, 27 Mar 2020 07:33:32 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
 
 latte-dock (0.9.9-1) unstable; urgency=medium
 
