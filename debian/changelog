@@ -6,6 +6,13 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
   * Update to newest release.
+  * Switch to +all hardening options.
+    - Enable dpkg export buildflags and include mk file.
+    - cmake ignores CPPFLAGS so to remedy we get the
+      values from dpkg-buildflags, append to cxxflags,
+      pass adjusted cxxflags to the compiler via
+      cmake_cxx_compiler_arg1 cxxflags which works with preprocessor
+      as well.
 
  -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
 
