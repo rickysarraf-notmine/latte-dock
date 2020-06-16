@@ -13,6 +13,7 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
   * Switch to +all hardening options.
     - Enable dpkg export buildflags and include mk file.
   *Add Bug-Database and Bug-Submit information to upstream metadata.
+  * Add missing runtime dependencies.
 
  -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
 
