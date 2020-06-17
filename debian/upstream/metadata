@@ -4,5 +4,5 @@ Contact: Michail Vourlakos <mvourlakos@gmail.com>
 Repository: https://anongit.kde.org/latte-dock.git
 Repository-Browse: https://cgit.kde.org/latte-dock.git/
 Security-Contact: Michail Vourlakos <mvourlakos@gmail.com>
-Bug-Database: https://bugs.kde.org/buglist.cgi?bug_file_loc_type=allwordssubstr&bug_status=UNCONFIRMED&bug_status=NEW&bug_status=ASSIGNED&bug_status=REOPENED&bugidtype=include&chfieldto=Now&cmdtype=doit&emailassigned_to1=1&emailassigned_to2=1&emailcc2=1&emailreporter2=1&emailtype1=substring&emailtype2=substring&field0-0-0=noop&keywords_type=allwords&long_desc_type=substring&order=Reuse%20same%20sort%20as%20last%20time&product=lattedock&query_format=advanced&short_desc_type=allwordssubstr&type0-0-0=noop
+Bug-Database: https://bugs.kde.org/buglist.cgi?bug_status=UNCONFIRMED&bug_status=CONFIRMED&bug_status=ASSIGNED&bug_status=REOPENED&list_id=1756244&product=lattedock&query_format=advanced
 Bug-Submit: https://bugs.kde.org/enter_bug.cgi?product=lattedock
