@@ -1,7 +1,8 @@
 latte-dock (0.9.11-1) UNRELEASED; urgency=medium
 
   * Add some team variables to salsa-ci config.
-  * New upstream release.
+    - Do not disable the conflicts and RC tests.
+    - Set reprotest variation to buildpath.
   * Refresh copyright information.
     - Version 0.9.10 refresh all copyright since 2019.
     - Version 0.9.11 release refresh.
@@ -9,7 +10,7 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
       - Fix DEP 5 entry for KDEeV clause.
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
-  * Update to newest release (0.9.11-1).
+  * New upstream release (0.9.11-1).
   * Add Bug-Database and Bug-Submit information to upstream metadata.
   * Add missing runtime dependencies.
   * Bump debhelper-compat to 13.
