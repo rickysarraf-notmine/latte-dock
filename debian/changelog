@@ -14,6 +14,7 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
   * Add Bug-Database and Bug-Submit information to upstream metadata.
   * Add missing runtime dependencies.
   * Bump debhelper-compat to 13.
+  * Enable hardening+=all build flags.
 
  -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
 
