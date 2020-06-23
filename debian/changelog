@@ -1,4 +1,4 @@
-latte-dock (0.9.11-1) UNRELEASED; urgency=medium
+latte-dock (0.9.11-1) unstable; urgency=medium
 
   * Add some team variables to salsa-ci config.
     - Do not disable the conflicts and RC tests.
@@ -17,8 +17,9 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
   * Enable hardening+=all build flags.
   * Remove as-needed linker override from rules as it is
     now default.
+  * Release to unstable.
 
- -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Tue, 23 Jun 2020 08:58:07 -0700
 
 latte-dock (0.9.9-1) unstable; urgency=medium
 
