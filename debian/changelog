@@ -1,7 +1,8 @@
-latte-dock (0.9.11-1) UNRELEASED; urgency=medium
+latte-dock (0.9.11-1) unstable; urgency=medium
 
   * Add some team variables to salsa-ci config.
-  * New upstream release.
+    - Do not disable the conflicts and RC tests.
+    - Set reprotest variation to buildpath.
   * Refresh copyright information.
     - Version 0.9.10 refresh all copyright since 2019.
     - Version 0.9.11 release refresh.
@@ -9,12 +10,16 @@ latte-dock (0.9.11-1) UNRELEASED; urgency=medium
       - Fix DEP 5 entry for KDEeV clause.
   * Add Rules-Requires-Root: no to control for reduced fakeroot
     overhead.
-  * Update to newest release.
-  * Switch to +all hardening options.
-    - Enable dpkg export buildflags and include mk file.
-  *Add Bug-Database and Bug-Submit information to upstream metadata.
+  * New upstream release (0.9.11-1).
+  * Add Bug-Database and Bug-Submit information to upstream metadata.
+  * Add missing runtime dependencies.
+  * Bump debhelper-compat to 13.
+  * Enable hardening+=all build flags.
+  * Remove as-needed linker override from rules as it is
+    now default.
+  * Release to unstable.
 
- -- Scarlett Moore <sgmoore@kde.org>  Mon, 13 Apr 2020 11:23:15 -0700
+ -- Scarlett Moore <sgmoore@kde.org>  Tue, 23 Jun 2020 08:58:07 -0700
 
 latte-dock (0.9.9-1) unstable; urgency=medium
 
