@@ -22,8 +22,6 @@ import QtQuick 2.7
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 import "options" as IndicatorOptions
 import "styles" as IndicatorStyles
 import "../task/indicator" as TaskIndicator
@@ -47,6 +45,7 @@ Item{
         readonly property bool providesHoveredAnimation: false
         readonly property bool providesClickedAnimation: false
         readonly property int extraMaskThickness: 0
+        readonly property real lengthPadding: 0.08
         readonly property real minThicknessPadding: 0
         readonly property real minLengthPadding:0
     }

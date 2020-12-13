@@ -19,91 +19,42 @@
 
 import QtQuick 2.7
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 Item{
-    // NAME: latteSideColoringEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is FALSE, Latte is not painting/colorizing this applet
-    //       in any case. In such case the applet can use 'palette'
-    //       in order to access the color palette used at all cases from Latte
-    //   USE CASE: when Latte is transparent and applets colors need to be adjusted in order
-    //       to look consistent with the underlying desktop background OR the applet
-    //       is not using monochromatic icons but rather colorful ones.
-    // @since: 0.9
-
-
-    // NAME: latteIconOverlayEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is FALSE, Latte is not overlaying any icons above
-    //       the applet or alters the applet visual in any sense.
-    //       That means that the applet is responsible to provide a coherent
-    //       parabolic effect experience.
-    // @since: 0.9
-
-    // NAME: activeIndicatorEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is TRUE, Latte can show its own Active Indicator
-    //       when needed. For FALSE, the Latte Active Indicator is not drawn
-    //       or used for that applet.
-    // @since: 0.9
-
-    // NAME: lengthMarginsEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is TRUE, all length margins are drawn including
-    //       indicator padding and applets distance. For FALSE, length margins
-    //       are not drawn at all.
-    // @since: 0.9
-
-    // NAME: parabolicEffectEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is TRUE, Latte can use Parabolic Effect in order
-    //       to draw that applet. For FALSE, this applet is considered locked
-    //       and can not be zoomed.
-    // @since: 0.9
-
-    // NAME: windowsTrackingEnabled
-    // TYPE: bool
-    //   USAGE: writable through actions.setProperty
-    //   EXPLANATION: when is TRUE, Latte is informed that this applet requests
-    //       windows tracking. For FALSE, this applet is not requesting
-    //       windows tracking.
-    // @since: 0.9
-
     function setProperty(appletId, parameter, value) {
         if (parameter === "latteSideColoringEnabled") {
-            mainCommunicator.latteSideColoringEnabled = value;
+            mainCommunicator.requires.latteSideColoringEnabled = value;
         } else if (parameter === "latteIconOverlayEnabled") {
-            mainCommunicator.latteIconOverlayEnabled = value;
+            mainCommunicator.requires.latteIconOverlayEnabled = value;
         } else if (parameter === "activeIndicatorEnabled") {
-            mainCommunicator.activeIndicatorEnabled = value;
+            mainCommunicator.requires.activeIndicatorEnabled = value;
         } else if (parameter === "lengthMarginsEnabled") {
-           mainCommunicator.lengthMarginsEnabled = value;
+           mainCommunicator.requires.lengthMarginsEnabled = value;
         } else if (parameter === "parabolicEffectLocked") {
-            mainCommunicator.parabolicEffectLocked = value;
+            mainCommunicator.requires.parabolicEffectLocked = value;
+        } else if (parameter === "screenEdgeMarginSupported") {
+            mainCommunicator.requires.screenEdgeMarginSupported = value;
         } else if (parameter === "windowsTrackingEnabled") {
-            mainCommunicator.windowsTrackingEnabled = value;
+            mainCommunicator.requires.windowsTrackingEnabled = value;
         }
     }
 
     function getProperty(appletId, parameter) {
         if (parameter === "latteSideColoringEnabled") {
-            return mainCommunicator.latteSideColoringEnabled;
+            return mainCommunicator.requires.latteSideColoringEnabled;
         } else if (parameter === "latteIconOverlayEnabled") {
-            return mainCommunicator.latteIconOverlayEnabled;
+            return mainCommunicator.requires.latteIconOverlayEnabled;
         } else if (parameter === "activeIndicatorEnabled") {
-            return mainCommunicator.activeIndicatorEnabled;
+            return mainCommunicator.requires.activeIndicatorEnabled;
         } else if (parameter === "lengthMarginsEnabled") {
-            return mainCommunicator.lengthMarginsEnabled;
+            return mainCommunicator.requires.lengthMarginsEnabled;
         } else if (parameter === "parabolicEffectLocked") {
-            return mainCommunicator.parabolicEffectLocked;
+            return mainCommunicator.requires.parabolicEffectLocked;
+        } else if (parameter === "screenEdgeMarginSupported") {
+            return mainCommunicator.requires.screenEdgeMarginSupported;
         } else if (parameter === "windowsTrackingEnabled") {
-            return mainCommunicator.windowsTrackingEnabled;
+            return mainCommunicator.requires.windowsTrackingEnabled;
         }
 
         return null;
@@ -118,6 +69,6 @@ Item{
     }
 
     function version(major, minor, patch) {
-        return Latte.WindowSystem.makeVersion(major, minor, patch)
+        return LatteCore.Environment.makeVersion(major, minor, patch)
     }
 }

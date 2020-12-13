@@ -22,7 +22,7 @@ import QtQuick 2.7
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.draganddrop 2.0 as DragDrop
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 DragDrop.DropArea {
     id: dragArea
@@ -39,8 +39,6 @@ DragDrop.DropArea {
 
         property bool computationsAreValid: false
     }
-
-    property bool animationSent: false
 
     Connections{
         target: root.dragInfo
@@ -121,10 +119,7 @@ DragDrop.DropArea {
 
         //! Send signal AFTER the dragging is confirmed otherwise the restore mask signal from animations
         //! may not be triggered #408926
-        if (!animationSent) {
-            animationSent = true;
-            slotAnimationsNeedLength(1);
-        }
+        animations.needLength.addEvent(dragArea);
 
         if (latteApplet && (dragInfo.onlyLaunchers || dragInfo.isSeparator || !dragInfo.isPlasmoid)) {
             if (dragInfo.onlyLaunchers) {
@@ -145,7 +140,7 @@ DragDrop.DropArea {
             }
         }
 
-        if (!root.ignoreRegularFilesDragging && !dragResistaner.running && (!latteApplet || (latteApplet && !dragInfo.isLatteTasks))) {
+        if (!root.ignoreRegularFilesDragging && !dragResistaner.running) {
             if (!isForeground) {
                 dragResistaner.start();
             }
@@ -180,7 +175,7 @@ DragDrop.DropArea {
             }
         }
 
-        if (!root.ignoreRegularFilesDragging && !dragResistaner.running && (!latteApplet || (latteApplet && !dragInfo.isLatteTasks))) {
+        if (!root.ignoreRegularFilesDragging && !dragResistaner.running) {
             if (!isForeground) {
                 dragResistaner.start();
             }
@@ -196,10 +191,7 @@ DragDrop.DropArea {
     }
 
     onDragLeave: {
-        if (animationSent) {
-            animationSent = false;
-            slotAnimationsNeedLength(-1);
-        }
+        animations.needLength.removeEvent(dragArea);
 
         root.addLaunchersMessage = false;
 
@@ -210,10 +202,7 @@ DragDrop.DropArea {
     }
 
     onDrop: {
-        if (animationSent) {
-            animationSent = false;
-            slotAnimationsNeedLength(-1);
-        }
+        animations.needLength.removeEvent(dragArea);
 
         if (root.ignoreRegularFilesDragging && dragInfo.isTask || dockIsHidden || visibilityManager.inSlidingIn || visibilityManager.inSlidingOut) {
             return;
@@ -221,12 +210,16 @@ DragDrop.DropArea {
 
         if (latteApplet && dragInfo.onlyLaunchers && (root.addLaunchersInTaskManager || root.latteAppletContainer.containsPos(event))) {
             latteApplet.launchersDropped(event.mimeData.urls);
-        } else if (!latteApplet || (latteApplet && !dragInfo.isLatteTasks)) {
+        } else {
             plasmoid.processMimeData(event.mimeData, event.x, event.y);
             event.accept(event.proposedAction);
         }
 
         root.addLaunchersMessage = false;
         dndSpacer.opacity = 0;
+
+        if (dragInfo.isPlasmoid && root.panelAlignment === LatteCore.Types.Justify) {
+            root.layoutManagerMoveAppletsBasedOnJustifyAlignment();
+        }
     }
 }

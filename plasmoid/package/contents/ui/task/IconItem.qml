@@ -29,7 +29,7 @@ import org.kde.plasma.private.taskmanager 0.1 as TaskManagerApplet
 
 import org.kde.kquickcontrolsaddons 2.0 as KQuickControlAddons
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 import "animations" as TaskAnimations
@@ -40,6 +40,9 @@ import "animations" as TaskAnimations
 
 Item{
     id: taskIcon
+
+   // width: wrapper.regulatorWidth
+   // height: wrapper.regulatorHeight
 
     //big interval to show shadows only after all the crappy adds and removes of tasks
     //have happened
@@ -115,12 +118,12 @@ Item{
 
     TitleTooltipParent{
         id: titleTooltipParent
-        thickness: root.zoomFactor * (root.iconSize + root.thickMargins)
+        thickness: taskItem.parabolic.factor.zoom * taskItem.metrics.totals.thickness
     }
 
     TitleTooltipParent{
         id: previewsTooltipParent
-        thickness: root.zoomFactor * (root.iconSize + root.thickMargins) + 1
+        thickness: (taskItem.parabolic.factor.zoom * taskItem.metrics.totals.thickness)
     }
 
     //!
@@ -149,15 +152,14 @@ Item{
             }
         }
 
-        Latte.IconItem{
+        LatteCore.IconItem{
             id: iconImageBuffer
-
             anchors.centerIn: parent
+            width: newTempSize
+            height: width
 
-            width: Math.round(newTempSize)
-            height: Math.round(width)
             source: decoration
-            smooth: root.zoomFactor === 1 ? true : false
+            smooth: taskItem.parabolic.factor.zoom === 1 ? true : false
             providesColors: indicators ? indicators.info.needsIconColors : false
 
             opacity: root.enableShadows
@@ -182,12 +184,12 @@ Item{
                 }
             }
 
-            property int zoomedSize: root.zoomFactor * root.iconSize
+            property int zoomedSize: taskItem.parabolic.factor.zoom * taskItem.metrics.iconSize
 
-            property real basicScalingWidth : wrapper.inTempScaling ? (root.iconSize * wrapper.scaleWidth) :
-                                                                      root.iconSize * wrapper.mScale
-            property real basicScalingHeight : wrapper.inTempScaling ? (root.iconSize * wrapper.scaleHeight) :
-                                                                       root.iconSize * wrapper.mScale
+            property real basicScalingWidth : wrapper.inTempScaling ? (taskItem.metrics.iconSize * wrapper.scaleWidth) :
+                                                                      taskItem.metrics.iconSize * wrapper.mScale
+            property real basicScalingHeight : wrapper.inTempScaling ? (taskItem.metrics.iconSize * wrapper.scaleHeight) :
+                                                                       taskItem.metrics.iconSize * wrapper.mScale
 
             property real newTempSize: {
                 if (wrapper.opacity === 1 ) {
@@ -221,10 +223,10 @@ Item{
                         target:iconImageBuffer;
                         anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined;
                         anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined;
-                        anchors.right: root.position === PlasmaCore.Types.RightPositioned ? parent.right : undefined;
-                        anchors.left: root.position === PlasmaCore.Types.LeftPositioned ? parent.left : undefined;
-                        anchors.top: root.position === PlasmaCore.Types.TopPositioned ? parent.top : undefined;
-                        anchors.bottom: root.position === PlasmaCore.Types.BottomPositioned ? parent.bottom : undefined;
+                        anchors.right: root.location === PlasmaCore.Types.RightEdge ? parent.right : undefined;
+                        anchors.left: root.location === PlasmaCore.Types.LeftEdge ? parent.left : undefined;
+                        anchors.top: root.location === PlasmaCore.Types.TopEdge ? parent.top : undefined;
+                        anchors.bottom: root.location === PlasmaCore.Types.BottomEdge ? parent.bottom : undefined;
                     }
                 },
 
@@ -236,10 +238,10 @@ Item{
                         target:iconImageBuffer;
                         anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined;
                         anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined;
-                        anchors.right: root.position === PlasmaCore.Types.LeftPositioned ? parent.right : undefined;
-                        anchors.left: root.position === PlasmaCore.Types.RightPositioned ? parent.left : undefined;
-                        anchors.top: root.position === PlasmaCore.Types.BottomPositioned ? parent.top : undefined;
-                        anchors.bottom: root.position === PlasmaCore.Types.TopPositioned ? parent.bottom : undefined;
+                        anchors.right: root.location === PlasmaCore.Types.LeftEdge ? parent.right : undefined;
+                        anchors.left: root.location === PlasmaCore.Types.RightEdge ? parent.left : undefined;
+                        anchors.top: root.location === PlasmaCore.Types.BottomEdge ? parent.top : undefined;
+                        anchors.bottom: root.location === PlasmaCore.Types.TopEdge ? parent.bottom : undefined;
                     }
                 }
             ]
@@ -251,7 +253,7 @@ Item{
                     to: "*"
                     enabled: !fastRestoreAnimation.running && !taskItem.inMimicParabolicAnimation
 
-                    AnchorAnimation { duration: 1.5*root.durationTime*units.longDuration }
+                    AnchorAnimation { duration: 1.5 * taskItem.animations.speedFactor.current * taskItem.animations.duration.large }
                 }
             ]
         } //IconImageBuffer
@@ -293,7 +295,7 @@ Item{
             property bool showAudio: (root.showAudioBadge && taskItem.hasAudioStream && taskItem.playingAudio && !taskItem.isSeparator) && !shortcutBadge.active
 
             Behavior on activateProgress {
-                NumberAnimation { duration: root.durationTime*2*units.longDuration }
+                NumberAnimation { duration: 2 * taskItem.animations.speedFactor.current * taskItem.animations.duration.large }
             }
 
             sourceComponent: Item{
@@ -302,7 +304,7 @@ Item{
                     enabled: false
                     anchors.fill: parent
                     property var source: ShaderEffectSource {
-                        sourceItem: Latte.IconItem{
+                        sourceItem: LatteCore.IconItem{
                             width: iconImageBuffer.width
                             height: iconImageBuffer.height
                             source: iconImageBuffer.source
@@ -344,7 +346,7 @@ Item{
                                 states: [
                                     State {
                                         name: "default"
-                                        when: (plasmoid.location !== PlasmaCore.Types.RightEdge)
+                                        when: (root.location !== PlasmaCore.Types.RightEdge)
 
                                         AnchorChanges {
                                             target: maskRect
@@ -357,7 +359,7 @@ Item{
                                     },
                                     State {
                                         name: "right"
-                                        when: (plasmoid.location === PlasmaCore.Types.RightEdge)
+                                        when: (root.location === PlasmaCore.Types.RightEdge)
 
                                         AnchorChanges {
                                             target: maskRect
@@ -387,7 +389,7 @@ Item{
                                 states: [
                                     State {
                                         name: "default"
-                                        when: (plasmoid.location !== PlasmaCore.Types.RightEdge)
+                                        when: (root.location !== PlasmaCore.Types.RightEdge)
 
                                         AnchorChanges {
                                             target: maskRect2
@@ -400,7 +402,7 @@ Item{
                                     },
                                     State {
                                         name: "right"
-                                        when: (plasmoid.location === PlasmaCore.Types.RightEdge)
+                                        when: (root.location === PlasmaCore.Types.RightEdge)
 
                                         AnchorChanges {
                                             target: maskRect2
@@ -506,7 +508,7 @@ Item{
 
                 //! HACK TO AVOID PIXELIZATION
                 //! WORKAROUND: When Effects are enabled e.g. BrightnessContrast, Colorize etc.
-                //! the icon appears pixelated. It is even most notable when zoomFactor === 1
+                //! the icon appears pixelated. It is even most notable when parabolic.factor.zoom === 1
                 //! I don't know enabling cached=true helps, but it does.
                 cached: true
 
@@ -527,7 +529,7 @@ Item{
 
             //! HACK TO AVOID PIXELIZATION
             //! WORKAROUND: When Effects are enabled e.g. BrightnessContrast, Colorize etc.
-            //! the icon appears pixelated. It is even most notable when zoomFactor === 1
+            //! the icon appears pixelated. It is even most notable when parabolic.factor.zoom === 1
             //! I don't know enabling cached=true helps, but it does.
             cached: true
 
@@ -549,7 +551,7 @@ Item{
 
             //! HACK TO AVOID PIXELIZATION
             //! WORKAROUND: When Effects are enabled e.g. BrightnessContrast, Colorize etc.
-            //! the icon appears pixelated. It is even most notable when zoomFactor === 1
+            //! the icon appears pixelated. It is even most notable when parabolic.factor.zoom === 1
             //! I don't know enabling cached=true helps, but it does.
             cached: true
 
@@ -561,7 +563,7 @@ Item{
             contrast: 0.1
 
             Behavior on opacity {
-                NumberAnimation { duration: root.durationTime*units.longDuration }
+                NumberAnimation { duration: taskItem.animations.speedFactor.current * taskItem.animations.duration.large }
             }
         }
 
@@ -573,7 +575,7 @@ Item{
 
             //! HACK TO AVOID PIXELIZATION
             //! WORKAROUND: When Effects are enabled e.g. BrightnessContrast, Colorize etc.
-            //! the icon appears pixelated. It is even most notable when zoomFactor === 1
+            //! the icon appears pixelated. It is even most notable when parabolic.factor.zoom === 1
             //! I don't know enabling cached=true helps, but it does.
             cached: true
 
@@ -596,8 +598,8 @@ Item{
         height: !root.vertical ? thickness : length
         anchors.centerIn: parent
 
-        readonly property int length: root.iconSize + root.lengthMargins
-        readonly property int thickness: root.iconSize + root.thickMargins
+        readonly property int length: taskItem.metrics.totals.length
+        readonly property int thickness: taskItem.metrics.totals.thickness
 
         readonly property real applyOpacity: root.dropNewLauncher && !mouseHandler.onlyLaunchers
                                              && (root.dragSource == null) && (mouseHandler.hoveredItem === taskItem) ? 0.7 : 0
@@ -648,36 +650,34 @@ Item{
 
         State{
             name: "isDragged"
-            when: ( (taskItem.isDragged) && (!root.inConfigureAppletsMode) )
+            when: taskItem.isDragged
         }
     ]
 
     //////////// Transitions //////////////
 
+    readonly property string draggingNeedThicknessEvent: taskIcon + "_dragging"
+
     transitions: [
         Transition{
             id: isDraggedTransition
             to: "isDragged"
-            property int speed: root.durationTime*units.longDuration
+            property int speed: taskItem.animations.speedFactor.current * taskItem.animations.duration.large
 
             SequentialAnimation{
                 ScriptAction{
                     script: {
-                        icList.directRender = false;
-                        if(latteView) {
-                            latteView.globalDirectRender=false;
-                        }
-
+                        taskItem.animations.needThickness.addEvent(draggingNeedThicknessEvent);
                         taskItem.inBlockingAnimation = true;
-                        root.clearZoom();
+                        taskItem.parabolic.setDirectRenderingEnabled(false);
                     }
                 }
 
                 PropertyAnimation {
                     target: wrapper
                     property: "mScale"
-                    to: 1 + ((root.zoomFactor - 1) / 3)
-                    duration: isDraggedTransition.speed / 2
+                    to: 1
+                    duration: taskItem.parabolic.factor.zoom === 1 ? 0 : (isDraggedTransition.speed*1.2)
                     easing.type: Easing.OutQuad
                 }
 
@@ -706,20 +706,19 @@ Item{
                         easing.type: Easing.OutQuad
                     }
                 }
+
+                ScriptAction{
+                    script: {
+                        taskItem.animations.needThickness.removeEvent(draggingNeedThicknessEvent);
+                    }
+                }
             }
 
             onRunningChanged: {
                 if(running){
                     taskItem.animationStarted();
-                    //root.animations++;
-
-                    parabolicManager.clearTasksGreaterThan(index);
-                    parabolicManager.clearTasksLowerThan(index);
-
-                    if (latteView){
-                        latteView.parabolicManager.clearAppletsGreaterThan(latteView.latteAppletPos);
-                        latteView.parabolicManager.clearAppletsLowerThan(latteView.latteAppletPos);
-                    }
+                } else {
+                    taskItem.animations.needThickness.removeEvent(draggingNeedThicknessEvent);
                 }
             }
         },
@@ -727,15 +726,12 @@ Item{
             id: defaultTransition
             from: "isDragged"
             to: "*"
-            property int speed: root.durationTime*units.longDuration
+            property int speed: taskItem.animations.speedFactor.current * taskItem.animations.duration.large
 
             SequentialAnimation{
                 ScriptAction{
                     script: {
-                        icList.directRender = false;
-                        if(latteView) {
-                            latteView.globalDirectRender=false;
-                        }
+                        taskItem.parabolic.setDirectRenderingEnabled(false);
                     }
                 }
 
@@ -782,9 +778,9 @@ Item{
 
             onRunningChanged: {
                 if(!running){
-                    var halfZoom = 1 + ((root.zoomFactor - 1) / 2);
+                    var halfZoom = 1 + ((taskItem.parabolic.factor.zoom - 1) / 2);
 
-                    wrapper.calculateScales((root.iconSize+root.thickMargins)/2);
+                    wrapper.calculateParabolicScales(taskItem.metrics.totals.thickness/2);
 
                     taskItem.animationEnded();
                     //   root.animations--;

@@ -5,10 +5,8 @@ set(lattedock-app_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/effects.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/panelshadows.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/positioner.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/screenedgeghostwindow.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tasksmodel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/view.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/visibilitymanager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/settings/primaryconfigview.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/settings/secondaryconfigview.cpp
     PARENT_SCOPE
 )

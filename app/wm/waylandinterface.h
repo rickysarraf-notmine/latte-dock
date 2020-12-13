@@ -59,41 +59,47 @@ public:
     explicit WaylandInterface(QObject *parent = nullptr);
     ~WaylandInterface() override;
 
-    void setViewExtraFlags(QWindow &view) override;
+    void setViewExtraFlags(QObject *view, bool isPanelWindow = true, Latte::Types::Visibility mode = Latte::Types::WindowsGoBelow) override;
     void setViewStruts(QWindow &view, const QRect &rect
                        , Plasma::Types::Location location) override;
     void setWindowOnActivities(QWindow &view, const QStringList &activities) override;
 
-    void removeViewStruts(QWindow &view) const override;
+    void removeViewStruts(QWindow &view) override;
 
-    WindowId activeWindow() const override;
-    WindowInfoWrap requestInfo(WindowId wid) const override;
-    WindowInfoWrap requestInfoActive() const override;
+    WindowId activeWindow() override;
+    WindowInfoWrap requestInfo(WindowId wid) override;
+    WindowInfoWrap requestInfoActive() override;
 
-    void setKeepAbove(const QDialog &dialog, bool above = true) const override;
-    void skipTaskBar(const QDialog &dialog) const override;
-    void slideWindow(QWindow &view, Slide location) const override;
-    void enableBlurBehind(QWindow &view) const override;
+    void skipTaskBar(const QDialog &dialog) override;
+    void slideWindow(QWindow &view, Slide location) override;
+    void enableBlurBehind(QWindow &view) override;
 
-    void requestActivate(WindowId wid) const override;
-    void requestClose(WindowId wid) const override;
-    void requestMoveWindow(WindowId wid, QPoint from) const override;
-    void requestToggleIsOnAllDesktops(WindowId wid) const override;
-    void requestToggleKeepAbove(WindowId wid) const override;
-    void requestToggleMinimized(WindowId wid) const override;
-    void requestToggleMaximized(WindowId wid) const override;
+    void requestActivate(WindowId wid) override;
+    void requestClose(WindowId wid) override;
+    void requestMoveWindow(WindowId wid, QPoint from) override;
+    void requestToggleIsOnAllDesktops(WindowId wid) override;
+    void requestToggleKeepAbove(WindowId wid) override;
+    void requestToggleMinimized(WindowId wid) override;
+    void requestToggleMaximized(WindowId wid) override;
+    void setKeepAbove(WindowId wid, bool active) override;
+    void setKeepBelow(WindowId wid, bool active) override;
 
-    bool windowCanBeDragged(WindowId wid) const override;
-    bool windowCanBeMaximized(WindowId wid) const override;
+    bool windowCanBeDragged(WindowId wid) override;
+    bool windowCanBeMaximized(WindowId wid) override;
 
-    QIcon iconFor(WindowId wid) const;
-    WindowId winIdFor(QString appId, QRect geometry) const override;
-    AppData appDataFor(WindowId wid) const override;
+    QIcon iconFor(WindowId wid) override;
+    WindowId winIdFor(QString appId, QRect geometry) override;
+    WindowId winIdFor(QString appId, QString title) override;
 
-    void setActiveEdge(QWindow *view, bool active) const override;
+    AppData appDataFor(WindowId wid) override;
 
-    void switchToNextVirtualDesktop() const override;
-    void switchToPreviousVirtualDesktop() const override;
+    void setActiveEdge(QWindow *view, bool active)  override;
+
+    void switchToNextVirtualDesktop() override;
+    void switchToPreviousVirtualDesktop() override;
+
+    void setFrameExtents(QWindow *view, const QMargins &margins) override;
+    void setInputMask(QWindow *window, const QRect &rect) override;
 
     void registerIgnoredWindow(WindowId wid) override;
     void unregisterIgnoredWindow(WindowId wid) override;
@@ -111,14 +117,16 @@ private slots:
 
 private:
     void init();
-    bool isValidWindow(const KWayland::Client::PlasmaWindow *w) const;
-    bool isPlasmaDesktop(const KWayland::Client::PlasmaWindow *w) const;
+    bool isAcceptableWindow(const KWayland::Client::PlasmaWindow *w);
+    bool isValidWindow(const KWayland::Client::PlasmaWindow *w);
+    bool isFullScreenWindow(const KWayland::Client::PlasmaWindow *w) const;
     bool isPlasmaPanel(const KWayland::Client::PlasmaWindow *w) const;
+    bool isSidepanel(const KWayland::Client::PlasmaWindow *w) const;
     void windowCreatedProxy(KWayland::Client::PlasmaWindow *w);
     void trackWindow(KWayland::Client::PlasmaWindow *w);
     void untrackWindow(KWayland::Client::PlasmaWindow *w);
 
-    KWayland::Client::PlasmaWindow *windowFor(WindowId wid) const;
+    KWayland::Client::PlasmaWindow *windowFor(WindowId wid);
     KWayland::Client::PlasmaShell *waylandCoronaInterface() const;
 
 #if KF5_VERSION_MINOR >= 52

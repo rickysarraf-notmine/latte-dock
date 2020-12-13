@@ -21,8 +21,6 @@ import QtQuick 2.7
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 Loader {
     id: indicatorLoader
     anchors.fill: parent
@@ -38,6 +36,6 @@ Loader {
         target: mainArea
         enabled: indicators.info.needsMouseEventCoordinates
         onPressed: level.mousePressed(mouse.x, mouse.y, mouse.button);
-        onMouseReleased: level.mouseReleased(mouse.x, mouse.y, mouse.button);
+        onReleased: level.mouseReleased(mouse.x, mouse.y, mouse.button);
     }
 }

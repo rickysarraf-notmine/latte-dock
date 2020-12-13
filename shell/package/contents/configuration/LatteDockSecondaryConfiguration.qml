@@ -29,11 +29,9 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.extras 2.0 as PlasmaExtras
 import QtQuick.Controls.Styles.Plasma 2.0 as Styles
 
-import org.kde.plasma.plasmoid 2.0
-
 import org.kde.kquickcontrolsaddons 2.0 as KQuickControlAddons
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 import "../controls" as LatteExtraControls
 
@@ -68,25 +66,8 @@ FocusScope {
 
         Keys.onPressed: {
             if (event.key === Qt.Key_Escape) {
-                viewConfig.hideConfigWindow();
+                primaryConfigView.hideConfigWindow();
             }
         }
-    }
-
-    //! HACK FOR X11 environments
-    //! show an inner shadow similar to Latte::View editShadow in order to
-    //! not break the visual user experience
-    LatteExtraControls.InnerShadow{
-        width: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? dialog.width + 2*shadowSize : shadowSize
-        height: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? shadowSize : dialog.height + 2*shadowSize
-
-        shadowSize: latteView.effects.editShadow
-        shadowOpacity: Math.max(0.35, maxOpacity)
-        shadowDirection: plasmoid.location
-
-        visible: !Latte.WindowSystem.isPlatformWayland && Latte.WindowSystem.compositingActive && latteView.effects.settingsMaskSubtracted
-
-        readonly property real maxOpacity: Latte.WindowSystem.compositingActive && !plasmoid.configuration.inConfigureAppletsMode ?
-                                               plasmoid.configuration.editBackgroundOpacity : 1
     }
 }

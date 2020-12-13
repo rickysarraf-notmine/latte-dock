@@ -19,8 +19,6 @@
 
 import QtQuick 2.7
 
-import org.kde.latte 0.2 as Latte
-
 Item{
     id: indicatorBridge
     anchors.fill: parent
@@ -52,19 +50,19 @@ Item{
     readonly property int windowsCount: 0
     readonly property int windowsMinimizedCount: 0
 
-    readonly property int currentIconSize: root.iconSize
-    readonly property int maxIconSize: root.maxIconSize
+    readonly property int currentIconSize: metrics.iconSize
+    readonly property int maxIconSize: metrics.maxIconSize
     readonly property real scaleFactor: 1
-    readonly property real panelOpacity: root.currentPanelOpacity
+    readonly property real panelOpacity: root.background.currentOpacity
     readonly property color shadowColor: root.appShadowColorSolid
 
-    readonly property bool animationsEnabled: root.animationsEnabled
-    readonly property real durationTime: root.durationTime
+    readonly property bool animationsEnabled: animations.active
+    readonly property real durationTime: animations.speedFactor.current
 
     readonly property bool progressVisible: false /*since 0.9.2*/
     readonly property real progress: 0 /*since 0.9.2*/
 
-    readonly property bool usePlasmaTabsStyle: !indicators.enabledForApplets
+    readonly property int screenEdgeMargin: 0 /*since 0.10*/
 
     readonly property QtObject palette: colorizerManager.applyTheme
 

@@ -22,7 +22,7 @@ import QtQuick 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 Item{
     id: wrapper
@@ -36,13 +36,13 @@ Item{
             if (!root.vertical)
                 return 0;
             else
-                return (root.iconSize + root.widthMargins);
+                return (taskItem.metrics.iconSize + root.widthMargins + taskItem.metrics.margin.screenEdge);
         }
 
-        if (taskItem.isStartup && root.durationTime !==0 ) {
-            return cleanScalingWidth;
+        if (taskItem.isStartup && taskItem.animations.speedFactor.current !==0 ) {
+            return root.vertical ? cleanScalingWidth + taskItem.metrics.margin.screenEdge : cleanScalingWidth;
         } else {
-            return showDelegateWidth;
+            return root.vertical ? showDelegateWidth + taskItem.metrics.margin.screenEdge : showDelegateWidth;
         }
     }
 
@@ -54,21 +54,21 @@ Item{
             if (root.vertical)
                 return 0;
             else
-                return (root.iconSize + root.heightMargins);
+                return (taskItem.metrics.iconSize + root.heightMargins + taskItem.metrics.margin.screenEdge);
         }
 
-        if (taskItem.isStartup && root.durationTime !==0){
-            return cleanScalingHeight;
+        if (taskItem.isStartup && taskItem.animations.speedFactor.current !==0){
+            return !root.vertical ? cleanScalingHeight + taskItem.metrics.margin.screenEdge : cleanScalingHeight;
         } else {
-            return showDelegateheight;
+            return !root.vertical ? showDelegateHeight + taskItem.metrics.margin.screenEdge : showDelegateHeight;
         }
     }
 
-    property int maxThickness: !root.vertical ? root.zoomFactor*(root.iconSize+root.heightMargins)
-                                              : root.zoomFactor*(root.iconSize+root.widthMargins)
+    property int maxThickness: !root.vertical ? taskItem.parabolic.factor.zoom*(taskItem.metrics.iconSize+root.heightMargins)
+                                              : taskItem.parabolic.factor.zoom*(taskItem.metrics.iconSize+root.widthMargins)
 
     property real showDelegateWidth: basicScalingWidth
-    property real showDelegateheight: basicScalingHeight
+    property real showDelegateHeight: basicScalingHeight
 
     //scales which are used mainly for activating InLauncher
     ////Scalers///////
@@ -81,20 +81,19 @@ Item{
     property real scaleWidth: (inTempScaling == true) ? tempScaleWidth : mScale
     property real scaleHeight: (inTempScaling == true) ? tempScaleHeight : mScale
 
-    property real cleanScalingWidth: (root.iconSize + root.widthMargins) * mScale
-    property real cleanScalingHeight: (root.iconSize + root.heightMargins) * mScale
+    property real cleanScalingWidth: (taskItem.metrics.iconSize + root.widthMargins) * mScale
+    property real cleanScalingHeight: (taskItem.metrics.iconSize + root.heightMargins) * mScale
 
-    property real basicScalingWidth : (inTempScaling == true) ? ((root.iconSize + root.widthMargins) * scaleWidth) : cleanScalingWidth
-    property real basicScalingHeight : (inTempScaling == true) ? ((root.iconSize + root.heightMargins) * scaleHeight) : cleanScalingHeight
+    property real basicScalingWidth : (inTempScaling == true) ? ((taskItem.metrics.iconSize + root.widthMargins) * scaleWidth) : cleanScalingWidth
+    property real basicScalingHeight : (inTempScaling == true) ? ((taskItem.metrics.iconSize + root.heightMargins) * scaleHeight) : cleanScalingHeight
 
     property real regulatorWidth: taskItem.isSeparator ? width : basicScalingWidth;
     property real regulatorHeight: taskItem.isSeparator ? height : basicScalingHeight;
 
-    property real visualScaledWidth: (root.iconSize + root.internalWidthMargins) * mScale
-    property real visualScaledHeight: (root.iconSize + root.internalHeightMargins) * mScale
+    property real visualScaledWidth: (taskItem.metrics.iconSize + root.internalWidthMargins) * mScale
+    property real visualScaledHeight: (taskItem.metrics.iconSize + root.internalHeightMargins) * mScale
     /// end of Scalers///////
 
-    //property int curIndex: icList.hoveredIndex
     //  property int index: taskItem.Positioner.index
     //property real center: (width + hiddenSpacerLeft.separatorSpace + hiddenSpacerRight.separatorSpace) / 2
     property real center: !root.vertical ?
@@ -113,7 +112,8 @@ Item{
 
     signal runLauncherAnimation();
 
-    /*  Rectangle{
+    readonly property string bothAxisZoomEvent: wrapper + "_zoom"
+     /* Rectangle{
             anchors.fill: parent
             border.width: 1
             border.color: "green"
@@ -121,7 +121,8 @@ Item{
         }*/
 
     Behavior on mScale {
-        enabled: !root.globalDirectRender || inMimicParabolicAnimation
+        id: animatedBehavior
+        enabled: !taskItem.parabolic.directRenderingEnabled || inMimicParabolicAnimation || restoreAnimation.running
         NumberAnimation{
             duration: 3 * taskItem.animationTime
             easing.type: Easing.OutCubic
@@ -129,60 +130,57 @@ Item{
     }
 
     Behavior on mScale {
-        enabled: root.globalDirectRender && !inMimicParabolicAnimation && !restoreAnimation.running
-        NumberAnimation { duration: root.directRenderAnimationTime }
+        enabled: !animatedBehavior.enabled
+        NumberAnimation { duration: 0 }
     }
 
     IconItem{
         id: taskIconItem
-        anchors.bottom: (root.position === PlasmaCore.Types.BottomPositioned) ? parent.bottom : undefined
-        anchors.top: (root.position === PlasmaCore.Types.TopPositioned) ? parent.top : undefined
-        anchors.left: (root.position === PlasmaCore.Types.LeftPositioned) ? parent.left : undefined
-        anchors.right: (root.position === PlasmaCore.Types.RightPositioned) ? parent.right : undefined
+        anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
+        anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
+        anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? parent.left : undefined
+        anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? parent.right : undefined
 
         anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
         anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
+
+        anchors.bottomMargin: (root.location === PlasmaCore.Types.BottomEdge) ? taskItem.metrics.margin.screenEdge : 0
+        anchors.topMargin: (root.location === PlasmaCore.Types.TopEdge) ? taskItem.metrics.margin.screenEdge : 0
+        anchors.leftMargin: (root.location === PlasmaCore.Types.LeftEdge) ? taskItem.metrics.margin.screenEdge : 0
+        anchors.rightMargin: (root.location === PlasmaCore.Types.RightEdge) ? taskItem.metrics.margin.screenEdge : 0
 
         anchors.horizontalCenterOffset: taskItem.iconOffsetX
         anchors.verticalCenterOffset: taskItem.iconOffsetY
 
         width: wrapper.regulatorWidth
-        height:wrapper.regulatorHeight
+        height: wrapper.regulatorHeight
     }
 
-    function calculateScales( currentMousePosition ){
-        if (root.zoomFactor===1) {
+    function calculateParabolicScales( currentMousePosition ){
+        if (taskItem.parabolic.factor.zoom===1 || parabolic.restoreZoomIsBlocked) {
             return;
         }
 
-        var distanceFromHovered = Math.abs(index - icList.hoveredIndex);
-
-        // A new algorithm trying to make the zoom calculation only once
-        // and at the same time fixing glitches
-        if ((distanceFromHovered === 0) &&
-                //! IMPORTANT: IS FIXING A BUG THAT NEGATIVE VALUES ARE SENT onEntered EVENT OF MOUSEAREA
-                // (currentMousePosition>=0) &&
-                (root.dragSource === null) ){
-
-            //use the new parabolicManager in order to handle all parabolic effect messages
-            var scales = parabolicManager.applyParabolicEffect(index, currentMousePosition, center);
+        if (root.dragSource === null) {
+            //use the new parabolic ability in order to handle all parabolic effect messages
+            var scales = taskItem.parabolic.applyParabolicEffect(index, currentMousePosition, center);
 
             //Left hiddenSpacer for first task
-            if(((index === parabolicManager.firstRealTaskIndex )&&(root.tasksCount>0)) && !root.disableLeftSpacer
+            if(((index === taskItem.indexer.firstVisibleItemIndex)&&(root.tasksCount>0)) && !root.disableLeftSpacer
                     && !inMimicParabolicAnimation && !inFastRestoreAnimation && !inAttentionAnimation){
                 hiddenSpacerLeft.nScale = scales.leftScale - 1;
             }
 
             //Right hiddenSpacer for last task
-            if(((index === parabolicManager.lastRealTaskIndex )&&(root.tasksCount>0)) && !root.disableRightSpacer
+            if(((index === taskItem.indexer.lastVisibleItemIndex )&&(root.tasksCount>0)) && !root.disableRightSpacer
                     && !inMimicParabolicAnimation && !inFastRestoreAnimation && !inAttentionAnimation){
                 hiddenSpacerRight.nScale =  scales.rightScale - 1;
             }
 
             if (!taskItem.inAttentionAnimation) {
-                mScale = root.zoomFactor;
+                mScale = taskItem.parabolic.factor.zoom;
             } else {
-                var subSpacerScale = (root.zoomFactor-1)/2;
+                var subSpacerScale = (taskItem.parabolic.factor.zoom-1)/2;
 
                 hiddenSpacerLeft.nScale = subSpacerScale;
                 hiddenSpacerRight.nScale = subSpacerScale;
@@ -190,10 +188,9 @@ Item{
 
             taskItem.scalesUpdatedOnce = false;
         }
-
     } //nScale
 
-    function signalUpdateScale(nIndex, nScale, step){
+    function updateScale(nIndex, nScale, step){
         if (!taskItem.containsMouse && (index === nIndex)
                 && (taskItem.hoverEnabled || inMimicParabolicAnimation)&&(tasksExtendedManager.waitingLaunchersLength()===0)){
             if (taskItem.inAttentionAnimation) {
@@ -219,16 +216,51 @@ Item{
         }
     }
 
+    function sltUpdateLowerItemScale(delegateIndex, newScale, step) {
+        if (delegateIndex === index) {
+            if (!taskItem.isSeparator && !taskItem.isHidden) {
+                //! when accepted
+                updateScale(delegateIndex, newScale, step);
+
+                if (newScale > 1) { // clear lower items
+                    taskItem.parabolic.sglUpdateLowerItemScale(delegateIndex-1, 1, 0);
+                }
+            } else {
+                taskItem.parabolic.sglUpdateLowerItemScale(delegateIndex-1, newScale, step);
+            }
+        } else if ((newScale === 1) && (index < delegateIndex)) {
+            updateScale(index, 1, 0);
+        }
+    }
+
+    function sltUpdateHigherItemScale(delegateIndex, newScale, step) {
+        if (delegateIndex === index) {
+            if (!taskItem.isSeparator && !taskItem.isHidden) {
+                //! when accepted
+                updateScale(delegateIndex, newScale, step);
+
+                if (newScale > 1) { // clear lower items
+                    taskItem.parabolic.sglUpdateHigherItemScale(delegateIndex+1, 1, 0); // clear higher items
+                }
+            } else {
+                taskItem.parabolic.sglUpdateHigherItemScale(delegateIndex+1, newScale, step);
+            }
+        } else if ((newScale === 1) && (index > delegateIndex)) {
+            updateScale(index, 1, 0);
+        }
+    }
+
+
     function sendEndOfNeedBothAxisAnimation(){
         if (taskItem.isZoomed) {
             taskItem.isZoomed = false;
-            root.signalAnimationsNeedBothAxis(-1);
+            taskItem.animations.needBothAxis.removeEvent(bothAxisZoomEvent);
         }
     }
 
     onMScaleChanged: {
-        if ((mScale === root.zoomFactor) && !root.directRenderTimerIsRunning && !root.globalDirectRender) {
-            root.setGlobalDirectRender(true);
+        if ((mScale === taskItem.parabolic.factor.zoom) && !taskItem.parabolic.directRenderingEnabled) {
+            taskItem.parabolic.setDirectRenderingEnabled(true);
         }
 
         if (inMimicParabolicAnimation){
@@ -238,7 +270,7 @@ Item{
                 inBlockingAnimation = false;
                 mimicParabolicScale = -1;
             } else {
-                var tempScale = (root.zoomFactor - mScale) / 2;
+                var tempScale = (taskItem.parabolic.factor.zoom - mScale) / 2;
 
                 hiddenSpacerLeft.nScale = tempScale;
                 hiddenSpacerRight.nScale = tempScale;
@@ -247,21 +279,23 @@ Item{
 
         if ((mScale > 1) && !taskItem.isZoomed) {
             taskItem.isZoomed = true;
-            root.signalAnimationsNeedBothAxis(1);
+            taskItem.animations.needBothAxis.addEvent(bothAxisZoomEvent);
         } else if ((mScale == 1) && taskItem.isZoomed) {
             sendEndOfNeedBothAxisAnimation();
         }
     }
 
     Component.onCompleted: {
-        if (!Latte.WindowSystem.compositingActive) {
+        if (!LatteCore.WindowSystem.compositingActive) {
             opacity = 1;
         }
 
-        root.updateScale.connect(signalUpdateScale);
+        taskItem.parabolic.sglUpdateLowerItemScale.connect(sltUpdateLowerItemScale);
+        taskItem.parabolic.sglUpdateHigherItemScale.connect(sltUpdateHigherItemScale);
     }
 
     Component.onDestruction: {
-        root.updateScale.disconnect(signalUpdateScale);
+        taskItem.parabolic.sglUpdateLowerItemScale.disconnect(sltUpdateLowerItemScale);
+        taskItem.parabolic.sglUpdateHigherItemScale.disconnect(sltUpdateHigherItemScale);
     }
 }// Main task area // id:wrapper

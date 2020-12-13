@@ -21,44 +21,16 @@ import QtQuick 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 PlasmaCore.FrameSvgItem {
     id: frame
     property string basePrefix: "normal"
 
-    imagePath: indicator.usePlasmaTabsStyle ? "widgets/tabbar" : "widgets/tasks"
+    imagePath: "widgets/tasks"
     rotation: root.reversedEnabled ? 180 : 0
 
-    opacity: 1 //state === "hovered" ? 0.9 : 1
+    opacity: 1
 
-    prefix: {
-        if (indicator.usePlasmaTabsStyle) {
-            if (!indicator.isActive) {
-                return "";
-            }
-
-            if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
-                return "west-active-tab";
-            }
-
-            if (plasmoid.location === PlasmaCore.Types.TopEdge) {
-                return "north-active-tab";
-            }
-
-            if (plasmoid.location === PlasmaCore.Types.RightEdge) {
-                return "east-active-tab";
-            }
-
-            if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
-                return "south-active-tab";
-            }
-
-            return  "south-active-tab";
-        } else {
-            return root.taskPrefix(basePrefix);
-        }
-    }
+    prefix: root.taskPrefix(basePrefix)
 
     states: [
         State {

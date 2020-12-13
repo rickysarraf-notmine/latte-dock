@@ -27,10 +27,12 @@
 #include "launcherssignals.h"
 #include "../infoview.h"
 #include "../screenpool.h"
+#include "../data/layoutdata.h"
 #include "../layout/abstractlayout.h"
 #include "../layout/centrallayout.h"
-#include "../settings/settingsdialog.h"
+#include "../settings/dialogs/settingsdialog.h"
 #include "../settings/universalsettings.h"
+#include "../templates/templatesmanager.h"
 
 // Qt
 #include <QDir>
@@ -44,8 +46,6 @@
 namespace Latte {
 namespace Layouts {
 
-const int MultipleLayoutsPresetId = 10;
-
 Manager::Manager(QObject *parent)
     : QObject(parent),
       m_importer(new Importer(this)),
@@ -56,13 +56,9 @@ Manager::Manager(QObject *parent)
     m_synchronizer = new Synchronizer(this);
 
     if (m_corona) {
-        connect(m_corona->universalSettings(), &UniversalSettings::currentLayoutNameChanged, this, &Manager::currentLayoutNameChanged);
 
         connect(m_synchronizer, &Synchronizer::centralLayoutsChanged, this, &Manager::centralLayoutsChanged);
-        connect(m_synchronizer, &Synchronizer::currentLayoutNameChanged, this, &Manager::currentLayoutNameChanged);
         connect(m_synchronizer, &Synchronizer::currentLayoutIsSwitching, this, &Manager::currentLayoutIsSwitching);
-        connect(m_synchronizer, &Synchronizer::layoutsChanged, this, &Manager::layoutsChanged);
-        connect(m_synchronizer, &Synchronizer::menuLayoutsChanged, this, &Manager::menuLayoutsChanged);
     }
 }
 
@@ -77,11 +73,9 @@ Manager::~Manager()
     m_synchronizer->deleteLater();
 }
 
-void Manager::load()
+void Manager::init()
 {
-    m_presetsPaths.clear();
-
-    QDir layoutsDir(QDir::homePath() + "/.config/latte");
+    QDir layoutsDir(Layouts::Importer::layoutUserDir());
     bool firstRun = !layoutsDir.exists();
 
     int configVer = m_corona->universalSettings()->version();
@@ -89,60 +83,42 @@ void Manager::load()
 
     if (firstRun) {
         m_corona->universalSettings()->setVersion(2);
-        m_corona->universalSettings()->setCurrentLayoutName(i18n("My Layout"));
+        m_corona->universalSettings()->setSingleModeLayoutName(i18n("My Layout"));
 
         //startup create what is necessary....
         if (!layoutsDir.exists()) {
             QDir(QDir::homePath() + "/.config").mkdir("latte");
         }
 
-        newLayout(i18n("My Layout"));
-        importPresets(false);
+        QString defpath = m_corona->templatesManager()->newLayout(i18n("My Layout"), i18n(Templates::DEFAULTLAYOUTTEMPLATENAME));
+        setOnAllActivities(Layout::AbstractLayout::layoutName(defpath));
+
+        m_corona->templatesManager()->importSystemLayouts();
     } else if (configVer < 2 && !firstRun) {
         m_corona->universalSettings()->setVersion(2);
 
         bool isOlderVersion = m_importer->updateOldConfiguration();
         if (isOlderVersion) {
             qDebug() << "Latte is updating its older configuration...";
-            importPresets(false);
+            m_corona->templatesManager()->importSystemLayouts();
         } else {
-            m_corona->universalSettings()->setCurrentLayoutName(i18n("My Layout"));
+            m_corona->universalSettings()->setSingleModeLayoutName(i18n("My Layout"));
         }
     }
 
     //! Check if the multiple-layouts hidden file is present, add it if it isnt
-    if (!QFile(QDir::homePath() + "/.config/latte/" + Layout::AbstractLayout::MultipleLayoutsName + ".layout.latte").exists()) {
-        importPreset(MultipleLayoutsPresetId, false);
+    if (!QFile(Layouts::Importer::layoutUserFilePath(Layout::MULTIPLELAYOUTSHIDDENNAME)).exists()) {
+        m_corona->templatesManager()->newLayout("", Layout::MULTIPLELAYOUTSHIDDENNAME);
     }
 
     qDebug() << "Latte is loading  its layouts...";
 
-    m_presetsPaths.append(m_corona->kPackage().filePath("preset1"));
-    m_presetsPaths.append(m_corona->kPackage().filePath("preset2"));
-    m_presetsPaths.append(m_corona->kPackage().filePath("preset3"));
-    m_presetsPaths.append(m_corona->kPackage().filePath("preset4"));
-
-    m_synchronizer->loadLayouts();
+    m_synchronizer->initLayouts();
 }
 
 void Manager::unload()
 {
     m_synchronizer->unloadLayouts();
-
-    //! Remove no-needed temp files
-    QString temp1File = QDir::homePath() + "/.config/lattedock.copy1.bak";
-    QString temp2File = QDir::homePath() + "/.config/lattedock.copy2.bak";
-
-    QFile file1(temp1File);
-    QFile file2(temp2File);
-
-    if (file1.exists()) {
-        file1.remove();
-    }
-
-    if (file2.exists()) {
-        file2.remove();
-    }
 }
 
 Latte::Corona *Manager::corona()
@@ -165,53 +141,12 @@ Synchronizer *Manager::synchronizer() const
     return m_synchronizer;
 }
 
-QString Manager::currentLayoutName() const
-{
-    return m_synchronizer->currentLayoutName();
-}
-
-QString Manager::defaultLayoutName() const
-{
-    QByteArray presetNameOrig = QString("preset" + QString::number(1)).toUtf8();
-    QString presetPath = m_corona->kPackage().filePath(presetNameOrig);
-    QString presetName = CentralLayout::layoutName(presetPath);
-    QByteArray presetNameChars = presetName.toUtf8();
-    presetName = i18n(presetNameChars);
-
-    return presetName;
-}
-
-QStringList Manager::layouts() const
-{
-    return m_synchronizer->layouts();
-}
-
-QStringList Manager::menuLayouts() const
-{
-    return m_synchronizer->menuLayouts();
-}
-
-void Manager::setMenuLayouts(QStringList layouts)
-{
-    m_synchronizer->setMenuLayouts(layouts);
-}
-
-QStringList Manager::presetsPaths() const
-{
-    return m_presetsPaths;
-}
-
-Types::LayoutsMemoryUsage Manager::memoryUsage() const
+MemoryUsage::LayoutsMemory Manager::memoryUsage() const
 {
     return m_corona->universalSettings()->layoutsMemoryUsage();
 }
 
-int Manager::layoutsMemoryUsage()
-{
-    return (int)m_corona->universalSettings()->layoutsMemoryUsage();
-}
-
-void Manager::setMemoryUsage(Types::LayoutsMemoryUsage memoryUsage)
+void Manager::setMemoryUsage(MemoryUsage::LayoutsMemory memoryUsage)
 {
     m_corona->universalSettings()->setLayoutsMemoryUsage(memoryUsage);
 }
@@ -221,24 +156,19 @@ QStringList Manager::centralLayoutsNames()
     return m_synchronizer->centralLayoutsNames();
 }
 
-QStringList Manager::sharedLayoutsNames()
+QStringList Manager::currentLayoutsNames() const
 {
-    return m_synchronizer->sharedLayoutsNames();
+    return m_synchronizer->currentLayoutsNames();
 }
 
-QStringList Manager::storedSharedLayouts() const
+QList<CentralLayout *> Manager::currentLayouts() const
 {
-    return m_synchronizer->storedSharedLayouts();
+    return m_synchronizer->currentLayouts();
 }
 
-CentralLayout *Manager::currentLayout() const
+bool Manager::switchToLayout(QString layoutName,  MemoryUsage::LayoutsMemory newMemoryUsage)
 {
-    return m_synchronizer->currentLayout();
-}
-
-bool Manager::switchToLayout(QString layoutName, int previousMemoryUsage)
-{
-    return m_synchronizer->switchToLayout(layoutName, previousMemoryUsage);
+    return m_synchronizer->switchToLayout(layoutName, newMemoryUsage);
 }
 
 void Manager::loadLayoutOnStartup(QString layoutName)
@@ -273,6 +203,30 @@ void Manager::loadLatteLayout(QString layoutPath)
         cleanupOnStartup(layoutPath);
         qDebug() << "LOADING CORONA LAYOUT:" << layoutPath;
         m_corona->loadLayout(layoutPath);
+    }
+}
+
+void Manager::setOnAllActivities(QString layoutName)
+{
+    CentralLayout *central = m_synchronizer->centralLayout(layoutName);
+
+    if (central) {
+        central->setActivities(QStringList(Data::Layout::ALLACTIVITIESID));
+    } else if (m_importer->layoutExists(layoutName)) {
+        CentralLayout storage(this, m_importer->layoutUserFilePath(layoutName));
+        storage.setActivities(QStringList(Data::Layout::ALLACTIVITIESID));
+    }
+}
+
+void Manager::setOnActivities(QString layoutName, QStringList activities)
+{
+    CentralLayout *central = m_synchronizer->centralLayout(layoutName);
+
+    if (central) {
+        central->setActivities(activities);
+    } else if (m_importer->layoutExists(layoutName)) {
+        CentralLayout storage(this, m_importer->layoutUserFilePath(layoutName));
+        storage.setActivities(activities);
     }
 }
 
@@ -312,10 +266,6 @@ void Manager::cleanupOnStartup(QString path)
     for (const auto &cId : removeContaimentsList) {
         containmentGroups.group(cId).deleteGroup();
     }
-
-
-    actionGroups.sync();
-    containmentGroups.sync();
 }
 
 
@@ -326,7 +276,7 @@ void Manager::showAboutDialog()
 
 void Manager::clearUnloadedContainmentsFromLinkedFile(QStringList containmentsIds, bool bypassChecks)
 {
-    if (!m_corona || (memoryUsage() == Types::SingleLayout && !bypassChecks)) {
+    if (!m_corona || (memoryUsage() == MemoryUsage::SingleLayout && !bypassChecks)) {
         return;
     }
 
@@ -341,96 +291,10 @@ void Manager::clearUnloadedContainmentsFromLinkedFile(QStringList containmentsId
     containments.sync();
 }
 
-QString Manager::newLayout(QString layoutName, QString preset)
+void Manager::showLatteSettingsDialog(int firstPage, bool toggleCurrentPage)
 {
-    QDir layoutDir(QDir::homePath() + "/.config/latte");
-    QStringList filter;
-    filter.append(QString(layoutName + "*.layout.latte"));
-    QStringList files = layoutDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
-
-    //! if the newLayout already exists provide a newName that doesn't
-    if (files.count() >= 1) {
-        int newCounter = files.count() + 1;
-
-        layoutName = layoutName + "-" + QString::number(newCounter);
-    }
-
-    QString newLayoutPath = layoutDir.absolutePath() + "/" + layoutName + ".layout.latte";
-
-    qDebug() << "adding layout : " << layoutName << " based on preset:" << preset;
-
-    if (preset == i18n("Default") && !QFile(newLayoutPath).exists()) {
-        qDebug() << "adding layout : succeed";
-        QFile(m_corona->kPackage().filePath("preset1")).copy(newLayoutPath);
-    }
-
-    return newLayoutPath;
-}
-
-void Manager::importDefaultLayout(bool newInstanceIfPresent)
-{
-    importPreset(1, newInstanceIfPresent);
-
-    if (newInstanceIfPresent) {
-        m_synchronizer->loadLayouts();
-    }
-}
-
-void Manager::importPresets(bool includeDefault)
-{
-    int start = 1;
-
-    if (!includeDefault) {
-        start = 2;
-    }
-
-    for (int i = start; i <= 4; ++i) {
-        importPreset(i, false);
-    }
-}
-
-void Manager::importPreset(int presetNo, bool newInstanceIfPresent)
-{
-    QDir configDir(QDir::homePath() + "/.config");
-
-    if (!QDir(configDir.absolutePath() + "/latte").exists()) {
-        configDir.mkdir("latte");
-    }
-
-    QByteArray presetNameOrig = QString("preset" + QString::number(presetNo)).toUtf8();
-    QString presetPath = m_corona->kPackage().filePath(presetNameOrig);
-    QString presetName = Layout::AbstractLayout::layoutName(presetPath);
-    QByteArray presetNameChars = presetName.toUtf8();
-    presetName = i18n(presetNameChars);
-
-    //! hide the multiple layouts layout file from user
-    presetName = (presetNo == MultipleLayoutsPresetId) ? "." + presetName : presetName;
-
-    QString newLayoutFile = "";
-
-    if (newInstanceIfPresent) {
-        newLayoutFile = QDir::homePath() + "/.config/latte/" + m_importer->uniqueLayoutName(presetName) + ".layout.latte";
-    } else {
-        newLayoutFile = QDir::homePath() + "/.config/latte/" + presetName + ".layout.latte";
-    }
-
-    if (!QFile(newLayoutFile).exists()) {
-        QFile(presetPath).copy(newLayoutFile);
-        QFileInfo newFileInfo(newLayoutFile);
-
-        if (newFileInfo.exists() && !newFileInfo.isWritable()) {
-            QFile(newLayoutFile).setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ReadGroup | QFileDevice::ReadOther);
-        }
-    }
-}
-
-void Manager::showLatteSettingsDialog(int page)
-{
-    bool created{false};
-
     if (!m_latteSettingsDialog) {
-        m_latteSettingsDialog = new SettingsDialog(nullptr, m_corona);
-        created = true;
+        m_latteSettingsDialog = new Latte::Settings::Dialog::SettingsDialog(nullptr, m_corona);
     }
     m_latteSettingsDialog->show();
 
@@ -438,9 +302,10 @@ void Manager::showLatteSettingsDialog(int page)
         m_latteSettingsDialog->showNormal();
     }
 
-    if (!created) {
-        Types::LatteConfigPage configPage = static_cast<Types::LatteConfigPage>(page);
+    if (toggleCurrentPage) {
         m_latteSettingsDialog->toggleCurrentPage();
+    } else {
+        m_latteSettingsDialog->setCurrentPage(firstPage);
     }
 
     m_latteSettingsDialog->activateWindow();
@@ -466,15 +331,6 @@ void Manager::showInfoWindow(QString info, int duration, QStringList activities)
             infoView->deleteLater();
         });
     }
-}
-
-//! it is used just in order to provide translations for the presets
-void Manager::ghostForTranslatedPresets()
-{
-    QString preset1 = i18n("Default");
-    QString preset2 = i18n("Plasma");
-    QString preset3 = i18n("Unity");
-    QString preset4 = i18n("Extended");
 }
 
 }

@@ -22,14 +22,16 @@
 
 // local
 #include "lattecorona.h"
+#include "panelbackground.h"
 #include "../../layouts/importer.h"
 #include "../../view/panelshadows_p.h"
 #include "../../wm/schemecolors.h"
-#include "../../../liblatte2/commontools.h"
+#include "../../tools/commontools.h"
 
 // Qt
 #include <QDebug>
 #include <QDir>
+#include <QPainter>
 #include <QProcess>
 
 // KDE
@@ -48,8 +50,14 @@ namespace PlasmaExtended {
 
 Theme::Theme(KSharedConfig::Ptr config, QObject *parent) :
     QObject(parent),
-    m_themeGroup(KConfigGroup(config, QStringLiteral("PlasmaThemeExtended")))
+    m_themeGroup(KConfigGroup(config, QStringLiteral("PlasmaThemeExtended"))),
+    m_backgroundTopEdge(new PanelBackground(Plasma::Types::TopEdge, this)),
+    m_backgroundLeftEdge(new PanelBackground(Plasma::Types::LeftEdge, this)),
+    m_backgroundBottomEdge(new PanelBackground(Plasma::Types::BottomEdge, this)),
+    m_backgroundRightEdge(new PanelBackground(Plasma::Types::RightEdge, this))
 {
+    qmlRegisterTypes();
+
     m_corona = qobject_cast<Latte::Corona *>(parent);
 
     //! compositing tracking
@@ -72,10 +80,9 @@ Theme::Theme(KSharedConfig::Ptr config, QObject *parent) :
 
     loadConfig();
 
-    connect(this, &Theme::compositingChanged, this, &Theme::roundnessChanged);
+    connect(this, &Theme::compositingChanged, this, &Theme::updateBackgrounds);
     connect(this, &Theme::outlineWidthChanged, this, &Theme::saveConfig);
 
-    connect(&m_theme, &Plasma::Theme::themeChanged, this, &Theme::hasShadowChanged);
     connect(&m_theme, &Plasma::Theme::themeChanged, this, &Theme::load);
     connect(&m_theme, &Plasma::Theme::themeChanged, this, &Theme::themeChanged);
 }
@@ -83,7 +90,7 @@ Theme::Theme(KSharedConfig::Ptr config, QObject *parent) :
 void Theme::load()
 {
     loadThemePaths();
-    loadRoundness();
+    updateBackgrounds();
 }
 
 Theme::~Theme()
@@ -96,7 +103,7 @@ Theme::~Theme()
 
 bool Theme::hasShadow() const
 {
-    return PanelShadows::self()->hasShadows();
+    return m_hasShadow;
 }
 
 bool Theme::isLightTheme() const
@@ -107,26 +114,6 @@ bool Theme::isLightTheme() const
 bool Theme::isDarkTheme() const
 {
     return !m_isLightTheme;
-}
-
-int Theme::bottomEdgeRoundness() const
-{
-    return m_bottomEdgeRoundness;
-}
-
-int Theme::leftEdgeRoundness() const
-{
-    return m_leftEdgeRoundness;
-}
-
-int Theme::topEdgeRoundness() const
-{
-    return m_topEdgeRoundness;
-}
-
-int Theme::rightEdgeRoundness() const
-{
-    return m_rightEdgeRoundness;
 }
 
 int Theme::outlineWidth() const
@@ -144,24 +131,24 @@ void Theme::setOutlineWidth(int width)
     emit outlineWidthChanged();
 }
 
-float Theme::bottomEdgeMaxOpacity() const
+PanelBackground *Theme::backgroundTopEdge() const
 {
-    return m_bottomEdgeMaxOpacity;
+    return m_backgroundTopEdge;
 }
 
-float Theme::leftEdgeMaxOpacity() const
+PanelBackground *Theme::backgroundLeftEdge() const
 {
-    return m_leftEdgeMaxOpacity;
+    return m_backgroundLeftEdge;
 }
 
-float Theme::topEdgeMaxOpacity() const
+PanelBackground *Theme::backgroundBottomEdge() const
 {
-    return m_topEdgeMaxOpacity;
+    return m_backgroundBottomEdge;
 }
 
-float Theme::rightEdgeMaxOpacity() const
+PanelBackground *Theme::backgroundRightEdge() const
 {
-    return m_rightEdgeMaxOpacity;
+    return m_backgroundRightEdge;
 }
 
 WindowSystem::SchemeColors *Theme::defaultTheme() const
@@ -321,124 +308,46 @@ void Theme::updateReversedSchemeValues()
     }
 }
 
-int Theme::roundness(const QImage &svgImage, Plasma::Types::Location edge)
+void Theme::updateBackgrounds()
 {
-    int discovRow = (edge == Plasma::Types::TopEdge ? svgImage.height()-1 : 0);
-    int discovCol = (edge == Plasma::Types::LeftEdge ? svgImage.width()-1 : 0);
+    updateHasShadow();
 
-    int round{0};
-
-    int maxOpacity = qMin(qAlpha(svgImage.pixel(49,0)), 200);
-
-    if (edge == Plasma::Types::BottomEdge) {
-        m_bottomEdgeMaxOpacity = (float)maxOpacity / (float)255;
-    } else if (edge == Plasma::Types::LeftEdge) {
-        m_leftEdgeMaxOpacity = (float)maxOpacity / (float)255;
-    } else if (edge == Plasma::Types::TopEdge) {
-        m_topEdgeMaxOpacity = (float)maxOpacity / (float)255;
-    } else if (edge == Plasma::Types::RightEdge) {
-        m_rightEdgeMaxOpacity = (float)maxOpacity / (float)255;
-    }
-
-    if (edge == Plasma::Types::BottomEdge || edge == Plasma::Types::RightEdge || edge == Plasma::Types::TopEdge) {
-        //! TOPLEFT corner
-        //! first LEFT pixel found
-        QRgb *line = (QRgb *)svgImage.scanLine(discovRow);
-
-        for (int col=0; col<50; ++col) {
-            QRgb pixelData = line[col];
-
-            if (qAlpha(pixelData) < maxOpacity) {
-                discovCol++;
-                round++;
-            } else {
-                break;
-            }
-        }
-    } else if (edge == Plasma::Types::LeftEdge) {
-        //! it should be TOPRIGHT corner in that case
-        //! first RIGHT pixel found
-        QRgb *line = (QRgb *)svgImage.scanLine(discovRow);
-        for (int col=99; col>50; --col) {
-            QRgb pixelData = line[col];
-
-            if (qAlpha(pixelData) < maxOpacity) {
-                discovCol--;
-                round++;
-            } else {
-                break;
-            }
-        }
-    }
-
-    //! this needs investigation (the x2) I don't know if it is really needed
-    //! but it gives me the impression that returns better results
-    return round; ///**2*/;
+    m_backgroundTopEdge->update();
+    m_backgroundLeftEdge->update();
+    m_backgroundBottomEdge->update();
+    m_backgroundRightEdge->update();
 }
 
-void Theme::loadCompositingRoundness()
+void Theme::updateHasShadow()
 {
-    Plasma::FrameSvg *svg = new Plasma::FrameSvg(this);
+    Plasma::Svg *svg = new Plasma::Svg(this);
     svg->setImagePath(QStringLiteral("widgets/panel-background"));
-    svg->setEnabledBorders(Plasma::FrameSvg::AllBorders);
-    svg->resizeFrame(QSize(100,100));
+    svg->resize();
 
-    //! New approach
-    QPixmap pxm = svg->framePixmap();
+    QString cornerId = "shadow-topleft";
+    QImage corner = svg->image(svg->elementSize(cornerId), cornerId);
 
-    //! bottom roundness
-    if (svg->hasElementPrefix("south")) {
-        svg->setElementPrefix("south");
-        pxm = svg->framePixmap();
-    } else {
-        svg->setElementPrefix("");
-        pxm = svg->framePixmap();
+    int fullTransparentPixels = 0;
+
+    for(int c=0; c<corner.width(); ++c) {
+        for(int r=0; r<corner.height(); ++r) {
+            QRgb *line = (QRgb *)corner.scanLine(r);
+            QRgb point = line[c];
+
+            if (qAlpha(point) == 0) {
+                fullTransparentPixels++;
+            }
+        }
     }
-    m_bottomEdgeRoundness = roundness(pxm.toImage(), Plasma::Types::BottomEdge);
 
-    //! left roundness
-    if (svg->hasElementPrefix("west")) {
-        svg->setElementPrefix("west");
-        pxm = svg->framePixmap();
-    } else {
-        svg->setElementPrefix("");
-        pxm = svg->framePixmap();
-    }
-    m_leftEdgeRoundness = roundness(pxm.toImage(), Plasma::Types::LeftEdge);
+    int pixels = (corner.width() * corner.height());
 
-    //! top roundness
-    if (svg->hasElementPrefix("north")) {
-        svg->setElementPrefix("north");
-        pxm = svg->framePixmap();
-    } else {
-        svg->setElementPrefix("");
-        pxm = svg->framePixmap();
-    }
-    m_topEdgeRoundness = roundness(pxm.toImage(), Plasma::Types::TopEdge);
+    m_hasShadow = (fullTransparentPixels != pixels );
+    emit hasShadowChanged();
 
-    //! right roundness
-    if (svg->hasElementPrefix("east")) {
-        svg->setElementPrefix("east");
-        pxm = svg->framePixmap();
-    } else {
-        svg->setElementPrefix("");
-        pxm = svg->framePixmap();
-    }
-    m_rightEdgeRoundness = roundness(pxm.toImage(), Plasma::Types::RightEdge);
-
-  /*  qDebug() << " COMPOSITING MASK ::: " << svg->mask();
-    qDebug() << " COMPOSITING MASK BOUNDING RECT ::: " << svg->mask().boundingRect();*/
-    qDebug() << " COMPOSITING ROUNDNESS ::: " << m_bottomEdgeRoundness << " _ " << m_leftEdgeRoundness << " _ " << m_topEdgeRoundness << " _ " << m_rightEdgeRoundness;
+    qDebug() << "  PLASMA THEME TOPLEFT SHADOW :: pixels : " << pixels << "  transparent pixels" << fullTransparentPixels << " | HAS SHADOWS :" << m_hasShadow;
 
     svg->deleteLater();
-}
-
-void Theme::loadRoundness()
-{
-    loadCompositingRoundness();
-
-    emit maxOpacityChanged();
-    emit roundnessChanged();
 }
 
 void Theme::loadThemePaths()
@@ -486,116 +395,6 @@ void Theme::loadThemePaths()
 
         setOriginalSchemeFile(WindowSystem::SchemeColors::possibleSchemeFile("kdeglobals"));
     }
-
-    //! this is probably not needed at all in order to provide full transparency for all
-    //! plasma themes, so we disable it in order to confirm from user testing
-    //! that it is not needed at all
-    //parseThemeSvgFiles();
-}
-
-void Theme::parseThemeSvgFiles()
-{
-    QString origBackgroundSvgFile;
-    QString curBackgroundSvgFile = m_extendedThemeDir.path()+"/widgets/panel-background.svg";
-
-    if (QFileInfo(curBackgroundSvgFile).exists()) {
-        QDir(m_extendedThemeDir.path()+"/widgets").remove("panel-background.svg");
-    }
-
-    if (!QDir(m_extendedThemeDir.path()+"/widgets").exists()) {
-        QDir(m_extendedThemeDir.path()).mkdir("widgets");
-    }
-
-    if (QFileInfo(m_themeWidgetsPath+"/panel-background.svg").exists()) {
-        origBackgroundSvgFile = m_themeWidgetsPath+"/panel-background.svg";
-        QFile(origBackgroundSvgFile).copy(curBackgroundSvgFile);
-    } else if (QFileInfo(m_themeWidgetsPath+"/panel-background.svgz").exists()) {
-        origBackgroundSvgFile = m_themeWidgetsPath+"/panel-background.svgz";
-        QString tempBackFile = m_extendedThemeDir.path()+"/widgets/panel-background.svg.gz";
-        QFile(origBackgroundSvgFile).copy(tempBackFile);
-
-        //! Identify Plasma Desktop version
-        QProcess process;
-        process.start("gzip -d " + tempBackFile);
-        process.waitForFinished();
-        QString output(process.readAllStandardOutput());
-
-        qDebug() << "plasma theme, background extraction output ::: " << output;
-        qDebug() << "plasma theme, original background svg file was decompressed...";
-    }
-
-    if (QFileInfo(curBackgroundSvgFile).exists()) {
-        qDebug() << "plasma theme, panel background ::: " << curBackgroundSvgFile;
-    } else {
-        qDebug() << "plasma theme, panel background ::: was not found...";
-    }
-
-    //! Find panel-background transparency
-    QFile svgFile(curBackgroundSvgFile);
-    QString styleSvgStr;
-
-    if (svgFile.open(QIODevice::ReadOnly)) {
-        QTextStream in(&svgFile);
-        bool centerIdFound{false};
-        bool styleFound{false};
-
-        while (!in.atEnd() && !styleFound) {
-            QString line = in.readLine();
-
-            //! each time a rect starts then style can be reset
-            if (line.contains("<rect")) {
-                styleSvgStr = "";
-            }
-
-            //! identify the id "center
-            if (line.contains("id=\"center\"")) {
-                centerIdFound = true;
-            }
-
-            //! if valid style for center exists we can break
-            if (centerIdFound && !styleSvgStr.isEmpty()) {
-                break;
-            }
-
-            if (centerIdFound && line.contains("style=\"") ) {
-                styleSvgStr = line;
-            }
-
-            //! when end of "center" you can break
-            if (centerIdFound && line.contains("/rect>")) {
-                break;
-            }
-        }
-        svgFile.close();
-    }
-
-    if (!styleSvgStr.isEmpty()) {
-        int styleInd = styleSvgStr.indexOf("style=");
-        QString cleanedStr = styleSvgStr.remove(0, styleInd+7);
-        int endInd = cleanedStr.indexOf("\"");
-        styleSvgStr = cleanedStr.mid(0,endInd);
-
-        QStringList styleValues = styleSvgStr.split(";");
-        // qDebug() << "plasma theme, discovered svg style ::: " << styleValues;
-
-        float opacity{1};
-        float fillOpacity{1};
-
-        for (QString &value : styleValues) {
-            if (value.startsWith("opacity:")) {
-                opacity = value.remove(0,8).toFloat();
-            }
-            if (value.startsWith("fill-opacity:")) {
-                fillOpacity = value.remove(0,13).toFloat();
-            }
-        }
-
-      //  m_backgroundMaxOpacity = opacity * fillOpacity;
-
-      //  qDebug() << "plasma theme opacity :: " << m_backgroundMaxOpacity << " from : " << opacity << " * " << fillOpacity;
-    }
-
- //   emit backgroundMaxOpacityChanged();
 }
 
 void Theme::loadThemeLightness()
@@ -616,6 +415,76 @@ void Theme::loadThemeLightness()
     }
 }
 
+const CornerRegions &Theme::cornersMask(const int &radius)
+{
+    if (m_cornerRegions.contains(radius)) {
+        return m_cornerRegions[radius];
+    }
+
+    qDebug() << radius;
+    CornerRegions corners;
+
+    int axis = (2 * radius) + 2;
+    QImage cornerimage(axis, axis, QImage::Format_ARGB32);
+    QPainter painter(&cornerimage);
+    //!does not provide valid masks
+    //painter.setRenderHints(QPainter::Antialiasing);
+
+    QPen pen(Qt::black);
+    pen.setStyle(Qt::SolidLine);
+    pen.setWidth(1);
+    painter.setPen(pen);
+
+    QRect rectArea(0,0,axis,axis);
+    painter.fillRect(rectArea, Qt::white);
+    painter.drawRoundedRect(rectArea, axis, axis);
+
+    QRegion topleft;
+    for(int y=0; y<radius; ++y) {
+        QRgb *line = (QRgb *)cornerimage.scanLine(y);
+
+        QString bits;
+        int width{0};
+        for(int x=0; x<radius; ++x) {
+            QRgb point = line[x];
+
+            if (QColor(point) == Qt::black) {
+                bits = bits + "1 ";
+                width = qMax(0, x);
+                break;
+            } else {
+                bits = bits + "0 ";
+            }
+        }
+
+        if (width>0) {
+            topleft += QRect(0, y, width, 1);
+        }
+
+        qDebug()<< "  " << bits;
+    }
+    corners.topLeft = topleft;
+
+    QTransform transform;
+    transform.rotate(90);
+    corners.topRight = transform.map(corners.topLeft);
+    corners.topRight.translate(corners.topLeft.boundingRect().width(), 0);
+
+    corners.bottomRight = transform.map(corners.topRight);
+    corners.bottomRight.translate(corners.topLeft.boundingRect().width(), 0);
+
+    corners.bottomLeft = transform.map(corners.bottomRight);
+    corners.bottomLeft.translate(corners.topLeft.boundingRect().width(), 0);
+
+    //qDebug() << " reg top;: " << corners.topLeft;
+    //qDebug() << " reg topr: " << corners.topRight;
+    //qDebug() << " reg bottomr: " << corners.bottomRight;
+    //qDebug() << " reg bottoml: " << corners.bottomLeft;
+
+    m_cornerRegions[radius] = corners;
+    return m_cornerRegions[radius];
+}
+
 void Theme::loadConfig()
 {
     setOutlineWidth(m_themeGroup.readEntry("outlineWidth", 1));
@@ -624,8 +493,17 @@ void Theme::loadConfig()
 void Theme::saveConfig()
 {
     m_themeGroup.writeEntry("outlineWidth", m_outlineWidth);
+}
 
-    m_themeGroup.sync();
+void Theme::qmlRegisterTypes()
+{
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
+    qmlRegisterType<Latte::PlasmaExtended::Theme>();
+    qmlRegisterType<Latte::PlasmaExtended::PanelBackground>();
+#else
+    qmlRegisterAnonymousType<Latte::PlasmaExtended::Theme>("latte-dock", 1);
+    qmlRegisterAnonymousType<Latte::PlasmaExtended::PanelBackground>("latte-dock", 1);
+#endif
 }
 
 }

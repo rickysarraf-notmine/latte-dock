@@ -25,6 +25,8 @@
 #include <QMenu>
 #include <QMetaMethod>
 #include <QQuickItem>
+#include <QQuickView>
+#include <QPointer>
 #include <QMouseEvent>
 #include <QObject>
 
@@ -51,6 +53,7 @@ public:
     QMenu *menu();
 
     bool mousePressEvent(QMouseEvent *event);
+    bool mousePressEventForContainmentMenu(QQuickView *view, QMouseEvent *event);
 
 signals:
     void menuChanged();
@@ -63,10 +66,16 @@ private:
     void addContainmentActions(QMenu *desktopMenu, QEvent *event);
     void updateAppletContainsMethod();
 
+    QPoint popUpRelevantToParent(const QRect &parentItem, const QRect popUpRect);
+    QPoint popUpRelevantToGlobalPoint(const QRect &parentItem, const QRect popUpRect);
+
+    QPoint popUpTopLeft(Plasma::Applet *applet, const QRect popUpRect);
+
     Plasma::Containment *containmentById(uint id);
 
+
 private:
-    QMenu *m_contextMenu{nullptr};
+    QPointer<QMenu> m_contextMenu;
     QMetaMethod m_appletContainsMethod;
     QQuickItem *m_appletContainsMethodItem{nullptr};
 

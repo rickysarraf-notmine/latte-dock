@@ -20,6 +20,9 @@
 #ifndef EFFECTS_H
 #define EFFECTS_H
 
+// local
+#include "../plasma/extended/theme.h"
+
 // Qt
 #include <QObject>
 #include <QPointer>
@@ -31,6 +34,7 @@
 #include <Plasma/Theme>
 
 namespace Latte {
+class Corona;
 class View;
 }
 
@@ -43,15 +47,19 @@ class Effects: public QObject
     Q_PROPERTY(bool animationsBlocked READ animationsBlocked NOTIFY animationsBlockedChanged)
     Q_PROPERTY(bool drawShadows READ drawShadows WRITE setDrawShadows NOTIFY drawShadowsChanged)
     Q_PROPERTY(bool drawEffects READ drawEffects WRITE setDrawEffects NOTIFY drawEffectsChanged)
-    Q_PROPERTY(bool settingsMaskSubtracted READ settingsMaskSubtracted WRITE setSettingsMaskSubtracted NOTIFY settingsMaskSubtractedChanged)
 
     //! thickness shadow size when is drawn inside the window from qml
-    Q_PROPERTY(int backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
     Q_PROPERTY(int editShadow READ editShadow WRITE setEditShadow NOTIFY editShadowChanged)
     Q_PROPERTY(int innerShadow READ innerShadow WRITE setInnerShadow NOTIFY innerShadowChanged)
 
+    Q_PROPERTY(bool backgroundAllCorners READ backgroundAllCorners WRITE setBackgroundAllCorners NOTIFY backgroundAllCornersChanged)
+    Q_PROPERTY(bool backgroundRadiusEnabled READ backgroundRadiusEnabled WRITE setBackgroundRadiusEnabled NOTIFY backgroundRadiusEnabledChanged)
+    Q_PROPERTY(int backgroundRadius READ backgroundRadius WRITE setBackgroundRadius NOTIFY backgroundRadiusChanged)
+    Q_PROPERTY(float backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
+
     Q_PROPERTY(QRect mask READ mask WRITE setMask NOTIFY maskChanged)
     Q_PROPERTY(QRect rect READ rect WRITE setRect NOTIFY rectChanged)
+    Q_PROPERTY(QRect inputMask READ inputMask WRITE setInputMask NOTIFY inputMaskChanged)
 
     Q_PROPERTY(Plasma::FrameSvg::EnabledBorders enabledBorders READ enabledBorders NOTIFY enabledBordersChanged)
 
@@ -62,20 +70,20 @@ public:
     bool animationsBlocked() const;
     void setAnimationsBlocked(bool blocked);
 
+    bool backgroundAllCorners() const;
+    void setBackgroundAllCorners(bool allcorners);
+
+    bool backgroundRadiusEnabled() const;
+    void setBackgroundRadiusEnabled(bool enabled);
+
     bool drawShadows() const;
     void setDrawShadows(bool draw);
 
     bool drawEffects() const;
     void setDrawEffects(bool draw);
 
-    bool forceDrawCenteredBorders() const;
-    void setForceDrawCenteredBorders(bool draw);
-
-    bool settingsMaskSubtracted() const;
-    void setSettingsMaskSubtracted(bool enabled);
-
-    int backgroundOpacity() const;
-    void setBackgroundOpacity(int opacity);
+    void setForceTopBorder(bool draw);
+    void setForceBottomBorder(bool draw);
 
     int editShadow() const;
     void setEditShadow(int shadow);
@@ -83,8 +91,17 @@ public:
     int innerShadow() const;
     void setInnerShadow(int shadow);
 
+    int backgroundRadius();
+    void setBackgroundRadius(const int &radius);
+
+    float backgroundOpacity() const;
+    void setBackgroundOpacity(float opacity);
+
     QRect mask() const;
     void setMask(QRect area);
+
+    QRect inputMask() const;
+    void setInputMask(QRect area);
 
     QRect rect() const;
     void setRect(QRect area);
@@ -93,6 +110,10 @@ public:
 
 public slots:
     Q_INVOKABLE void forceMaskRedraw();
+    Q_INVOKABLE void setSubtractedMaskRegion(const QString &regionid, const QRegion &region);
+    Q_INVOKABLE void removeSubtractedMaskRegion(const QString &regionid);
+    Q_INVOKABLE void setUnitedMaskRegion(const QString &regionid, const QRegion &region);
+    Q_INVOKABLE void removeUnitedMaskRegion(const QString &regionid);
 
     void clearShadows();
     void updateShadows();
@@ -102,37 +123,54 @@ public slots:
 
 signals:
     void animationsBlockedChanged();
+    void backgroundAllCornersChanged();
+    void backgroundCornersMaskChanged();
     void backgroundOpacityChanged();
+    void backgroundRadiusEnabledChanged();
+    void backgroundRadiusChanged();
     void drawShadowsChanged();
     void drawEffectsChanged();
     void editShadowChanged();
     void enabledBordersChanged();
     void maskChanged();
     void innerShadowChanged();
+    void inputMaskChanged();
     void rectChanged();
-    void settingsMaskSubtractedChanged();
+
+    void subtractedMaskRegionsChanged();
+    void unitedMaskRegionsChanged();
 
 private slots:
     void init();
 
     void updateBackgroundContrastValues();
+    void updateBackgroundCorners();
 
 private:
+    bool backgroundRadiusIsEnabled() const;
     qreal currentMidValue(const qreal &max, const qreal &factor, const qreal &min) const;
-
-    QRegion subtractedMask();
-    QRegion subtrackedMaskFromWindow(QRegion initialRegion, QQuickView *window);
+    QRegion customMask(const QRect &rect);
+    QRegion maskCombinedRegion();
 
 private:
     bool m_animationsBlocked{false};
+    bool m_backgroundAllCorners{false};
+    bool m_backgroundRadiusEnabled{false};
     bool m_drawShadows{true};
     bool m_drawEffects{false};
-    bool m_forceDrawCenteredBorders{false};
-    bool m_settingsMaskSubtracted{false};
+    bool m_forceTopBorder{false};
+    bool m_forceBottomBorder{false};
 
-    int m_backgroundOpacity{100};
+    bool m_hasTopLeftCorner{false};
+    bool m_hasTopRightCorner{false};
+    bool m_hasBottomLeftCorner{false};
+    bool m_hasBottomRightCorner{false};
+
     int m_editShadow{0};
     int m_innerShadow{0};
+
+    int m_backgroundRadius{-1};
+    float m_backgroundOpacity{1.0};
 
     qreal m_backEffectContrast{1};
     qreal m_backEffectIntesity{1};
@@ -140,8 +178,12 @@ private:
 
     QRect m_rect;
     QRect m_mask;
+    QRect m_inputMask;
 
     QPointer<Latte::View> m_view;
+    QPointer<Latte::Corona> m_corona;
+
+    PlasmaExtended::CornerRegions m_cornersMaskRegion;
 
     Plasma::Theme m_theme;
     //only for the mask on disabled compositing, not to actually paint
@@ -149,6 +191,10 @@ private:
 
     //only for the mask, not to actually paint
     Plasma::FrameSvg::EnabledBorders m_enabledBorders{Plasma::FrameSvg::AllBorders};
+
+    //! Subtracted and United Mask regions
+    QHash<QString, QRegion> m_subtractedMaskRegions;
+    QHash<QString, QRegion> m_unitedMaskRegions;
 };
 
 }

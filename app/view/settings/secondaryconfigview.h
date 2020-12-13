@@ -21,8 +21,9 @@
 #define SECONDARYCONFIGVIEW_H
 
 // local
+#include <coretypes.h>
+#include "subconfigview.h"
 #include "../../wm/windowinfowrap.h"
-#include "../../../liblatte2/types.h"
 
 //Qt
 #include <QObject>
@@ -33,6 +34,7 @@
 // Plasma
 #include <plasma/package.h>
 #include <Plasma/FrameSvg>
+
 
 namespace Plasma {
 class Applet;
@@ -61,61 +63,39 @@ class PrimaryConfigView;
 namespace Latte {
 namespace ViewPart {
 
-class SecondaryConfigView : public QQuickView
+class SecondaryConfigView : public SubConfigView
 {
     Q_OBJECT
 
-    Q_PROPERTY(Plasma::FrameSvg::EnabledBorders enabledBorders READ enabledBorders NOTIFY enabledBordersChanged)
-
 public:
-    SecondaryConfigView(Latte::View *view, QWindow *parent);
-    ~SecondaryConfigView() override;
-
-    void init();
-    void requestActivate();
-    Qt::WindowFlags wFlags() const;
+    SecondaryConfigView(Latte::View *view, PrimaryConfigView *parent);
 
     QRect geometryWhenVisible() const;
 
-    Plasma::FrameSvg::EnabledBorders enabledBorders() const;
+    void hideConfigWindow();
 
 public slots:
-    Q_INVOKABLE void hideConfigWindow();
-    Q_INVOKABLE void syncGeometry();
+    Q_INVOKABLE void syncGeometry() override;
     Q_INVOKABLE void updateEffects();
 
 signals:
-    void enabledBordersChanged();
     void showSignal();
 
 protected:
     void showEvent(QShowEvent *ev) override;
     void focusOutEvent(QFocusEvent *ev) override;
-    bool event(QEvent *e) override;
 
-    void syncSlideEffect();
-
-private slots:
-    void updateEnabledBorders();
+    void init() override;
+    void initParentView(Latte::View *view) override;
+    void updateEnabledBorders() override;
 
 private:
-    void setupWaylandIntegration();
-
     QRect m_geometryWhenVisible;
 
-    QPointer<Latte::View> m_latteView;
     QPointer<PrimaryConfigView> m_parent;
-    QTimer m_screenSyncTimer;
-    QTimer m_thicknessSyncTimer;
-    QList<QMetaObject::Connection> connections;
 
-    Plasma::FrameSvg::EnabledBorders m_enabledBorders{Plasma::FrameSvg::AllBorders};
     //only for the mask on disabled compositing, not to actually paint
     Plasma::FrameSvg *m_background{nullptr};
-
-    Latte::Corona *m_corona{nullptr};
-    Latte::WindowSystem::WindowId m_waylandWindowId;
-    KWayland::Client::PlasmaShellSurface *m_shellSurface{nullptr};
 };
 
 }

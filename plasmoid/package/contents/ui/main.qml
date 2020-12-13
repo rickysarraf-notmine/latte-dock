@@ -31,9 +31,14 @@ import org.kde.plasma.private.taskmanager 0.1 as TaskManagerApplet
 
 import org.kde.activities 0.1 as Activities
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
+import org.kde.latte.abilities.applets 0.1 as AppletAbility
+
+import org.kde.latte.private.tasks 0.1 as LatteTasks
+
+import "abilities" as Ability
 import "previews" as Previews
 import "task" as Task
 import "taskslayout" as TasksLayout
@@ -43,44 +48,31 @@ import "../code/ColorizerTools.js" as ColorizerTools
 
 Item {
     id:root
-
     Layout.fillWidth: scrollingEnabled && !root.vertical
     Layout.fillHeight: scrollingEnabled && root.vertical
 
-    ///IMPORTANT: These values must be tested when the Now Dock Panel support
-    ///also the four new anchors. A small issue is shown between the animation
-    /// of the now dock plasmoid and the neighbour widgets...
-    Layout.minimumWidth: -1 //(userPanelPosition !== 0)&&(!latteView) ? clearWidth : -1
-    Layout.minimumHeight: -1 //(userPanelPosition !== 0)&&(!latteView) ? clearHeight : -1
-    Layout.preferredWidth: tasksWidth   //(userPanelPosition !== 0)&&(!latteView) ? tasksWidth : tasksWidth
-    Layout.preferredHeight: tasksHeight //(userPanelPosition !== 0)&&(!latteView) ? tasksHeight : tasksHeight
+    Layout.minimumWidth: -1
+    Layout.minimumHeight: -1
+    Layout.preferredWidth: tasksWidth
+    Layout.preferredHeight: tasksHeight
     Layout.maximumWidth: -1
     Layout.maximumHeight: -1
 
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft && !root.vertical
     LayoutMirroring.childrenInherit: true
 
-    property bool debugLocation: false
+    property bool plasma515: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,15,0)
+    property bool plasma518: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,18,0)
+    property bool plasma520: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,20,0)
 
-    //it is used to check both the applet and the containment for direct render
-    property bool globalDirectRender: latteView ? latteView.globalDirectRender : icList.directRender
-
-    property bool plasma515: latteView ? latteView.plasma515 : Latte.WindowSystem.plasmaDesktopVersion >= Latte.WindowSystem.makeVersion(5,15,0)
-    property bool plasma518: latteView ? latteView.plasma518 : Latte.WindowSystem.plasmaDesktopVersion >= Latte.WindowSystem.makeVersion(5,18,0)
-
-    property bool editMode: latteView ? latteView.editMode : plasmoid.userConfiguring
-    property bool inConfigureAppletsMode: latteView ? latteView.inConfigureAppletsMode : true
     property bool disableRestoreZoom: false //blocks restore animation in rightClick
-    property bool disableAllWindowsFunctionality: root.showWindowsOnlyFromLaunchers && !indicators.isEnabled
+    property bool disableAllWindowsFunctionality: plasmoid.configuration.hideAllTasks
     property bool dropNewLauncher: false
-    readonly property bool hasInternalSeparator: parabolicManager.hasInternalSeparator
     property bool inActivityChange: false
     property bool inDraggingPhase: false
     property bool initializationStep: false //true
     property bool isHovered: false
     property bool showBarLine: plasmoid.configuration.showBarLine
-    property bool showTaskShortcutBadges: false
-    property int tasksBaseIndex: 0
     property bool useThemePanel: plasmoid.configuration.useThemePanel
     property bool taskInAnimation: noTasksInAnimation > 0 ? true : false
     property bool transparentPanel: plasmoid.configuration.transparentPanel
@@ -89,30 +81,31 @@ Item {
     property int clearWidth
     property int clearHeight
 
-    property int newLocationDebugUse: PlasmaCore.Types.BottomPositioned
     property int newDroppedPosition: -1
     property int noInitCreatedBuffers: 0
     property int noTasksInAnimation: 0
     property int themePanelSize: plasmoid.configuration.panelSize
 
-    property int position : PlasmaCore.Types.BottomPositioned
+    property int location : {
+        if (plasmoid.location === PlasmaCore.Types.LeftEdge
+                || plasmoid.location === PlasmaCore.Types.RightEdge
+                || plasmoid.location === PlasmaCore.Types.TopEdge) {
+            return plasmoid.location;
+        }
+
+        return PlasmaCore.Types.BottomEdge;
+    }
+
     property int tasksStarting: 0
 
     ///Don't use Math.floor it adds one pixel in animations and creates glitches
-    property int widthMargins: root.vertical ? thickMargins : lengthMargins
-    property int heightMargins: !root.vertical ? thickMargins : lengthMargins
+    property int widthMargins: root.vertical ? metrics.totals.thicknessEdges : metrics.totals.lengthEdges
+    property int heightMargins: !root.vertical ? metrics.totals.thicknessEdges : metrics.totals.lengthEdges
 
-    property int internalWidthMargins: root.vertical ? thickMargins : 2 * lengthIntMargin
-    property int internalHeightMargins: !root.vertical ? thickMargins : 2 * lengthIntMargin
+    property int internalWidthMargins: root.vertical ? metrics.totals.thicknessEdges : metrics.totals.lengthPaddings
+    property int internalHeightMargins: !root.vertical ? metrics.totals.thicknessEdges : metrics.totals.lengthPaddings
 
     property real textColorBrightness: ColorizerTools.colorBrightness(themeTextColor)
-    property color minimizedDotColor: {
-        if (latteView) {
-            return latteView.minimizedDotColor;
-        }
-
-        return textColorBrightness > 127.5 ? Qt.darker(themeTextColor, 1.7) : Qt.lighter(themeBackgroundColor, 7)
-    }
 
     property color themeTextColor: theme.textColor
     property color themeBackgroundColor: theme.backgroundColor
@@ -129,23 +122,15 @@ Item {
     property QtObject contextMenu: null
     property QtObject contextMenuComponent: Qt.createComponent("ContextMenu.qml");
     property Item dragSource: null
-    property Item parabolicManager: _parabolicManager
+
     property Item tasksExtendedManager: _tasksExtendedManager
-
-    //separator calculations based on audoban's design
-    property int maxSeparatorLength: {
-        if (root.vertical)
-            return 5 + heightMargins;
-        else
-            return 5 + widthMargins;
-    }
-
-    property real missingSeparatorLength: {
-        if (!root.isVertical)
-            return ((iconSize + widthMargins) * zoomFactor) - maxSeparatorLength;
-        else
-            return ((iconSize + heightMargins) * zoomFactor) - maxSeparatorLength;
-    }
+    readonly property alias animations: _animations
+    readonly property alias debug: _debug
+    readonly property alias indexer: _indexer
+    readonly property alias launchers: _launchers
+    readonly property alias metrics: _metrics
+    readonly property alias parabolic: _parabolic
+    readonly property alias shortcuts: _shortcuts
 
     readonly property alias containsDrag: mouseHandler.containsDrag
     readonly property bool dragAreaEnabled: latteView ? (root.dragSource !== null
@@ -162,141 +147,110 @@ Item {
     property bool dockIsShownCompletely: latteView ? latteView.dockIsShownCompletely : true
     property bool enableShadows: latteView ? latteView.enableShadows > 0 : plasmoid.configuration.showShadows
     property bool forceHidePanel: false
-    property bool directRenderDelayerIsRunning: latteView ? latteView.directRenderDelayerIsRunning : directRenderDelayerForEnteringTimer.running
+
     property bool disableLeftSpacer: false
     property bool disableRightSpacer: false
     property bool dockIsHidden: latteView ? latteView.dockIsHidden : false
-    property bool groupTasksByDefault: latteView ? latteView.groupTasksByDefault: true
-    property bool highlightWindows: latteView ? latteView.hoverAction === Latte.Types.HighlightWindows || latteView.hoverAction === Latte.Types.PreviewAndHighlightWindows :
-                                                plasmoid.configuration.highlightWindows
-    property bool mouseWheelActions: latteView ? latteView.mouseWheelActions : true
-    property bool parabolicEffectEnabled: latteView ? latteView.parabolicEffectEnabled : zoomFactor>1 && !root.editMode
+    property bool groupTasksByDefault: plasmoid.configuration.groupTasksByDefault
+    property bool highlightWindows: hoverAction === LatteTasks.Types.HighlightWindows || hoverAction === LatteTasks.Types.PreviewAndHighlightWindows
 
-    property bool scrollingEnabled: latteView ? latteView.scrollTasksEnabled : false
-    property bool autoScrollTasksEnabled: latteView ? (scrollingEnabled && latteView.autoScrollTasksEnabled) : false
-    property bool manualScrollTasksEnabled: latteView ? (scrollingEnabled &&  manualScrollTasksType !== Latte.Types.ManualScrollDisabled) : Latte.Types.ManualScrollDisabled
-    property int manualScrollTasksType: latteView ? latteView.manualScrollTasksType : 0
+    property bool scrollingEnabled: plasmoid.configuration.scrollTasksEnabled
+    property bool autoScrollTasksEnabled: scrollingEnabled && plasmoid.configuration.autoScrollTasksEnabled
+    property bool manualScrollTasksEnabled: scrollingEnabled &&  manualScrollTasksType !== LatteTasks.Types.ManualScrollDisabled
+    property int manualScrollTasksType: plasmoid.configuration.manualScrollTasksType
 
-    property bool showInfoBadge: latteView ? latteView.showInfoBadge : plasmoid.configuration.showInfoBadge
-    property bool showProgressBadge: latteView ? latteView.showProgressBadge : plasmoid.configuration.showInfoBadge
-    property bool showAudioBadge: latteView ? latteView.showAudioBadge : plasmoid.configuration.showAudioBadge
-    property bool infoBadgeProminentColorEnabled: latteView ? latteView.infoBadgeProminentColorEnabled : false
-    property bool audioBadgeActionsEnabled: latteView ? latteView.audioBadgeActionsEnabled : true
-    property bool showOnlyCurrentScreen: latteView ? latteView.showOnlyCurrentScreen : plasmoid.configuration.showOnlyCurrentScreen
-    property bool showOnlyCurrentDesktop: latteView ? latteView.showOnlyCurrentDesktop : plasmoid.configuration.showOnlyCurrentDesktop
-    property bool showOnlyCurrentActivity: latteView ? latteView.showOnlyCurrentActivity : plasmoid.configuration.showOnlyCurrentActivity
-    property bool showPreviews:  latteView ? latteView.hoverAction === Latte.Types.PreviewWindows || latteView.hoverAction === Latte.Types.PreviewAndHighlightWindows :
-                                             plasmoid.configuration.showToolTips
-    property bool showWindowActions: latteView ? latteView.showWindowActions : plasmoid.configuration.showWindowActions
-    property bool showWindowsOnlyFromLaunchers: latteView ? latteView.showWindowsOnlyFromLaunchers : false
+    property bool showInfoBadge: plasmoid.configuration.showInfoBadge
+    property bool showProgressBadge: plasmoid.configuration.showProgressBadge
+    property bool showAudioBadge: plasmoid.configuration.showAudioBadge
+    property bool infoBadgeProminentColorEnabled: plasmoid.configuration.infoBadgeProminentColorEnabled
+    property bool audioBadgeActionsEnabled: plasmoid.configuration.audioBadgeActionsEnabled
+    property bool showOnlyCurrentScreen: plasmoid.configuration.showOnlyCurrentScreen
+    property bool showOnlyCurrentDesktop: plasmoid.configuration.showOnlyCurrentDesktop
+    property bool showOnlyCurrentActivity: plasmoid.configuration.showOnlyCurrentActivity
+    property bool showPreviews:  hoverAction === LatteTasks.Types.PreviewWindows || hoverAction === LatteTasks.Types.PreviewAndHighlightWindows
+    property bool showWindowActions: plasmoid.configuration.showWindowActions && !disableAllWindowsFunctionality
+    property bool showWindowsOnlyFromLaunchers: plasmoid.configuration.showWindowsOnlyFromLaunchers && !disableAllWindowsFunctionality
 
     property bool titleTooltips: latteView ? latteView.titleTooltips : false
     property alias windowPreviewIsShown: windowsPreviewDlg.visible
 
-    property int animationStep: latteView ? latteView.animationStep : 1
-    property int directRenderAnimationTime: latteView ? latteView.directRenderAnimationTime : 0
-    property int dockHoveredIndex : latteView ? latteView.hoveredIndex : -1
+    property int launchersGroup: plasmoid.configuration.launchersGroup
 
-    property int iconSize: latteView ? latteView.iconSize : Math.max(plasmoid.configuration.iconSize, 16)
-    property int maxIconSize: latteView ? latteView.maxIconSize : iconSize
-
-    property int leftClickAction: latteView ? latteView.leftClickAction : Latte.Types.PresentWindows
-    property int middleClickAction: latteView ? latteView.middleClickAction : plasmoid.configuration.middleClickAction
-    property int hoverAction: latteView ? latteView.hoverAction : Latte.Types.NoneAction
-    property int modifier: latteView ? latteView.modifier : -1
-    property int modifierClickAction: latteView ? latteView.modifierClickAction : -1
-    property int modifierClick: latteView ? latteView.modifierClick : -1
+    property int leftClickAction: plasmoid.configuration.leftClickAction
+    property int middleClickAction: plasmoid.configuration.middleClickAction
+    property int hoverAction: plasmoid.configuration.hoverAction
+    property int modifier: plasmoid.configuration.modifier
+    property int modifierClickAction: plasmoid.configuration.modifierClickAction
+    property int modifierClick: plasmoid.configuration.modifierClick
     property int modifierQt:{
-        if (modifier === Latte.Types.Shift)
+        if (modifier === LatteTasks.Types.Shift)
             return Qt.ShiftModifier;
-        else if (modifier === Latte.Types.Ctrl)
+        else if (modifier === LatteTasks.Types.Ctrl)
             return Qt.ControlModifier;
-        else if (modifier === Latte.Types.Alt)
+        else if (modifier === LatteTasks.Types.Alt)
             return Qt.AltModifier;
-        else if (modifier === Latte.Types.Meta)
+        else if (modifier === LatteTasks.Types.Meta)
             return Qt.MetaModifier;
         else return -1;
     }
+    property int taskScrollAction: plasmoid.configuration.taskScrollAction
 
-    property int thickMargin: latteView ? latteView.thickMargin : 0.16*iconSize
-    property int thickMargins: 2 * thickMargin
-    property int lengthIntMargin: latteView ? latteView.lengthIntMargin : 0.04*iconSize
-    property int lengthExtMargin: latteView ? latteView.lengthExtMargin : 0.1 * iconSize
-    property int lengthMargin: lengthIntMargin + lengthExtMargin
-    property int lengthMargins: 2 * lengthMargin
+    onTaskScrollActionChanged: {
+        if (taskScrollAction > LatteTasks.Types.ScrollToggleMinimized) {
+            //! migrating scroll action to LatteTasks.Types.ScrollAction
+            plasmoid.configuration.taskScrollAction = plasmoid.configuration.taskScrollAction-LatteTasks.Types.ScrollToggleMinimized;
+        }
+    }
 
-    property int tasksHeight: mouseHandler.height
-    property int tasksWidth: mouseHandler.width
+    //! Real properties are need in order for parabolic effect to be 1px precise perfect.
+    //! This way moving from Tasks to Applets and vice versa is pretty stable when hovering with parabolic effect.
+    property real tasksHeight:  mouseHandler.height
+    property real tasksWidth: mouseHandler.width
+
     //updated from Binding
-    property int userPanelPosition
+    property int alignment
 
     readonly property real currentPanelOpacity: latteView ? latteView.currentPanelTransparency / 100 : 1
 
-    //! Animations
-    property bool animationsEnabled: latteView ? latteView.animationsEnabled : durationTime !== 0
-    property bool animationLauncherBouncing: latteView ? latteView.animationLauncherBouncing : durationTime !== 0
-    property bool animationWindowInAttention: latteView ? latteView.animationWindowInAttention : durationTime !== 0
-    property bool animationNewWindowSliding: latteView ? latteView.animationNewWindowSliding : durationTime !== 0
-    property bool animationWindowAddedInGroup: latteView ? latteView.animationWindowAddedInGroup : durationTime !== 0
-    property bool animationWindowRemovedFromGroup: latteView ? latteView.animationWindowRemovedFromGroup : durationTime !== 0
-
-    property real animationsZoomFactor: latteView ? latteView.animationsZoomFactor : durationTime === 0 ? 1 : 1.65
-    property real maxZoomFactor: latteView ? latteView.maxZoomFactor : Math.max(zoomFactor, animationsZoomFactor)
-
-    readonly property real animationsSpeed2: plasma518 ? 1.00 : 2.00
-
-    property real appliedDurationTime: animationsEnabled ? durationTime : animationsSpeed2
-    property real durationTime: latteView ? latteView.durationTime : plasmoid.configuration.durationTime
-    property real zoomFactor: latteView ? latteView.zoomFactor : ( 1 + (plasmoid.configuration.zoomLevel / 20) )
-
-    property int appShadowSize: latteView ? latteView.appShadowSize : Math.ceil(0.12*iconSize)
+    property int appShadowSize: latteView ? latteView.appShadowSize : Math.ceil(0.12*metrics.iconSize)
     property string appShadowColor: latteView ? latteView.appShadowColor : "#ff080808"
     property string appShadowColorSolid: latteView ? latteView.appShadowColorSolid : "#ff080808"
 
     property alias tasksCount: tasksModel.count
-    property alias hoveredIndex: icList.hoveredIndex
 
+    readonly property real screenGeometryHeightRatio: screenGeometry.height / screenGeometry.width
     readonly property rect screenGeometry: latteView ? latteView.screenGeometry : plasmoid.screenGeometry
 
-    readonly property bool viewLayoutIsCurrent: latteView && viewLayout && latteView.layoutsManager
-                                                && viewLayout.name === latteView.layoutsManager.currentLayoutName
     readonly property string viewLayoutName: viewLayout ? viewLayout.name : ""
     readonly property QtObject viewLayout : latteView && latteView.viewLayout ? latteView.viewLayout : null
-
-    property var badgesForActivate: latteView ? latteView.badgesForActivate : []
-
 
     property Item latteView: null
     readonly property Item indicators: latteView ? latteView.indicatorsManager : indicatorsStandaloneLoader.item
     //END Latte Dock Panel properties
 
+    readonly property bool inEditMode: latteInEditMode || plasmoid.userConfiguring
+
     //BEGIN Latte Dock Communicator
     property QtObject latteBridge: null
-    onLatteBridgeChanged: {
-        if (latteBridge) {
-            latteBridge.actions.setProperty(plasmoid.id, "latteSideColoringEnabled", false);
-        }
-    }
-    //END  Latte Dock Communicator
-    //BEGIN Latte based properties
+
+    readonly property bool inPlasma: latteBridge === null
+    readonly property bool inPlasmaDesktop: inPlasma && !inPlasmaPanel
+    readonly property bool inPlasmaPanel: inPlasma && (plasmoid.location === PlasmaCore.Types.LeftEdge
+                                                       || plasmoid.location === PlasmaCore.Types.RightEdge
+                                                       || plasmoid.location === PlasmaCore.Types.BottomEdge
+                                                       || plasmoid.location === PlasmaCore.Types.TopEdge)
     readonly property bool enforceLattePalette: latteBridge && latteBridge.applyPalette && latteBridge.palette
     readonly property bool latteInEditMode: latteBridge && latteBridge.inEditMode
-    //END Latte based properties
+    //END  Latte Dock Communicator
 
     Plasmoid.preferredRepresentation: Plasmoid.fullRepresentation
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
-    signal clearZoomSignal();
     signal draggingFinished();
     signal hiddenTasksUpdated();
     signal launchersUpdatedFor(string launcher);
     signal presentWindows(variant winIds);
     signal requestLayout;
-    signal separatorsUpdated();
-    signal signalActionsBlockHiding(int value);
-    signal signalAnimationsNeedBothAxis(int value);
-    signal signalAnimationsNeedLength(int value);
-    signal signalAnimationsNeedThickness(int value);
     signal signalPreviewsShown();
     //signal signalDraggingState(bool value);
     signal showPreviewForTasks(QtObject group);
@@ -316,18 +270,26 @@ Item {
     onLatteViewChanged: {
         if (latteView) {
             plasmoid.action("configure").visible = false;
-            plasmoid.action("remove").visible = false;
             plasmoid.configuration.isInLatteDock = true;
+
+            if (root.launchersGroup === LatteCore.Types.LayoutLaunchers
+                    || root.launchersGroup === LatteCore.Types.GlobalLaunchers) {
+                tasksModel.updateLaunchersList();
+            }
         } else {
             plasmoid.configuration.isInLatteDock = false;
         }
     }
 
+    onLaunchersGroupChanged:{
+        if(latteView) {
+            tasksModel.updateLaunchersList();
+        }
+    }
 
     Connections {
         target: plasmoid
         onLocationChanged: {
-            root.updatePosition();
             iconGeometryTimer.start();
         }
     }
@@ -348,31 +310,19 @@ Item {
                 windowsPreviewDlg.hide("3.3");
             }
         }
+    }
 
-        onLaunchersGroupChanged:{
-            if( latteView && latteView.editMode) {
-                tasksModel.updateLaunchersList();
+    Binding {
+        target: plasmoid
+        property: "status"
+        value: {
+            if (tasksModel.anyTaskDemandsAttentionInValidTime || root.dragSource) {
+                return PlasmaCore.Types.NeedsAttentionStatus;
             }
+
+            return PlasmaCore.Types.PassiveStatus;
         }
     }
-
-
-    Connections{
-        target: latteView && latteView.layoutsManager ? latteView.layoutsManager : null
-
-        onCurrentLayoutNameChanged: root.publishTasksGeometries();
-    }
-
-    Connections{
-        target: icList
-
-        onHoveredIndexChanged:{
-            if (latteView && icList.hoveredIndex>-1){
-                latteView.setHoveredIndex(-1);
-            }
-        }
-    }
-
 
     /////
     PlasmaCore.ColorScope{
@@ -394,40 +344,33 @@ Item {
 
     Binding {
         target: root
-        property: "userPanelPosition"
+        property: "alignment"
         value: {
             if (latteView) {
-                if (latteView.panelUserSetAlignment === -1) {
+                if (latteView.panelAlignment === -1) {
                     return;
                 }
 
-                if (inConfigureAppletsMode) {
-                    return Latte.Types.Center;
-                } else if (latteView.panelUserSetAlignment === Latte.Types.Justify) {
+                if (latteView.panelAlignment === LatteCore.Types.Justify) {
                     if (latteView.latteAppletPos>=0 && latteView.latteAppletPos<100) {
-                        return plasmoid.formFactor === PlasmaCore.Types.Horizontal ? Latte.Types.Left : Latte.Types.Top;
+                        return plasmoid.formFactor === PlasmaCore.Types.Horizontal ? LatteCore.Types.Left : LatteCore.Types.Top;
                     } else if (latteView.latteAppletPos>=100 && latteView.latteAppletPos<200) {
-                        return Latte.Types.Center;
+                        return LatteCore.Types.Center;
                     } else if (latteView.latteAppletPos>=200) {
-                        return plasmoid.formFactor === PlasmaCore.Types.Horizontal ? Latte.Types.Right : Latte.Types.Bottom;
+                        return plasmoid.formFactor === PlasmaCore.Types.Horizontal ? LatteCore.Types.Right : LatteCore.Types.Bottom;
                     }
 
-                    return Latte.Types.Center;
+                    return LatteCore.Types.Center;
                 }
 
-                return latteView.panelUserSetAlignment;
+                return latteView.panelAlignment;
             }
 
-            return plasmoid.configuration.plasmoidPosition;
+            return !root.vertical ? LatteCore.Types.Left : LatteCore.Types.Top;
         }
     }
 
     /////
-
-    function initializeHoveredIndex() {
-        icList.hoveredIndex = -1;
-        icList.currentSpot = -1000;
-    }
 
     function launchersDropped(urls){
         mouseHandler.urlsDropped(urls);
@@ -469,12 +412,12 @@ Item {
         if (viewLayout) {
             if (latteView && latteView.layoutsManager
                     && latteView.viewLayout && latteView.universalSettings
-                    && (latteView.launchersGroup === Latte.Types.LayoutLaunchers
-                        || latteView.launchersGroup === Latte.Types.GlobalLaunchers)) {
+                    && (root.launchersGroup === LatteCore.Types.LayoutLaunchers
+                        || root.launchersGroup === LatteCore.Types.GlobalLaunchers)) {
 
-                if (latteView.launchersGroup === Latte.Types.LayoutLaunchers) {
+                if (root.launchersGroup === LatteCore.Types.LayoutLaunchers) {
                     launchersList = latteView.viewLayout.launchers;
-                } else if (latteView.launchersGroup === Latte.Types.GlobalLaunchers) {
+                } else if (root.launchersGroup === LatteCore.Types.GlobalLaunchers) {
                     launchersList = latteView.universalSettings.launchers;
                 }
             }
@@ -517,6 +460,12 @@ Item {
         return launch;
     }
 
+    function forcePreviewsHiding(debug) {
+        // console.log(" org.kde.latte   Tasks: Force hide previews event called: "+debug);
+        windowsPreviewDlg.activeItem = null;
+        windowsPreviewDlg.visible = false;
+    }
+
     function hidePreview(){
         windowsPreviewDlg.hide(11);
     }
@@ -524,13 +473,11 @@ Item {
     onDragSourceChanged: {
         if (dragSource == null) {
             root.draggingFinished();
-            root.signalActionsBlockHiding(-1);
             tasksModel.syncLaunchers();
 
             restoreDraggingPhaseTimer.start();
         } else {
             inDraggingPhase = true;
-            root.signalActionsBlockHiding(1);
         }
     }
 
@@ -543,13 +490,13 @@ Item {
 
     ////BEGIN interfaces
 
-    PlasmaCore.Dialog{
+    LatteTasks.Dialog{
         id: windowsPreviewDlg
-        // hideOnWindowDeactivate: false
-        type: PlasmaCore.Dialog.Tooltip
-        flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
+        type: plasmoid.configuration.previewWindowAsPopup ? PlasmaCore.Dialog.PopupMenu : PlasmaCore.Dialog.Tooltip
+        flags: plasmoid.configuration.previewWindowAsPopup ? Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.Popup :
+                                                             Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
 
-        location: plasmoid.location
+        location: root.location
         mainItem: toolTipDelegate
         visible: false
 
@@ -558,17 +505,33 @@ Item {
 
         Component.onCompleted: mainItem.visible = true;
 
+        onContainsMouseChanged: {
+            //! Orchestrate restore zoom and previews window hiding. Both should be
+            //! triggered together.
+            if (containsMouse) {
+                hidePreviewWinTimer.stop();
+                parabolic.stopRestoreZoomTimer();
+                parabolic.setDirectRenderingEnabled(false);
+            } else {
+                hide(7.3);
+                parabolic.startRestoreZoomTimer();
+            }
+        }
+
         function hide(debug){
-            // console.log("on hide previews event called: "+debug);
+            //console.log("   Tasks: hide previews event called: "+debug);
+            if (containsMouse || !visible) {
+                return;
+            }
 
             if (latteView && signalSent) {
                 //it is used to unblock dock hiding
-                root.signalActionsBlockHiding(-1);
                 signalSent = false;
             }
 
-            if (!root.contextMenu)
+            if (!root.contextMenu) {
                 root.disableRestoreZoom = false;
+            }
 
             hidePreviewWinTimer.start();
         }
@@ -595,15 +558,15 @@ Item {
 
                 if (latteView && !signalSent) {
                     //it is used to block dock hiding
-                    root.signalActionsBlockHiding(1);
                     signalSent = true;
                 }
 
                 //! Workaround in order to update properly the previews thumbnails
                 //! when switching between single thumbnail to another single thumbnail
-                mainItem.visible = false;
+                //! maybe is not needed any more, let's disable it
+                //mainItem.visible = false;
                 visible = true;
-                mainItem.visible = true;
+                //mainItem.visible = true;
             }
         }
     }
@@ -611,11 +574,20 @@ Item {
     //! Delay windows previews hiding
     Timer {
         id: hidePreviewWinTimer
-        interval: 350
+        interval: 300
         onTriggered: {
-            windowsPreviewDlg.visible = false;
-            windowsPreviewDlg.mainItem.visible = false;
-            windowsPreviewDlg.activeItem = null;
+            //! Orchestrate restore zoom and previews window hiding. Both should be
+            //! triggered together.
+            var contains = (windowsPreviewDlg.containsMouse
+                            || (windowsPreviewDlg.activeItem && windowsPreviewDlg.activeItem.containsMouse) /*main task*/
+                            || (windowsPreviewDlg.activeItem /*dragging file(s) from outside*/
+                                && mouseHandler.hoveredItem
+                                && !root.dragSource
+                                && mouseHandler.hoveredItem === windowsPreviewDlg.activeItem));
+
+            if (!contains) {
+                root.forcePreviewsHiding(9.9);
+            }
         }
     }
 
@@ -639,14 +611,14 @@ Item {
     Timer{
         id: delayWindowRemovalTimer
         //this is the animation time needed in order for tasks to restore their zoom first
-        interval: 7 * (root.durationTime * units.shortDuration)
+        interval: 7 * (animations.speedFactor.current * animations.duration.small)
 
         property var modelIndex
 
         onTriggered: {
             tasksModel.requestClose(delayWindowRemovalTimer.modelIndex)
 
-            if (latteView && latteView.debugModeTimers) {
+            if (debug.timersEnabled) {
                 console.log("plasmoid timer: delayWindowRemovalTimer called...");
             }
         }
@@ -657,9 +629,10 @@ Item {
         interval: 150
         onTriggered: {
             root.inActivityChange = false;
+            root.publishTasksGeometries();
             activityInfo.previousActivity = activityInfo.currentActivity;
 
-            if (latteView && latteView.debugModeTimers) {
+            if (debug.timersEnabled) {
                 console.log("plasmoid timer: activityChangeDelayer called...");
             }
         }
@@ -697,16 +670,21 @@ Item {
         groupMode: groupTasksByDefault ? TaskManager.TasksModel.GroupApplications : TaskManager.TasksModel.GroupDisabled
         sortMode: TaskManager.TasksModel.SortManual
 
+        property bool anyTaskDemandsAttentionInValidTime: false
+
         function updateLaunchersList(){
-            if (latteView.universalSettings
-                    && (latteView.launchersGroup === Latte.Types.LayoutLaunchers
-                        || latteView.launchersGroup === Latte.Types.GlobalLaunchers)) {
-                if (latteView.launchersGroup === Latte.Types.LayoutLaunchers) {
+            if (latteView
+                    && (root.launchersGroup === LatteCore.Types.LayoutLaunchers
+                        || root.launchersGroup === LatteCore.Types.GlobalLaunchers)) {
+                if (root.launchersGroup === LatteCore.Types.LayoutLaunchers) {
+                    console.log("Tasks: Applying LAYOUT Launchers List...");
                     tasksModel.launcherList = latteView.viewLayout.launchers;
-                } else if (latteView.launchersGroup === Latte.Types.GlobalLaunchers) {
+                } else if (root.launchersGroup === LatteCore.Types.GlobalLaunchers) {
+                    console.log("Tasks: Applying GLOBAL Launchers List...");
                     tasksModel.launcherList = latteView.universalSettings.launchers;
                 }
             } else {
+                console.log("Tasks: Applying UNIQUE Launchers List...");
                 tasksModel.launcherList = plasmoid.configuration.launchers59;
             }
         }
@@ -716,8 +694,9 @@ Item {
 
             var NULL_UUID = "00000000-0000-0000-0000-000000000000";
 
-            if (activities.indexOf(NULL_UUID) !== -1 || activities.indexOf(activityInfo.currentActivity) !== -1)
+            if (activities.length === 0 || activities.indexOf(NULL_UUID) !== -1 || activities.indexOf(activityInfo.currentActivity) !== -1) {
                 return true;
+            }
 
             return false;
         }
@@ -730,20 +709,20 @@ Item {
             if (viewLayout) {
                 if (latteView && latteView.layoutsManager
                         && latteView.viewLayout && latteView.universalSettings
-                        && (latteView.launchersGroup === Latte.Types.LayoutLaunchers
-                            || latteView.launchersGroup === Latte.Types.GlobalLaunchers)) {
+                        && (root.launchersGroup === LatteCore.Types.LayoutLaunchers
+                            || root.launchersGroup === LatteCore.Types.GlobalLaunchers)) {
 
-                    if (latteView.launchersGroup === Latte.Types.LayoutLaunchers) {
+                    if (root.launchersGroup === LatteCore.Types.LayoutLaunchers) {
                         latteView.viewLayout.launchers = launcherList;
-                    } else if (latteView.launchersGroup === Latte.Types.GlobalLaunchers) {
+                    } else if (root.launchersGroup === LatteCore.Types.GlobalLaunchers) {
                         latteView.universalSettings.launchers = launcherList;
                     }
 
                     if (inDraggingPhase) {
-                        if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+                        if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                             latteView.layoutsManager.launchersSignals.validateLaunchersOrder(root.viewLayoutName,
                                                                                              plasmoid.id,
-                                                                                             latteView.launchersGroup,
+                                                                                             root.launchersGroup,
                                                                                              currentLauncherList());
                         }
                     }
@@ -765,7 +744,7 @@ Item {
 
         onAnyTaskDemandsAttentionChanged: {
             if (anyTaskDemandsAttention){
-                plasmoid.status = PlasmaCore.Types.RequiresAttentionStatus;
+                anyTaskDemandsAttentionInValidTime = true;
                 attentionTimerComponent.createObject(root);
             }
         }
@@ -780,12 +759,12 @@ Item {
             ActivitiesTools.importLaunchersToNewArchitecture();
 
             if (viewLayout && latteView.universalSettings
-                    && (latteView.launchersGroup === Latte.Types.LayoutLaunchers
-                        || latteView.launchersGroup === Latte.Types.GlobalLaunchers)) {
+                    && (root.launchersGroup === LatteCore.Types.LayoutLaunchers
+                        || root.launchersGroup === LatteCore.Types.GlobalLaunchers)) {
 
-                if (latteView.launchersGroup === Latte.Types.LayoutLaunchers) {
+                if (root.launchersGroup === LatteCore.Types.LayoutLaunchers) {
                     launcherList = latteView.viewLayout.launchers;
-                } else if (latteView.launchersGroup === Latte.Types.GlobalLaunchers) {
+                } else if (root.launchersGroup === LatteCore.Types.GlobalLaunchers) {
                     launcherList = latteView.universalSettings.launchers;
                 }
             } else {
@@ -799,7 +778,7 @@ Item {
             tasksStarting = count;
 
             ///Plasma 5.9 enforce grouping at all cases
-            if (Latte.WindowSystem.plasmaDesktopVersion >= Latte.WindowSystem.makeVersion(5,9,0)) {
+            if (LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,9,0)) {
                 groupingWindowTasksThreshold = -1;
             }
         }
@@ -815,7 +794,7 @@ Item {
         type: PlasmaCore.Dialog.PopupMenu
         flags: Qt.WindowStaysOnTopHint
         hideOnWindowDeactivate: true
-        location: plasmoid.location
+        location: root.location
     }
 
 
@@ -837,7 +816,7 @@ Item {
             //! work only after Plasma 5.9 and frameworks 5.29
             //! + added a check for groupDialog also when it is present
             //!   in plasma 5.8 (that was introduced after 5.8.5)
-            if (Latte.WindowSystem.frameworksVersion >= 335104 || (groupDialog !== undefined)) {
+            if (LatteCore.Environment.frameworksVersion >= 335104 || (groupDialog !== undefined)) {
                 groupDialog = groupDialogGhost;
             }
         }
@@ -921,6 +900,12 @@ Item {
         function goNext(source) {
             startOperation(source, "Next");
         }
+        function play(source) {
+            startOperation(source, "Play");
+        }
+        function pause(source) {
+            startOperation(source, "Pause");
+        }
         function playPause(source) {
             startOperation(source, "PlayPause");
         }
@@ -941,17 +926,69 @@ Item {
         active: root.showAudioBadge
     }
 
-    ParabolicManager{
-        id: _parabolicManager
-    }
-
     TasksExtendedManager {
         id: _tasksExtendedManager
     }
 
-    /*  IconsModel{
-        id: iconsmdl
-    }*/
+    Ability.Animations {
+        id: _animations
+        bridge: latteBridge
+    }
+
+    AppletAbility.Debug {
+        id: _debug
+        bridge: latteBridge
+    }
+
+    Ability.Indexer {
+        id: _indexer
+        bridge: latteBridge
+        layout: icList.contentItem
+
+        allItemsCount: tasksModel.count
+    }
+
+    Ability.Launchers {
+        id: _launchers
+    }
+
+    Ability.Metrics {
+        id: _metrics
+        bridge: latteBridge
+    }
+
+    Ability.ParabolicEffect {
+        id: _parabolic
+        bridge: latteBridge
+        local.isEnabled: factor.zoom > 1
+        local.restoreZoomIsBlocked: root.contextMenu || windowsPreviewDlg.containsMouse
+    }
+
+    Ability.PositionShortcuts {
+        id: _shortcuts
+        bridge: latteBridge
+        isStealingGlobalPositionShortcuts: plasmoid.configuration.isPreferredForPositionShortcuts
+
+        onDisabledIsStealingGlobalPositionShortcuts: {
+            plasmoid.configuration.isPreferredForPositionShortcuts = false;
+        }
+    }
+
+    AppletAbility.Requirements{
+        id: _requires
+        bridge: latteBridge
+
+        activeIndicatorEnabled: false
+        latteIconOverlayEnabled: false
+        lengthMarginsEnabled: false
+        latteSideColoringEnabled: false
+        screenEdgeMarginSupported: true
+    }
+
+    Ability.UserRequests {
+        id: _userRequests
+        bridge: latteBridge
+    }
 
     Component{
         id: attentionTimerComponent
@@ -959,10 +996,10 @@ Item {
             id: attentionTimer
             interval:8500
             onTriggered: {
-                plasmoid.status = PlasmaCore.Types.PassiveStatus;
+                tasksModel.anyTaskDemandsAttentionInValidTime = false;
                 destroy();
 
-                if (latteView && latteView.debugModeTimers) {
+                if (debug.timersEnabled) {
                     console.log("plasmoid timer: attentionTimer called...");
                 }
             }
@@ -970,55 +1007,6 @@ Item {
                 start();
             }
         }
-    }
-
-    //Timer to check if the mouse is still inside the ListView
-    //IMPORTANT ::: This timer should be used only when the Latte plasmoid
-    //is not inside a Latte dock
-    Timer{
-        id:checkListHovered
-        repeat:false;
-        interval: 120
-
-        property int normalInterval: Math.max(120, 2 * (root.durationTime * 1.2 * units.shortDuration) + 50)
-
-        onTriggered: {
-            if(root.latteView)
-                console.log("Plasmoid, checkListHoveredTimer was called, even though it shouldn't...");
-
-            if (!root.containsMouse()) {
-
-                icList.directRender = false;
-
-                root.clearZoom();
-            }
-
-            interval = normalInterval;
-
-            if (latteView && latteView.debugModeTimers) {
-                console.log("plasmoid timer: checkListHovered called...");
-            }
-        }
-
-        function startNormal(){
-            interval = normalInterval;
-
-            start();
-        }
-
-        function startDuration( duration){
-            interval = duration;
-
-            start();
-        }
-    }
-
-    //! Delayer in order to not activate directRendering when the mouse
-    //! enters until the timer has ended. This way we make sure that the
-    //! zoom-in animations will have ended.
-    Timer{
-        id:directRenderDelayerForEnteringTimer
-        interval: 3.2 * root.durationTime * units.shortDuration
     }
 
     //this timer restores the draggingPhase flag to false
@@ -1036,28 +1024,35 @@ Item {
         anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
         anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
 
-        width: root.vertical ? 1 : 2 * root.iconSize
-        height: root.vertical ? 2 * root.iconSize : 1
+        width: root.vertical ? 1 : 2 * metrics.iconSize
+        height: root.vertical ? 2 * metrics.iconSize : 1
         color: "red"
-        x: (root.position === PlasmaCore.Types.LeftPositioned) ? neededSpace : parent.width - neededSpace
-        y: (root.position === PlasmaCore.Types.TopPositioned) ? neededSpace : parent.height - neededSpace
+        x: (root.location === PlasmaCore.Types.LeftEdge) ? neededSpace : parent.width - neededSpace
+        y: (root.location === PlasmaCore.Types.TopEdge) ? neededSpace : parent.height - neededSpace
 
         visible: plasmoid.configuration.zoomHelper
 
-        property int neededSpace: zoomFactor*(iconSize+lengthMargins)
+        property int neededSpace: parabolic.factor.zoom*metrics.totals.length
     }
 
     Item{
         id:barLine
+        anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
+        anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
+        anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? parent.left : undefined
+        anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? parent.right : undefined
+
+        anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
+        anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
 
         width: ( icList.orientation === Qt.Horizontal ) ? icList.width + spacing : smallSize
         height: ( icList.orientation === Qt.Vertical ) ? icList.height + spacing : smallSize
 
-        property int spacing: latteView ? 0 : root.iconSize / 2
-        property int smallSize: Math.max(0.10 * root.iconSize, 16)
+        property int spacing: latteBridge ? 0 : metrics.iconSize / 2
+        property int smallSize: Math.max(0.10 * metrics.iconSize, 16)
 
         Behavior on opacity{
-            NumberAnimation { duration: root.durationTime*units.longDuration }
+            NumberAnimation { duration: animations.speedFactor.current*animations.duration.large }
         }
 
         /// plasmoid's default panel
@@ -1074,7 +1069,7 @@ Item {
             verticalTileMode: BorderImage.Stretch
 
             Behavior on opacity{
-                NumberAnimation { duration: root.durationTime*units.longDuration }
+                NumberAnimation { duration: animations.speedFactor.current*animations.duration.large }
             }
         }
 
@@ -1083,13 +1078,13 @@ Item {
         Item{
             id:belower
 
-            width: (root.position === PlasmaCore.Types.LeftPositioned) ? shadowsSvgItem.margins.left : shadowsSvgItem.margins.right
-            height: (root.position === PlasmaCore.Types.BottomPositioned)? shadowsSvgItem.margins.bottom : shadowsSvgItem.margins.top
+            width: (root.location === PlasmaCore.Types.LeftEdge) ? shadowsSvgItem.margins.left : shadowsSvgItem.margins.right
+            height: (root.location === PlasmaCore.Types.BottomEdge)? shadowsSvgItem.margins.bottom : shadowsSvgItem.margins.top
 
-            anchors.top: (root.position === PlasmaCore.Types.BottomPositioned) ? parent.bottom : undefined
-            anchors.bottom: (root.position === PlasmaCore.Types.TopPositioned) ? parent.top : undefined
-            anchors.right: (root.position === PlasmaCore.Types.LeftPositioned) ? parent.left : undefined
-            anchors.left: (root.position === PlasmaCore.Types.RightPositioned) ? parent.right : undefined
+            anchors.top: (root.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
+            anchors.bottom: (root.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
+            anchors.right: (root.location === PlasmaCore.Types.LeftEdge) ? parent.left : undefined
+            anchors.left: (root.location === PlasmaCore.Types.RightEdge) ? parent.right : undefined
         }
 
 
@@ -1097,10 +1092,10 @@ Item {
         PlasmaCore.FrameSvgItem{
             id: shadowsSvgItem
 
-            anchors.bottom: (root.position === PlasmaCore.Types.BottomPositioned) ? belower.bottom : undefined
-            anchors.top: (root.position === PlasmaCore.Types.TopPositioned) ? belower.top : undefined
-            anchors.left: (root.position === PlasmaCore.Types.LeftPositioned) ? belower.left : undefined
-            anchors.right: (root.position === PlasmaCore.Types.RightPositioned) ? belower.right : undefined
+            anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? belower.bottom : undefined
+            anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? belower.top : undefined
+            anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? belower.left : undefined
+            anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? belower.right : undefined
 
             anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
             anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
@@ -1114,13 +1109,13 @@ Item {
             opacity: (plasmoid.configuration.showBarLine && plasmoid.configuration.useThemePanel && !root.forceHidePanel) ? 1 : 0
             visible: (opacity == 0) ? false : true
 
-            property int panelSize: ((root.position === PlasmaCore.Types.BottomPositioned) ||
-                                     (root.position === PlasmaCore.Types.TopPositioned)) ?
+            property int panelSize: ((root.location === PlasmaCore.Types.BottomEdge) ||
+                                     (root.location === PlasmaCore.Types.TopEdge)) ?
                                         plasmoid.configuration.panelSize + belower.height:
                                         plasmoid.configuration.panelSize + belower.width
 
             Behavior on opacity{
-                NumberAnimation { duration: root.durationTime*units.longDuration }
+                NumberAnimation { duration: animations.speedFactor.current*animations.duration.large }
             }
 
 
@@ -1135,24 +1130,23 @@ Item {
 
         TasksLayout.MouseHandler {
             id: mouseHandler
-            anchors.bottom: (root.position === PlasmaCore.Types.BottomPositioned) ? scrollableList.bottom : undefined
-            anchors.top: (root.position === PlasmaCore.Types.TopPositioned) ? scrollableList.top : undefined
-            anchors.left: (root.position === PlasmaCore.Types.LeftPositioned) ? scrollableList.left : undefined
-            anchors.right: (root.position === PlasmaCore.Types.RightPositioned) ? scrollableList.right : undefined
+            anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? scrollableList.bottom : undefined
+            anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? scrollableList.top : undefined
+            anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? scrollableList.left : undefined
+            anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? scrollableList.right : undefined
 
             anchors.horizontalCenter: !root.vertical ? scrollableList.horizontalCenter : undefined
             anchors.verticalCenter: root.vertical ? scrollableList.verticalCenter : undefined
 
-            width: root.vertical ? maxSize : icList.width
-            height: root.vertical ? icList.height : maxSize
+            width: root.vertical ? maxThickness : icList.width
+            height: root.vertical ? icList.height : maxThickness
 
             target: icList
 
             visible: root.dragAreaEnabled
 
-            property int maxSize: (((root.hoveredIndex>=0 || dockHoveredIndex>=0 ) || windowPreviewIsShown) && !root.dragSource) ?
-                                      root.zoomFactor * (root.iconSize + root.thickMargins) :
-                                      root.iconSize + root.thickMargins
+            property int maxThickness: (parabolic.local.lastIndex>=0 || windowPreviewIsShown || animations.hasThicknessAnimation) ?
+                                           metrics.mask.thickness.zoomedForItems : metrics.mask.thickness.normalForItems
 
             function onlyLaunchersInList(list){
                 return list.every(function (item) {
@@ -1181,11 +1175,11 @@ Item {
                 tasksModel.requestOpenUrls(hoveredItem.modelIndex(), urlsList);
             }
 
-            onUrlsDropped: {               
+            onUrlsDropped: {
                 //! inform synced docks for new dropped launchers
-                if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers && onlyLaunchersInList(urls)) {
+                if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers && onlyLaunchersInList(urls)) {
                     latteView.layoutsManager.launchersSignals.urlsDropped(root.viewLayoutName,
-                                                                          latteView.launchersGroup, urls);
+                                                                          root.launchersGroup, urls);
                     return;
                 }
 
@@ -1204,18 +1198,13 @@ Item {
 
         TasksLayout.ScrollableList {
             id: scrollableList
-            width: !root.vertical ? Math.min(root.width, icList.width) : thickness
-            height: root.vertical ? Math.min(root.height, icList.height) : thickness
+            width: !root.vertical ? length : thickness
+            height: root.vertical ? length : thickness
             contentWidth: icList.width
             contentHeight: icList.height
 
-            property int thickness: {
-                if (latteView) {
-                    return !latteView.thickAnimated ? latteView.maskManager.thicknessNormal : latteView.maskManager.thicknessZoom;
-                }
-
-                return (root.thickMargins + root.iconSize) * root.zoomFactor;
-            }
+            property int thickness:0 // through Binding to avoid binding loops
+            property int length:0 // through Binding to avoid binding loops
 
             //onCurrentPosChanged: console.log("CP :: "+ currentPos + " icW:"+icList.width + " rw: "+root.width + " w:" +width);
 
@@ -1227,24 +1216,64 @@ Item {
                 }
             }
 
+            Binding {
+                target: scrollableList
+                property: "thickness"
+                when: latteView && !latteView.maskManager.inRelocationHiding
+                value: {
+                    if (latteView) {
+                        return animations.hasThicknessAnimation ? metrics.mask.thickness.zoomed : metrics.mask.thickness.normal;
+                    }
+
+                    return metrics.totals.thickness * parabolic.factor.zoom;
+                }
+            }
+
+            Binding {
+                target: scrollableList
+                property: "length"
+                when: latteView && !latteView.maskManager.inRelocationHiding
+                value: {
+                    if (root.vertical) {
+                        return Math.min(root.height, icList.height)
+                    }
+
+                    return Math.min(root.width, icList.width);
+                }
+            }
+
             TasksLayout.ScrollPositioner {
                 id: listViewBase
 
                 ListView {
                     id:icList
-                    width: !root.vertical ? contentWidth : mouseHandler.maxSize
-                    height: root.vertical ? contentHeight : mouseHandler.maxSize
+                    anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
+                    anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
+                    anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? parent.left : undefined
+                    anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? parent.right : undefined
+
+                    anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
+                    anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
+
+                    width: !root.vertical ? contentWidth : mouseHandler.maxThickness
+                    height: root.vertical ? contentHeight : mouseHandler.maxThickness
                     boundsBehavior: Flickable.StopAtBounds
-                    orientation: Qt.Horizontal
-                    delegate: Task.TaskItem{}
+                    orientation: plasmoid.formFactor === PlasmaCore.Types.Vertical ? Qt.Vertical : Qt.Horizontal
+                    delegate: Task.TaskItem{
+                        animations: _animations
+                        debug: _debug
+                        indexer: _indexer
+                        launchers: _launchers
+                        metrics: _metrics
+                        parabolic: _parabolic
+                        requires: _requires
+                        shortcuts: _shortcuts
+                    }
 
                     property int currentSpot : -1000
-                    property int hoveredIndex : -1
                     property int previousCount : 0
 
                     property int tasksCount: tasksModel.count
-
-                    property bool directRender: false
 
                     //the duration of this animation should be as small as possible
                     //it fixes a small issue with the dragging an item to change it's
@@ -1253,7 +1282,7 @@ Item {
 
                     //more of a trouble
                     moveDisplaced: Transition {
-                        NumberAnimation { properties: "x,y"; duration: root.durationTime*units.longDuration; easing.type: Easing.Linear }
+                        NumberAnimation { properties: "x,y"; duration: animations.speedFactor.current*animations.duration.large; easing.type: Easing.Linear }
                     }
 
                     ///this transition can not be used with dragging !!!! I breaks
@@ -1325,13 +1354,81 @@ Item {
 
         LatteComponents.AddingArea {
             id: newDroppedLauncherVisual
-            anchors.fill: mouseHandler
+            width: root.vertical ? metrics.totals.thickness : scrollableList.width
+            height: root.vertical ? scrollableList.height : metrics.totals.thickness
+
             visible: backgroundOpacity > 0
-            radius: root.iconSize/10
+            radius: metrics.iconSize/10
             backgroundOpacity: root.dropNewLauncher && mouseHandler.onlyLaunchers && (root.dragSource == null)? 0.75 : 0
-            duration: root.durationTime
+            duration: animations.speedFactor.current
 
             title: i18n("Tasks Area")
+
+            states: [
+                ///Bottom Edge
+                State {
+                    name: "left"
+                    when: root.location===PlasmaCore.Types.LeftEdge
+
+                    AnchorChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ top:undefined; bottom:undefined; left:scrollableList.left; right:undefined;
+                            horizontalCenter:undefined; verticalCenter:scrollableList.verticalCenter}
+                    }
+
+                    PropertyChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ topMargin:0; bottomMargin:0; leftMargin:metrics.margin.screenEdge; rightMargin:0;}
+                    }
+                },
+                State {
+                    name: "right"
+                    when: root.location===PlasmaCore.Types.RightEdge
+
+                    AnchorChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ top:undefined; bottom:undefined; left:undefined; right:scrollableList.right;
+                            horizontalCenter:undefined; verticalCenter:scrollableList.verticalCenter}
+                    }
+
+                    PropertyChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ topMargin:0; bottomMargin:0; leftMargin:0; rightMargin:metrics.margin.screenEdge;}
+                    }
+                },
+                State {
+                    name: "top"
+                    when: root.location===PlasmaCore.Types.TopEdge
+
+                    AnchorChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ top:scrollableList.top; bottom:undefined; left:undefined; right:undefined;
+                            horizontalCenter:scrollableList.horizontalCenter; verticalCenter:undefined}
+                    }
+
+                    PropertyChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ topMargin:metrics.margin.screenEdge; bottomMargin:0; leftMargin:0; rightMargin:0;}
+                    }
+                },
+                State {
+                    name: "bottom"
+                    when: root.location!==PlasmaCore.Types.TopEdge
+                          && root.location !== PlasmaCore.Types.LeftEdge
+                          && root.location !== PlasmaCore.Types.RightEdge
+
+                    AnchorChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ top:undefined; bottom:scrollableList.bottom; left:undefined; right:undefined;
+                            horizontalCenter:scrollableList.horizontalCenter; verticalCenter:undefined}
+                    }
+
+                    PropertyChanges {
+                        target: newDroppedLauncherVisual
+                        anchors{ topMargin:0; bottomMargin:metrics.margin.screenEdge; leftMargin:0; rightMargin:0;}
+                    }
+                }
+            ]
         }
     }
 
@@ -1346,7 +1443,7 @@ Item {
         onTriggered: {
             root.publishTasksGeometries();
 
-            if (latteView && latteView.debugModeTimers) {
+            if (debug.timersEnabled) {
                 console.log("plasmoid timer: iconGeometryTimer called...");
             }
         }
@@ -1461,8 +1558,6 @@ Item {
                 stop();
                 console.log("launchers synced at:" + launchers);
                 launchers.length = 0;
-                parabolicManager.updateTasksEdgesIndexes();
-                root.separatorsUpdated();
                 tasksModel.syncLaunchers();
             } else {
                 var currentLaunchers = currentListViewLauncherList();
@@ -1527,205 +1622,29 @@ Item {
     /////////
 
     //// functions
-    function movePanel(obj, newPosition){
-        var bLine = obj;
-        if (newPosition === PlasmaCore.Types.BottomPositioned){
-            bLine.anchors.horizontalCenter = bLine.parent.horizontalCenter;
-            bLine.anchors.verticalCenter = undefined;
-            bLine.anchors.bottom = bLine.parent.bottom;
-            bLine.anchors.top = undefined;
-            bLine.anchors.left = undefined;
-            bLine.anchors.right = undefined;
-        }
-        else if (newPosition === PlasmaCore.Types.TopPositioned){
-            bLine.anchors.horizontalCenter = bLine.parent.horizontalCenter;
-            bLine.anchors.verticalCenter = undefined;
-            bLine.anchors.bottom = undefined;
-            bLine.anchors.top = bLine.parent.top;
-            bLine.anchors.left = undefined;
-            bLine.anchors.right = undefined;
-        }
-        else if (newPosition === PlasmaCore.Types.LeftPositioned){
-            bLine.anchors.horizontalCenter = undefined;
-            bLine.anchors.verticalCenter = bLine.parent.verticalCenter;
-            bLine.anchors.bottom = undefined;
-            bLine.anchors.top = undefined;
-            bLine.anchors.left = bLine.parent.left;
-            bLine.anchors.right = undefined;
-        }
-        else if (newPosition === PlasmaCore.Types.RightPositioned){
-            bLine.anchors.horizontalCenter = undefined;
-            bLine.anchors.verticalCenter = bLine.parent.verticalCenter;
-            bLine.anchors.bottom = undefined;
-            bLine.anchors.top = undefined;
-            bLine.anchors.left =undefined;
-            bLine.anchors.right = bLine.parent.right;
-        }
-    }
-
-    property int ncounter:0
-
-    function updateImplicits(){
-        if(icList.previousCount !== icList.count){
-            icList.previousCount = icList.count;
-
-            var zoomedLength = Math.floor( 1.2 * (iconSize+thickMargins) * (root.zoomFactor));
-            var bigAxis = (tasksModel.count-1) * (iconSize+thickMargins) + zoomedLength;
-            var smallAxis = zoomedLength;
-
-            var clearBigAxis = tasksModel.count * (iconSize+thickMargins) + (barLine.spacing/2);
-            var clearSmallAxis = iconSize+thickMargins;
-
-            //  debugging code
-            //     ncounter++;
-            //      console.log("Implicits______ "+ncounter+". - "+tasksModel.count);
-
-            if (root.vertical){
-                root.implicitWidth = smallAxis;
-                root.implicitHeight = bigAxis;
-                root.clearWidth = clearSmallAxis;
-                root.clearHeight = clearBigAxis;
-            }
-            else{
-                root.implicitWidth = bigAxis;
-                root.implicitHeight = smallAxis;
-                root.clearWidth = clearBigAxis;
-                root.clearHeight = clearSmallAxis;
-            }
-
-            iconGeometryTimer.restart();
-        }
-    }
-
-    PlasmaComponents.Button{
-        id: orientationBtn
-        text:"Orientation"
-
-        anchors.centerIn: parent
-        visible: root.debugLocation
-
-        onClicked:{
-            switch(root.position){
-            case PlasmaCore.Types.BottomPositioned:
-                root.newLocationDebugUse = PlasmaCore.Types.LeftEdge;
-                break;
-            case PlasmaCore.Types.LeftPositioned:
-                root.newLocationDebugUse = PlasmaCore.Types.TopEdge;
-                break;
-            case PlasmaCore.Types.TopPositioned:
-                root.newLocationDebugUse = PlasmaCore.Types.RightEdge;
-                break;
-            case PlasmaCore.Types.RightPositioned:
-                root.newLocationDebugUse = PlasmaCore.Types.BottomEdge;
-                break;
-            }
-            updatePosition();
-        }
-    }
-
     function addInternalSeparatorAtPos(pos) {
-        var separatorName = parabolicManager.freeAvailableSeparatorName();
+        var separatorName = launchers.freeAvailableSeparatorName();
 
         if (separatorName !== "") {
             tasksExtendedManager.addLauncherToBeMoved(separatorName, Math.max(0,pos));
 
-            if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+            if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                 latteView.layoutsManager.launchersSignals.addLauncher(root.viewLayoutName,
-                                                                      latteView.launchersGroup, separatorName);
+                                                                      root.launchersGroup, separatorName);
             } else {
                 tasksModel.requestAddLauncher(separatorName);
             }
         }
     }
 
-    // This is called by dockcorona in response to a Meta+number shortcut.
     function activateTaskAtIndex(index) {
-        if (typeof index !== "number") {
-            return;
-        }
-
-        var tasks = icList.contentItem.children;
-
-        //! this is used to bypass the internal separators if they exist
-        var confirmedIndex = parabolicManager.realTaskIndex(index - 1);
-
-        for(var i=0; i<tasks.length; ++i){
-            var task = tasks[i];
-
-            if (task.itemIndex === confirmedIndex) {
-                if (task.isGroupParent) {
-                    task.activateNextTask();
-                } else {
-                    task.activateTask();
-                }
-                break;
-            }
-        }
+        // This is called with Meta+number shortcuts by plasmashell when Tasks are in a plasma panel.
+        shortcuts.sglActivateEntryAtIndex(index);
     }
 
-    // This is called by dockcorona in response to a Meta+Alt+number shortcut.
     function newInstanceForTaskAtIndex(index) {
-        if (typeof index !== "number") {
-            return;
-        }
-
-        var tasks = icList.contentItem.children;
-
-        //! this is used to bypass the internal separators if they exist
-        var confirmedIndex = parabolicManager.realTaskIndex(index - 1);
-
-        for(var i=0; i<tasks.length; ++i){
-            var task = tasks[i];
-
-            if (task.itemIndex === confirmedIndex) {
-                TaskTools.activateTask(task.modelIndex(), task.m, Qt.ControlModifier , task);
-                break;
-            }
-        }
-    }
-
-    function setHoveredIndex(ind) {
-        icList.hoveredIndex = ind;
-    }
-
-    function updatePosition(){
-        var newPosition;
-        var tempVertical=false;
-
-        var positionUsed;
-
-
-        if (root.debugLocation)
-            positionUsed = root.newLocationDebugUse;
-        else
-            positionUsed = plasmoid.location;
-
-        switch (positionUsed) {
-        case PlasmaCore.Types.LeftEdge:
-            newPosition = PlasmaCore.Types.LeftPositioned;
-            tempVertical = true;
-            break;
-        case PlasmaCore.Types.RightEdge:
-            newPosition = PlasmaCore.Types.RightPositioned;
-            tempVertical = true;
-            break;
-        case PlasmaCore.Types.TopEdge:
-            newPosition = PlasmaCore.Types.TopPositioned;
-            break;
-        default:
-            newPosition = PlasmaCore.Types.BottomPositioned;
-            break
-        }
-
-        movePanel(barLine,newPosition);
-        movePanel(icList,newPosition);
-
-        if(tempVertical)
-            icList.orientation = Qt.Vertical;
-        else
-            icList.orientation = Qt.Horizontal;
-
-        root.position = newPosition;
+        // This is called with Meta+Alt+number shortcuts by plasmashell when Tasks are in a plasma panel.
+        shortcuts.sglNewInstanceForEntryAtIndex(index);
     }
 
     function getBadger(identifier) {
@@ -1766,7 +1685,7 @@ Item {
 
     //! BEGIN ::: external launchers signals in order to update the tasks model
     function extSignalAddLauncher(group, launcher) {
-        if (group === latteView.launchersGroup) {
+        if (group === root.launchersGroup) {
             tasksModel.requestAddLauncher(launcher);
             launchersUpdatedFor(launcher);
             tasksModel.syncLaunchers();
@@ -1774,7 +1693,7 @@ Item {
     }
 
     function extSignalRemoveLauncher(group, launcher) {
-        if (group === latteView.launchersGroup) {
+        if (group === root.launchersGroup) {
             root.launcherForRemoval = launcher;
             tasksModel.requestRemoveLauncher(launcher);
             launchersUpdatedFor(launcher);
@@ -1783,7 +1702,7 @@ Item {
     }
 
     function extSignalAddLauncherToActivity(group, launcher, activity) {
-        if (group === latteView.launchersGroup) {
+        if (group === root.launchersGroup) {
             var launcherActivities = tasksModel.launcherActivities(launcher);
 
             if (activity !== tasksModel.activity && (launcherActivities[0] === "00000000-0000-0000-0000-000000000000")) {
@@ -1797,7 +1716,7 @@ Item {
     }
 
     function extSignalRemoveLauncherFromActivity(group, launcher, activity) {
-        if (group === latteView.launchersGroup) {
+        if (group === root.launchersGroup) {
             if (activity === tasksModel.activity) {
                 root.launcherForRemoval = launcher;
             }
@@ -1809,22 +1728,20 @@ Item {
     }
 
     function extSignalUrlsDropped(group, urls) {
-        if (group === latteView.launchersGroup) {
+        if (group === root.launchersGroup) {
             mouseHandler.urlsDroppedOnArea(urls);
         }
     }
 
     function extSignalMoveTask(group, from, to) {
-        if (group === latteView.launchersGroup && !root.dragSource) {
+        if (group === root.launchersGroup && !root.dragSource) {
             tasksModel.move(from, to);
-            parabolicManager.updateTasksEdgesIndexes();
-            root.separatorsUpdated();
             tasksModel.syncLaunchers();
         }
     }
 
     function extSignalValidateLaunchersOrder(group, launchers) {
-        if (group === latteView.launchersGroup && !root.dragSource) {
+        if (group === root.launchersGroup && !root.dragSource) {
             launchersOrderValidatorTimer.stop();
             launchersOrderValidatorTimer.launchers = launchers;
             launchersOrderValidatorTimer.start();
@@ -1837,50 +1754,21 @@ Item {
     //! it is used to add the fake desktop file which represents
     //! the separator (fake launcher)
     function addSeparator(pos){
-        var separatorName = parabolicManager.freeAvailableSeparatorName();
+        var separatorName = launchers.freeAvailableSeparatorName();
 
         if (separatorName !== "") {
             tasksExtendedManager.addLauncherToBeMoved(separatorName, Math.max(0,pos));
 
-            if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
-                latteView.layoutsManager.launchersSignals.addLauncher(latteView.launchersGroup, separatorName);
+            if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
+                latteView.layoutsManager.launchersSignals.addLauncher(root.launchersGroup, separatorName);
             } else {
                 tasksModel.requestAddLauncher(separatorName);
             }
         }
     }
 
-    function removeLastSeparator(){
-        var separatorName = parabolicManager.lastPresentSeparatorName();
-
-        if (separatorName !== "") {
-            if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
-                latteView.layoutsManager.launchersSignals.removeLauncher(root.viewLayoutName,
-                                                                         latteView.launchersGroup, separatorName);
-            } else {
-                root.launcherForRemoval = separatorName;
-                tasksModel.requestRemoveLauncher(separatorName);
-            }
-        }
-    }
-
-    //! show/hide tasks numbered badges e.g. from global shortcuts
-    function setShowTaskShortcutBadges(showBadges){
-        showTaskShortcutBadges = showBadges;
-    }
-
-    //! setup the tasks first index based on the fact that this is a plasmoid
-    //! and applets could exist before it
-    function setTasksBaseIndex(base){
-        tasksBaseIndex = base;
-    }
-
     function previewContainsMouse() {
-        if(toolTipDelegate && toolTipDelegate.containsMouse && toolTipDelegate.parentTask) {
-            return true;
-        } else {
-            return false;
-        }
+        return windowsPreviewDlg.containsMouse;
     }
 
     function containsMouse(){
@@ -1912,24 +1800,6 @@ Item {
         return false;
     }
 
-    function clearZoom(){
-        //console.log("Plasmoid clear...");
-        if (disableRestoreZoom && (root.contextMenu || windowsPreviewDlg.visible)) {
-            return;
-        } else {
-            disableRestoreZoom = false;
-        }
-
-        if (!previewContainsMouse())
-            windowsPreviewDlg.hide(4.2);
-
-        if (!latteView) {
-            initializeHoveredIndex();
-        }
-
-        root.clearZoomSignal();
-    }
-
     function hasLauncher(url) {
         return tasksModel.launcherPosition(url) != -1;
     }
@@ -1956,53 +1826,6 @@ Item {
         dragSource = null;
     }
 
-    function setGlobalDirectRender(value) {
-        if (tasksExtendedManager.waitingLaunchersLength() > 0)
-            return;
-
-        if (latteView) {
-            latteView.setGlobalDirectRender(value);
-        } else {
-            if (value === true) {
-                if (root.containsMouse()) {
-                    icList.directRender = true;
-                } else {
-                    //    console.log("direct render true ignored...");
-                }
-            } else {
-                icList.directRender = false;
-            }
-        }
-    }
-
-    function startCheckRestoreZoomTimer(duration) {
-        if (latteView) {
-            latteView.startCheckRestoreZoomTimer();
-        } else {
-            if (duration > 0) {
-                checkListHovered.startDuration(duration);
-            } else {
-                checkListHovered.startNormal();
-            }
-        }
-    }
-
-    function stopCheckRestoreZoomTimer() {
-        if (latteView) {
-            latteView.stopCheckRestoreZoomTimer();
-        } else {
-            checkListHovered.stop();
-        }
-    }
-
-    function startDirectRenderDelayerDuringEntering(){
-        if (latteView) {
-            latteView.startDirectRenderDelayerDuringEntering();
-        } else {
-            directRenderDelayerForEnteringTimer.start();
-        }
-    }
-
     ///REMOVE
     /*function createContextMenu(task) {
         var menu = root.contextMenuComponent.createObject(task);
@@ -2025,8 +1848,6 @@ Item {
     }
 
     Component.onCompleted:  {
-        updatePosition();
-
         root.presentWindows.connect(backend.presentWindows);
         root.windowsHovered.connect(backend.windowsHovered);
         dragHelper.dropped.connect(resetDragSource);
@@ -2039,14 +1860,13 @@ Item {
     }
 
     //BEGIN states
-    //user set Panel Positions
+    // Alignments
     // 0-Center, 1-Left, 2-Right, 3-Top, 4-Bottom
     states: [
         ///Bottom Edge
         State {
             name: "bottomCenter"
-            when: ((plasmoid.location===PlasmaCore.Types.BottomEdge || plasmoid.location===PlasmaCore.Types.Floating)
-                   && root.userPanelPosition===Latte.Types.Center)
+            when: (root.location===PlasmaCore.Types.BottomEdge && root.alignment===LatteCore.Types.Center)
 
             AnchorChanges {
                 target: barLine
@@ -2059,8 +1879,7 @@ Item {
         },
         State {
             name: "bottomLeft"
-            when: ((plasmoid.location===PlasmaCore.Types.BottomEdge || plasmoid.location===PlasmaCore.Types.Floating)
-                   && root.userPanelPosition===Latte.Types.Left)
+            when: (root.location===PlasmaCore.Types.BottomEdge && root.alignment===LatteCore.Types.Left)
 
             AnchorChanges {
                 target: barLine
@@ -2073,8 +1892,7 @@ Item {
         },
         State {
             name: "bottomRight"
-            when: ((plasmoid.location===PlasmaCore.Types.BottomEdge || plasmoid.location===PlasmaCore.Types.Floating)
-                   && root.userPanelPosition===Latte.Types.Right)
+            when: (root.location===PlasmaCore.Types.BottomEdge && root.alignment===LatteCore.Types.Right)
 
             AnchorChanges {
                 target: barLine
@@ -2088,7 +1906,7 @@ Item {
         ///Top Edge
         State {
             name: "topCenter"
-            when: (plasmoid.location===PlasmaCore.Types.TopEdge && root.userPanelPosition===Latte.Types.Center)
+            when: (root.location===PlasmaCore.Types.TopEdge && root.alignment===LatteCore.Types.Center)
 
             AnchorChanges {
                 target: barLine
@@ -2101,7 +1919,7 @@ Item {
         },
         State {
             name: "topLeft"
-            when: (plasmoid.location===PlasmaCore.Types.TopEdge && root.userPanelPosition===Latte.Types.Left)
+            when: (root.location===PlasmaCore.Types.TopEdge && root.alignment===LatteCore.Types.Left)
 
             AnchorChanges {
                 target: barLine
@@ -2114,7 +1932,7 @@ Item {
         },
         State {
             name: "topRight"
-            when: (plasmoid.location===PlasmaCore.Types.TopEdge && root.userPanelPosition===Latte.Types.Right)
+            when: (root.location===PlasmaCore.Types.TopEdge && root.alignment===LatteCore.Types.Right)
 
             AnchorChanges {
                 target: barLine
@@ -2128,7 +1946,7 @@ Item {
         ////Left Edge
         State {
             name: "leftCenter"
-            when: (plasmoid.location===PlasmaCore.Types.LeftEdge && root.userPanelPosition===Latte.Types.Center)
+            when: (root.location===PlasmaCore.Types.LeftEdge && root.alignment===LatteCore.Types.Center)
 
             AnchorChanges {
                 target: barLine
@@ -2141,7 +1959,7 @@ Item {
         },
         State {
             name: "leftTop"
-            when: (plasmoid.location===PlasmaCore.Types.LeftEdge && root.userPanelPosition===Latte.Types.Top)
+            when: (root.location===PlasmaCore.Types.LeftEdge && root.alignment===LatteCore.Types.Top)
 
             AnchorChanges {
                 target: barLine
@@ -2154,7 +1972,7 @@ Item {
         },
         State {
             name: "leftBottom"
-            when: (plasmoid.location===PlasmaCore.Types.LeftEdge && root.userPanelPosition===Latte.Types.Bottom)
+            when: (root.location===PlasmaCore.Types.LeftEdge && root.alignment===LatteCore.Types.Bottom)
 
             AnchorChanges {
                 target: barLine
@@ -2168,7 +1986,7 @@ Item {
         ///Right Edge
         State {
             name: "rightCenter"
-            when: (plasmoid.location===PlasmaCore.Types.RightEdge && root.userPanelPosition===Latte.Types.Center)
+            when: (root.location===PlasmaCore.Types.RightEdge && root.alignment===LatteCore.Types.Center)
 
             AnchorChanges {
                 target: barLine
@@ -2181,7 +1999,7 @@ Item {
         },
         State {
             name: "rightTop"
-            when: (plasmoid.location===PlasmaCore.Types.RightEdge && root.userPanelPosition===Latte.Types.Top)
+            when: (root.location===PlasmaCore.Types.RightEdge && root.alignment===LatteCore.Types.Top)
 
             AnchorChanges {
                 target: barLine
@@ -2194,7 +2012,7 @@ Item {
         },
         State {
             name: "rightBottom"
-            when: (plasmoid.location===PlasmaCore.Types.RightEdge && root.userPanelPosition===Latte.Types.Bottom)
+            when: (root.location===PlasmaCore.Types.RightEdge && root.alignment===LatteCore.Types.Bottom)
 
             AnchorChanges {
                 target: barLine

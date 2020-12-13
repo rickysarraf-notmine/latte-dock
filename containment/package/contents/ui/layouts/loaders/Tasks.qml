@@ -21,20 +21,21 @@ import QtQuick 2.7
 
 import org.kde.taskmanager 0.1 as TaskManager
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
+import org.kde.latte.private.containment 0.1 as LatteContainment
 
 Loader {
     id: tasksLoader
-    active: root.scrollAction === Latte.Types.ScrollTasks
+    active: root.scrollAction === LatteContainment.Types.ScrollTasks || root.scrollAction === LatteContainment.Types.ScrollToggleMinimized
     sourceComponent: Item {
         TaskManager.TasksModel {
             id: tasksModel
             virtualDesktop: virtualDesktopInfo.currentDesktop
-            screenGeometry: latteView.screenGeometry
+            screenGeometry: latteView ? latteView.screenGeometry : Qt.rect(-1, -1, 0, 0)
             activity: activityInfo.currentActivity
 
             filterByVirtualDesktop: true
-            filterByScreen: true
+            filterByScreen:latteView ?  true : false
             filterByActivity: true
 
             launchInPlace: true

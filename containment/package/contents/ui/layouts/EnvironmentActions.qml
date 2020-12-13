@@ -22,7 +22,9 @@ import QtQuick 2.7
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
+
+import org.kde.latte.private.containment 0.1 as LatteContainment
 
 import "loaders" as Loaders
 import "indicator" as Indicator
@@ -31,38 +33,39 @@ import "../applet/indicator" as AppletIndicator
 Loader {
     id: environmentLoader
 
+    width: root.isHorizontal ? length : localThickness
+    height: root.isVertical ? length :  localThickness
+
+    property int alignment: LatteCore.Types.BottomEdgeCenterAlign
+
+    readonly property bool useAllLayouts: root.panelAlignment === LatteCore.Types.Justify
+
+    readonly property int localThickness: active ? metrics.totals.thickness + metrics.margin.screenEdge : 0
+    readonly property int length: {
+        if (!active) {
+            return 0;
+        }
+
+        if (screenEdgeMarginEnabled && root.floatingInternalGapIsForced) {
+            return root.isHorizontal ? root.width : root.height;
+        }
+
+        return useAllLayouts ? root.maxLength : background.totals.visualLength;
+    }
+
     sourceComponent: MouseArea{
         id: mainArea
-
-        width:  {
-            if (root.isHorizontal) {
-                return useAllLayouts ? root.maxLength : root.realPanelLength;
-            } else {
-                return root.isHovered ? (root.iconSize + root.thickMargins)*root.zoomFactor : (root.iconSize + root.thickMargins)
-            }
-        }
-
-        height: {
-            if (root.isVertical) {
-                return useAllLayouts ? root.maxLength : root.realPanelLength;
-            } else {
-                return root.isHovered ? (root.iconSize + root.thickMargins)*root.zoomFactor : (root.iconSize + root.thickMargins)
-            }
-        }
-
+        acceptedButtons: Qt.LeftButton | Qt.MidButton
         hoverEnabled: true
 
-        readonly property bool useAllLayouts: panelUserSetAlignment === Latte.Types.Justify && !root.inConfigureAppletsMode
+        property bool wheelIsBlocked: false
 
         property int lastPressX: -1
         property int lastPressY: -1
 
-        onContainsMouseChanged: {
-            if (root.mouseInHoverableArea()) {
-                root.stopCheckRestoreZoomTimer();
-            } else {
-                root.initializeHoveredIndexes();
-                root.startCheckRestoreZoomTimer()
+        onClicked: {
+            if (root.closeActiveWindowEnabled && mouse.button === Qt.MidButton) {
+                selectedWindowsTracker.lastActiveWindow.requestClose();
             }
         }
 
@@ -71,7 +74,7 @@ Loader {
                 return;
             }
 
-            if (selectedWindowsTracker.lastActiveWindow.canBeDragged()) {
+            if (mouse.button === Qt.LeftButton && selectedWindowsTracker.lastActiveWindow.canBeDragged()) {
                 lastPressX = mouse.x;
                 lastPressY = mouse.y;
                 dragWindowTimer.start();
@@ -84,7 +87,7 @@ Loader {
         }
 
         onPositionChanged: {
-            if (!root.dragActiveWindowEnabled) {
+            if (!root.dragActiveWindowEnabled || !(mainArea.pressedButtons & Qt.LeftButton)) {
                 return;
             }
 
@@ -110,10 +113,17 @@ Loader {
         }
 
         onWheel: {
-            if (root.scrollAction === Latte.Types.ScrollNone) {
+            if (wheelIsBlocked) {
+                return;
+            }
+
+            if (root.scrollAction === LatteContainment.Types.ScrollNone) {
                 root.emptyAreasWheel(wheel);
                 return;
             }
+
+            wheelIsBlocked = true;
+            scrollDelayer.start();
 
             var delta = 0;
 
@@ -125,19 +135,45 @@ Loader {
 
             var angle = delta / 8;
 
+            var ctrlPressed = (wheel.modifiers & Qt.ControlModifier);
+
             if (angle>10) {
-                if (root.scrollAction === Latte.Types.ScrollDesktops) {
+                //! upwards
+                if (root.scrollAction === LatteContainment.Types.ScrollDesktops) {
                     latteView.windowsTracker.switchToPreviousVirtualDesktop();
-                } else if (root.scrollAction === Latte.Types.ScrollActivities) {
+                } else if (root.scrollAction === LatteContainment.Types.ScrollActivities) {
                     latteView.windowsTracker.switchToPreviousActivity();
+                } else if (root.scrollAction === LatteContainment.Types.ScrollToggleMinimized) {
+                    if (!ctrlPressed) {
+                        tasksLoader.item.activateNextPrevTask(true);
+                    } else if (!selectedWindowsTracker.lastActiveWindow.isMaximized){
+                        selectedWindowsTracker.lastActiveWindow.requestToggleMaximized();
+                    }
                 } else if (tasksLoader.active) {
                     tasksLoader.item.activateNextPrevTask(true);
                 }
             } else if (angle<-10) {
-                if (root.scrollAction === Latte.Types.ScrollDesktops) {
+                //! downwards
+                if (root.scrollAction === LatteContainment.Types.ScrollDesktops) {
                     latteView.windowsTracker.switchToNextVirtualDesktop();
-                } else if (root.scrollAction === Latte.Types.ScrollActivities) {
+                } else if (root.scrollAction === LatteContainment.Types.ScrollActivities) {
                     latteView.windowsTracker.switchToNextActivity();
+                } else if (root.scrollAction === LatteContainment.Types.ScrollToggleMinimized) {
+                    if (!ctrlPressed) {
+                        if (selectedWindowsTracker.lastActiveWindow.isValid
+                                && !selectedWindowsTracker.lastActiveWindow.isMinimized
+                                && selectedWindowsTracker.lastActiveWindow.isMaximized){
+                            //! maximized
+                            selectedWindowsTracker.lastActiveWindow.requestToggleMaximized();
+                        } else if (selectedWindowsTracker.lastActiveWindow.isValid
+                                   && !selectedWindowsTracker.lastActiveWindow.isMinimized
+                                   && !selectedWindowsTracker.lastActiveWindow.isMaximized) {
+                            //! normal
+                            selectedWindowsTracker.lastActiveWindow.requestToggleMinimized();
+                        }
+                    } else if (selectedWindowsTracker.lastActiveWindow.isMaximized) {
+                        selectedWindowsTracker.lastActiveWindow.requestToggleMaximized();
+                    }
                 } else if (tasksLoader.active) {
                     tasksLoader.item.activateNextPrevTask(false);
                 }
@@ -165,6 +201,17 @@ Loader {
             }
         }
 
+        //! A timer is needed in order to handle also touchpads that probably
+        //! send too many signals very fast. This way the signals per sec are limited.
+        //! The user needs to have a steady normal scroll in order to not
+        //! notice a annoying delay
+        Timer{
+            id: scrollDelayer
+
+            interval: 200
+            onTriggered: mainArea.wheelIsBlocked = false;
+        }
+
         //! Background Indicator
         Indicator.Bridge{
             id: indicatorBridge
@@ -179,65 +226,42 @@ Loader {
                 bridge: indicatorBridge
             }
         }
-
-        states:[
-            State {
-                name: "bottom"
-                when: (plasmoid.location === PlasmaCore.Types.BottomEdge)
-
-                AnchorChanges {
-                    target: mainArea
-                    anchors{ top:undefined; bottom:parent.bottom; left:undefined; right:undefined;
-                        horizontalCenter:parent.horizontalCenter; verticalCenter:undefined}
-                }
-            },
-            State {
-                name: "top"
-                when: (plasmoid.location === PlasmaCore.Types.TopEdge)
-
-                AnchorChanges {
-                    target: mainArea
-                    anchors{ top:parent.top; bottom:undefined; left:undefined; right:undefined;
-                        horizontalCenter:parent.horizontalCenter; verticalCenter:undefined}
-                }
-            },
-            State {
-                name: "left"
-                when: (plasmoid.location === PlasmaCore.Types.LeftEdge)
-
-                AnchorChanges {
-                    target: mainArea
-                    anchors{ top:undefined; bottom:undefined; left:parent.left; right:undefined;
-                        horizontalCenter:undefined; verticalCenter:parent.verticalCenter}
-                }
-            },
-            State {
-                name: "right"
-                when: (plasmoid.location === PlasmaCore.Types.RightEdge)
-
-                AnchorChanges {
-                    target: mainArea
-                    anchors{ top:undefined; bottom:undefined; left:undefined; right:parent.right;
-                        horizontalCenter:undefined; verticalCenter:parent.verticalCenter}
-                }
-            }
-        ]
     }
 
     states:[
         State {
-            name: "bottom"
-            when: (plasmoid.location === PlasmaCore.Types.BottomEdge)
+            name: "bottomCenter"
+            when: (alignment === LatteCore.Types.BottomEdgeCenterAlign)
 
             AnchorChanges {
                 target: environmentLoader
-                anchors{ top:undefined; bottom: _mainLayout.bottom; left:undefined; right:undefined;
+                anchors{ top:undefined; bottom:_mainLayout.bottom; left:undefined; right:undefined;
                     horizontalCenter: _mainLayout.horizontalCenter; verticalCenter:undefined}
             }
         },
         State {
-            name: "top"
-            when: (plasmoid.location === PlasmaCore.Types.TopEdge)
+            name: "bottomLeft"
+            when: (alignment === LatteCore.Types.BottomEdgeLeftAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:undefined; bottom:_mainLayout.bottom; left:_mainLayout.left; right:undefined;
+                    horizontalCenter: undefined; verticalCenter:undefined}
+            }
+        },
+        State {
+            name: "bottomRight"
+            when: (alignment === LatteCore.Types.BottomEdgeRightAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:undefined; bottom: _mainLayout.bottom; left:undefined; right:_mainLayout.right;
+                    horizontalCenter: undefined; verticalCenter:undefined}
+            }
+        },
+        State {
+            name: "topCenter"
+            when: (alignment === LatteCore.Types.TopEdgeCenterAlign)
 
             AnchorChanges {
                 target: environmentLoader
@@ -246,8 +270,28 @@ Loader {
             }
         },
         State {
-            name: "left"
-            when: (plasmoid.location === PlasmaCore.Types.LeftEdge)
+            name: "topLeft"
+            when: (alignment === LatteCore.Types.TopEdgeLeftAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top: _mainLayout.top; bottom:undefined; left: _mainLayout.left; right:undefined;
+                    horizontalCenter: undefined; verticalCenter:undefined}
+            }
+        },
+        State {
+            name: "topRight"
+            when: (alignment === LatteCore.Types.TopEdgeRightAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top: _mainLayout.top; bottom:undefined; left:undefined; right: _mainLayout.right;
+                    horizontalCenter: undefined; verticalCenter:undefined}
+            }
+        },
+        State {
+            name: "leftCenter"
+            when: (alignment === LatteCore.Types.LeftEdgeCenterAlign)
 
             AnchorChanges {
                 target: environmentLoader
@@ -256,13 +300,53 @@ Loader {
             }
         },
         State {
-            name: "right"
-            when: (plasmoid.location === PlasmaCore.Types.RightEdge)
+            name: "leftTop"
+            when: (alignment === LatteCore.Types.LeftEdgeTopAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:mainLayout.top; bottom:undefined; left: _mainLayout.left; right:undefined;
+                    horizontalCenter:undefined; verticalCenter: undefined}
+            }
+        },
+        State {
+            name: "leftBottom"
+            when: (alignment === LatteCore.Types.LeftEdgeBottomAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:undefined; bottom:_mainLayout.bottom; left: _mainLayout.left; right:undefined;
+                    horizontalCenter:undefined; verticalCenter: undefined}
+            }
+        },
+        State {
+            name: "rightCenter"
+            when: (alignment === LatteCore.Types.RightEdgeCenterAlign)
 
             AnchorChanges {
                 target: environmentLoader
                 anchors{ top:undefined; bottom:undefined; left:undefined; right: _mainLayout.right;
                     horizontalCenter:undefined; verticalCenter: _mainLayout.verticalCenter}
+            }
+        },
+        State {
+            name: "rightTop"
+            when: (alignment === LatteCore.Types.RightEdgeTopAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:_mainLayout.top; bottom:undefined; left:undefined; right: _mainLayout.right;
+                    horizontalCenter:undefined; verticalCenter: undefined}
+            }
+        },
+        State {
+            name: "rightBottom"
+            when: (alignment === LatteCore.Types.RightEdgeBottomAlign)
+
+            AnchorChanges {
+                target: environmentLoader
+                anchors{ top:undefined; bottom:_mainLayout.bottom; left:undefined; right: _mainLayout.right;
+                    horizontalCenter:undefined; verticalCenter: undefined}
             }
         }
     ]

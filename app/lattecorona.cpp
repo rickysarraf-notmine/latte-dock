@@ -21,23 +21,32 @@
 #include "lattecorona.h"
 
 // local
+#include <coretypes.h>
 #include "alternativeshelper.h"
+#include "apptypes.h"
 #include "lattedockadaptor.h"
 #include "screenpool.h"
+#include "declarativeimports/interfaces.h"
 #include "indicator/factory.h"
+#include "layout/abstractlayout.h"
 #include "layout/centrallayout.h"
 #include "layout/genericlayout.h"
-#include "layout/sharedlayout.h"
 #include "layouts/importer.h"
 #include "layouts/manager.h"
 #include "layouts/synchronizer.h"
 #include "layouts/launcherssignals.h"
 #include "shortcuts/globalshortcuts.h"
 #include "package/lattepackage.h"
+#include "plasma/extended/backgroundcache.h"
+#include "plasma/extended/backgroundtracker.h"
+#include "plasma/extended/screengeometries.h"
 #include "plasma/extended/screenpool.h"
 #include "plasma/extended/theme.h"
 #include "settings/universalsettings.h"
+#include "settings/dialogs/settingsdialog.h"
+#include "templates/templatesmanager.h"
 #include "view/view.h"
+#include "view/settings/viewsettingsfactory.h"
 #include "view/windowstracker/windowstracker.h"
 #include "view/windowstracker/allscreenstracker.h"
 #include "view/windowstracker/currentscreentracker.h"
@@ -59,6 +68,7 @@
 #include <QFile>
 #include <QFontDatabase>
 #include <QQmlContext>
+#include <QProcess>
 
 // Plasma
 #include <Plasma>
@@ -89,14 +99,17 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
       m_defaultLayoutOnStartup(defaultLayoutOnStartup),
       m_userSetMemoryUsage(userSetMemoryUsage),
       m_layoutNameOnStartUp(layoutNameOnStartUp),
-      m_activityConsumer(new KActivities::Consumer(this)),
+      m_activitiesConsumer(new KActivities::Consumer(this)),
       m_screenPool(new ScreenPool(KSharedConfig::openConfig(), this)),
       m_indicatorFactory(new Indicator::Factory(this)),
       m_universalSettings(new UniversalSettings(KSharedConfig::openConfig(), this)),
       m_globalShortcuts(new GlobalShortcuts(this)),
       m_plasmaScreenPool(new PlasmaExtended::ScreenPool(this)),
       m_themeExtended(new PlasmaExtended::Theme(KSharedConfig::openConfig(), this)),
+      m_viewSettingsFactory(new ViewSettingsFactory(this)),
+      m_templatesManager(new Templates::Manager(this)),
       m_layoutsManager(new Layouts::Manager(this)),
+      m_plasmaGeometries(new PlasmaExtended::ScreenGeometries(this)),
       m_dialogShadows(new PanelShadows(this, QStringLiteral("dialogs/background")))
 {
     //! create the window manager
@@ -129,11 +142,11 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
 
     qmlRegisterTypes();
 
-    if (m_activityConsumer && (m_activityConsumer->serviceStatus() == KActivities::Consumer::Running)) {
+    if (m_activitiesConsumer && (m_activitiesConsumer->serviceStatus() == KActivities::Consumer::Running)) {
         load();
     }
 
-    connect(m_activityConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
+    connect(m_activitiesConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
 
     m_viewsScreenSyncTimer.setSingleShot(true);
     m_viewsScreenSyncTimer.setInterval(m_universalSettings->screenTrackerInterval());
@@ -141,12 +154,6 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
     connect(m_universalSettings, &UniversalSettings::screenTrackerIntervalChanged, this, [this]() {
         m_viewsScreenSyncTimer.setInterval(m_universalSettings->screenTrackerInterval());
     });
-
-    //! initialize the background tracer for broadcasted backgrounds
-    m_backgroundTracer = new KDeclarative::QmlObjectSharedEngine(this);
-    m_backgroundTracer->setInitializationDelayed(true);
-    m_backgroundTracer->setSource(kPackage().filePath("backgroundTracer"));
-    m_backgroundTracer->completeInitialization();
 
     //! Dbus adaptor initialization
     new LatteDockAdaptor(this);
@@ -156,8 +163,11 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
 
 Corona::~Corona()
 {
+    m_inQuit = true;
+
     //! BEGIN: Give the time to slide-out views when closing
     m_layoutsManager->synchronizer()->hideAllViews();
+    m_viewSettingsFactory->deleteLater();
 
     //! Don't delay the destruction under wayland in any case
     //! because it creates a crash with kwin effects
@@ -176,14 +186,14 @@ Corona::~Corona()
 
     m_viewsScreenSyncTimer.stop();
 
-    if (m_layoutsManager->memoryUsage() == Types::SingleLayout) {
+    if (m_layoutsManager->memoryUsage() == MemoryUsage::SingleLayout) {
         cleanConfig();
     }
 
     qDebug() << "Latte Corona - unload: containments ...";
 
     m_layoutsManager->unload();
-
+    m_plasmaGeometries->deleteLater();
     m_wm->deleteLater();
     m_dialogShadows->deleteLater();
     m_globalShortcuts->deleteLater();
@@ -191,66 +201,74 @@ Corona::~Corona()
     m_screenPool->deleteLater();
     m_universalSettings->deleteLater();
     m_plasmaScreenPool->deleteLater();
-    m_backgroundTracer->deleteLater();
     m_themeExtended->deleteLater();
     m_indicatorFactory->deleteLater();
 
-    disconnect(m_activityConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
-    delete m_activityConsumer;
+    disconnect(m_activitiesConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
+    delete m_activitiesConsumer;
 
     qDebug() << "Latte Corona - deleted...";
+
+    if (!m_importFullConfigurationFile.isEmpty()) {
+        //!NOTE: Restart latte to import the new configuration
+        QString importCommand = "latte-dock --import-full \"" + m_importFullConfigurationFile + "\"";
+        qDebug() << "Executing Import Full Configuration command : " << importCommand;
+
+        QProcess::startDetached(importCommand);
+    }
 }
 
 void Corona::load()
 {
-    if (m_activityConsumer && (m_activityConsumer->serviceStatus() == KActivities::Consumer::Running) && m_activitiesStarting) {
+    if (m_activitiesConsumer && (m_activitiesConsumer->serviceStatus() == KActivities::Consumer::Running) && m_activitiesStarting) {
         m_activitiesStarting = false;
 
-        disconnect(m_activityConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
+        disconnect(m_activitiesConsumer, &KActivities::Consumer::serviceStatusChanged, this, &Corona::load);
 
-        m_layoutsManager->load();
+        m_templatesManager->init();
+        m_layoutsManager->init();
 
         connect(this, &Corona::availableScreenRectChangedFrom, this, &Plasma::Corona::availableScreenRectChanged);
         connect(this, &Corona::availableScreenRegionChangedFrom, this, &Plasma::Corona::availableScreenRegionChanged);
-
         connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &Corona::primaryOutputChanged, Qt::UniqueConnection);
-
         connect(m_screenPool, &ScreenPool::primaryPoolChanged, this, &Corona::screenCountChanged);
-
-        QString assignedLayout = m_layoutsManager->synchronizer()->shouldSwitchToLayout(m_activityConsumer->currentActivity());
 
         QString loadLayoutName = "";
 
-        if (!m_defaultLayoutOnStartup && m_layoutNameOnStartUp.isEmpty()) {
-            if (!assignedLayout.isEmpty() && assignedLayout != m_universalSettings->currentLayoutName()) {
-                loadLayoutName = assignedLayout;
-            } else {
-                loadLayoutName = m_universalSettings->currentLayoutName();
-            }
-
-            if (!m_layoutsManager->synchronizer()->layoutExists(loadLayoutName)) {
-                loadLayoutName = m_layoutsManager->defaultLayoutName();
-                m_layoutsManager->importDefaultLayout(false);
-            }
-        } else if (m_defaultLayoutOnStartup) {
-            loadLayoutName = m_layoutsManager->importer()->uniqueLayoutName(m_layoutsManager->defaultLayoutName());
-            m_layoutsManager->importDefaultLayout(true);
-        } else {
-            loadLayoutName = m_layoutNameOnStartUp;
-        }
-
-        if (m_userSetMemoryUsage != -1 && !KWindowSystem::isPlatformWayland()) {
-            Types::LayoutsMemoryUsage usage = static_cast<Types::LayoutsMemoryUsage>(m_userSetMemoryUsage);
-
+        if (m_userSetMemoryUsage != -1) {
+            MemoryUsage::LayoutsMemory usage = static_cast<MemoryUsage::LayoutsMemory>(m_userSetMemoryUsage);
             m_universalSettings->setLayoutsMemoryUsage(usage);
         }
 
-        if (KWindowSystem::isPlatformWayland()) {
-            m_universalSettings->setLayoutsMemoryUsage(Types::SingleLayout);
+        if (!m_defaultLayoutOnStartup && m_layoutNameOnStartUp.isEmpty()) {
+            if (m_universalSettings->layoutsMemoryUsage() == MemoryUsage::MultipleLayouts) {
+                loadLayoutName = "";
+            } else {
+                loadLayoutName = m_universalSettings->singleModeLayoutName();
+
+                if (!m_layoutsManager->synchronizer()->layoutExists(loadLayoutName)) {
+                    //! If chosen layout does not exist, force Default layout loading
+                    QString defaultLayoutTemplateName = i18n(Templates::DEFAULTLAYOUTTEMPLATENAME);
+                    loadLayoutName = defaultLayoutTemplateName;
+
+                    if (!m_layoutsManager->synchronizer()->layoutExists(defaultLayoutTemplateName)) {
+                        //! If Default layout does not exist at all, create it
+                        QString path = m_templatesManager->newLayout("", defaultLayoutTemplateName);
+                        m_layoutsManager->setOnAllActivities(Layout::AbstractLayout::layoutName(path));
+                    }
+                }
+            }
+        } else if (m_defaultLayoutOnStartup) {
+            //! force loading a NEW default layout even though a default layout may already exists
+            QString newDefaultLayoutPath = m_templatesManager->newLayout("", i18n(Templates::DEFAULTLAYOUTTEMPLATENAME));
+            loadLayoutName = Layout::AbstractLayout::layoutName(newDefaultLayoutPath);
+            m_universalSettings->setLayoutsMemoryUsage(MemoryUsage::SingleLayout);
+        } else {
+            loadLayoutName = m_layoutNameOnStartUp;
+            m_universalSettings->setLayoutsMemoryUsage(MemoryUsage::SingleLayout);
         }
 
         m_layoutsManager->loadLayoutOnStartup(loadLayoutName);
-
 
         //! load screens signals such screenGeometryChanged in order to support
         //! plasmoid.screenGeometry properly
@@ -324,11 +342,6 @@ void Corona::setupWaylandIntegration()
     connection->roundtrip();
 }
 
-KActivities::Consumer *Corona::activityConsumer() const
-{
-    return m_activityConsumer;
-}
-
 KWayland::Client::PlasmaShell *Corona::waylandCoronaInterface() const
 {
     return m_waylandCorona;
@@ -400,9 +413,14 @@ bool Corona::appletExists(uint containmentId, uint appletId) const
     return false;
 }
 
+bool Corona::inQuit() const
+{
+    return m_inQuit;
+}
+
 KActivities::Consumer *Corona::activitiesConsumer() const
 {
-    return m_activityConsumer;
+    return m_activitiesConsumer;
 }
 
 PanelShadows *Corona::dialogShadows() const
@@ -425,6 +443,11 @@ UniversalSettings *Corona::universalSettings() const
     return m_universalSettings;
 }
 
+ViewSettingsFactory *Corona::viewSettingsFactory() const
+{
+    return m_viewSettingsFactory;
+}
+
 WindowSystem::AbstractWindowInterface *Corona::wm() const
 {
     return m_wm;
@@ -438,6 +461,11 @@ Indicator::Factory *Corona::indicatorFactory() const
 Layouts::Manager *Corona::layoutsManager() const
 {
     return m_layoutsManager;
+}
+
+Templates::Manager *Corona::templatesManager() const
+{
+    return m_templatesManager;
 }
 
 PlasmaExtended::ScreenPool *Corona::plasmaScreenPool() const
@@ -480,24 +508,19 @@ CentralLayout *Corona::centralLayout(QString name) const
 {
     CentralLayout *result{nullptr};
 
-    if (name.isEmpty()) {
-        result = m_layoutsManager->currentLayout();
-    } else {
-        CentralLayout *tempCentral = m_layoutsManager->synchronizer()->centralLayout(name);
+    if (!name.isEmpty()) {
+        result = m_layoutsManager->synchronizer()->centralLayout(name);
+    }
 
-        if (!tempCentral) {
-            //! Identify best active layout to be used for metrics calculations.
-            //! Active layouts are always take into account their shared layouts for their metrics
-            SharedLayout *sharedLayout = m_layoutsManager->synchronizer()->sharedLayout(name);
+    return result;
+}
 
-            if (sharedLayout) {
-                tempCentral = sharedLayout->currentCentralLayout();
-            }
-        }
+Layout::GenericLayout *Corona::layout(QString name) const
+{
+    Layout::GenericLayout *result{nullptr};
 
-        if (tempCentral) {
-            result = tempCentral;
-        }
+    if (!name.isEmpty()) {
+        result = m_layoutsManager->synchronizer()->layout(name);
     }
 
     return result;
@@ -509,33 +532,102 @@ QRegion Corona::availableScreenRegion(int id) const
 }
 
 QRegion Corona::availableScreenRegionWithCriteria(int id,
-                                                  QString forLayout,
-                                                  QList<Types::Visibility> modes,
-                                                  QList<Plasma::Types::Location> edges,
-                                                  bool includeExternalPanels) const
+                                                  QString activityid,
+                                                  QList<Types::Visibility> ignoreModes,
+                                                  QList<Plasma::Types::Location> ignoreEdges,
+                                                  bool ignoreExternalPanels,
+                                                  bool desktopUse) const
 {
     const QScreen *screen = m_screenPool->screenForId(id);
-    CentralLayout *layout = centralLayout(forLayout);
+    bool inCurrentActivity{activityid.isEmpty()};
 
     if (!screen) {
         return {};
     }
 
-    QRegion available = includeExternalPanels ? screen->availableGeometry() : screen->geometry();
+    QRegion available = ignoreExternalPanels ? screen->geometry() : screen->availableGeometry();
 
-    if (!layout) {
+    QList<Latte::View *> views;
+
+    if (inCurrentActivity) {
+        views = m_layoutsManager->synchronizer()->viewsBasedOnActivityId(m_activitiesConsumer->currentActivity());
+    } else {
+        views = m_layoutsManager->synchronizer()->viewsBasedOnActivityId(activityid);
+    }
+
+    if (views.isEmpty()) {
         return available;
     }
 
-    bool allModes = modes.isEmpty();
-    bool allEdges = edges.isEmpty();
-    QList<Latte::View *> views = layout->latteViews();
+    //! blacklist irrelevant visibility modes
+    if (!ignoreModes.contains(Latte::Types::None)) {
+        ignoreModes << Latte::Types::None;
+    }
+
+    if (!ignoreModes.contains(Latte::Types::NormalWindow)) {
+        ignoreModes << Latte::Types::NormalWindow;
+    }
+
+    bool allEdges = ignoreEdges.isEmpty();
 
     for (const auto *view : views) {
         if (view && view->containment() && view->screen() == screen
-                && ((allEdges || edges.contains(view->location()))
-                    && (allModes || (view->visibility() && modes.contains(view->visibility()->mode()))))) {
+                && ((allEdges || !ignoreEdges.contains(view->location()))
+                    && (view->visibility() && !ignoreModes.contains(view->visibility()->mode())))) {
             int realThickness = view->normalThickness();
+
+            int x = 0; int y = 0; int w = 0; int h = 0;
+
+            switch (view->formFactor()) {
+            case Plasma::Types::Horizontal:
+                if (view->behaveAsPlasmaPanel()) {
+                    w = view->width();
+                    x = view->x();
+                } else {
+                    w = view->maxLength() * view->width();
+                    int offsetW = view->offset() * view->width();
+
+                    switch (view->alignment()) {
+                    case Latte::Types::Left:
+                        x = view->x() + offsetW;
+                        break;
+
+                    case Latte::Types::Center:
+                    case Latte::Types::Justify:
+                        x = (view->geometry().center().x() - w/2) + offsetW;
+                        break;
+
+                    case Latte::Types::Right:
+                        x = view->geometry().right() - w - offsetW;
+                        break;
+                    }
+                }
+                break;
+            case Plasma::Types::Vertical:
+                if (view->behaveAsPlasmaPanel()) {
+                    h = view->height();
+                    y = view->y();
+                } else {
+                    h = view->maxLength() * view->height();
+                    int offsetH = view->offset() * view->height();
+
+                    switch (view->alignment()) {
+                    case Latte::Types::Top:
+                        y = view->y() + offsetH;
+                        break;
+
+                    case Latte::Types::Center:
+                    case Latte::Types::Justify:
+                        y = (view->geometry().center().y() - h/2) + offsetH;
+                        break;
+
+                    case Latte::Types::Bottom:
+                        y = view->geometry().bottom() - h - offsetH;
+                        break;
+                    }
+                }
+                break;
+            }
 
             // Usually availableScreenRect is used by the desktop,
             // but Latte don't have desktop, then here just
@@ -544,122 +636,68 @@ QRegion Corona::availableScreenRegionWithCriteria(int id,
             switch (view->location()) {
             case Plasma::Types::TopEdge:
                 if (view->behaveAsPlasmaPanel()) {
-                    available -= view->geometry();
-                } else {
-                    QRect realGeometry;
-                    int realWidth = view->maxLength() * view->width();
+                    QRect viewGeometry = view->geometry();
 
-                    switch (view->alignment()) {
-                    case Latte::Types::Left:
-                        realGeometry = QRect(view->x(), view->y(),
-                                             realWidth, realThickness);
-                        break;
-
-                    case Latte::Types::Center:
-                    case Latte::Types::Justify:
-                        realGeometry = QRect(qMax(view->geometry().x(), view->geometry().center().x() - realWidth / 2), view->y(),
-                                             realWidth, realThickness);
-                        break;
-
-                    case Latte::Types::Right:
-                        realGeometry = QRect(view->geometry().right() - realWidth + 1, view->y(),
-                                             realWidth, realThickness);
-                        break;
+                    if (desktopUse) {
+                        //! ignore any real window slide outs in all cases
+                        viewGeometry.moveTop(view->screen()->geometry().top() + view->screenEdgeMargin());
                     }
 
-                    available -= realGeometry;
+                    available -= viewGeometry;
+                } else {                  
+                    y = view->y();
+                    available -= QRect(x, y, w, realThickness);
                 }
 
                 break;
 
             case Plasma::Types::BottomEdge:
                 if (view->behaveAsPlasmaPanel()) {
-                    available -= view->geometry();
-                } else {
-                    QRect realGeometry;
-                    int realWidth = view->maxLength() * view->width();
-                    int realY = view->geometry().bottom() - realThickness + 1;
+                    QRect viewGeometry = view->geometry();
 
-                    switch (view->alignment()) {
-                    case Latte::Types::Left:
-                        realGeometry = QRect(view->x(), realY,
-                                             realWidth, realThickness);
-                        break;
-
-                    case Latte::Types::Center:
-                    case Latte::Types::Justify:
-                        realGeometry = QRect(qMax(view->geometry().x(), view->geometry().center().x() - realWidth / 2),
-                                             realY, realWidth, realThickness);
-                        break;
-
-                    case Latte::Types::Right:
-                        realGeometry = QRect(view->geometry().right() - realWidth + 1, realY,
-                                             realWidth, realThickness);
-                        break;
+                    if (desktopUse) {
+                        //! ignore any real window slide outs in all cases
+                        viewGeometry.moveTop(view->screen()->geometry().bottom() - view->screenEdgeMargin() - viewGeometry.height());
                     }
 
-                    available -= realGeometry;
+                    available -= viewGeometry;
+                } else {
+                    y = view->geometry().bottom() - realThickness + 1;
+                    available -= QRect(x, y, w, realThickness);
                 }
 
                 break;
 
             case Plasma::Types::LeftEdge:
                 if (view->behaveAsPlasmaPanel()) {
-                    available -= view->geometry();
-                } else {
-                    QRect realGeometry;
-                    int realHeight = view->maxLength() * view->height();
+                    QRect viewGeometry = view->geometry();
 
-                    switch (view->alignment()) {
-                    case Latte::Types::Top:
-                        realGeometry = QRect(view->x(), view->y(),
-                                             realThickness, realHeight);
-                        break;
-
-                    case Latte::Types::Center:
-                    case Latte::Types::Justify:
-                        realGeometry = QRect(view->x(), qMax(view->geometry().y(), view->geometry().center().y() - realHeight / 2),
-                                             realThickness, realHeight);
-                        break;
-
-                    case Latte::Types::Bottom:
-                        realGeometry = QRect(view->x(), view->geometry().bottom() - realHeight + 1,
-                                             realThickness, realHeight);
-                        break;
+                    if (desktopUse) {
+                        //! ignore any real window slide outs in all cases
+                        viewGeometry.moveLeft(view->screen()->geometry().left() + view->screenEdgeMargin());
                     }
 
-                    available -= realGeometry;
+                    available -= viewGeometry;
+                } else {
+                    x = view->x();
+                    available -= QRect(x, y, realThickness, h);
                 }
 
                 break;
 
             case Plasma::Types::RightEdge:
                 if (view->behaveAsPlasmaPanel()) {
-                    available -= view->geometry();
-                } else {
-                    QRect realGeometry;
-                    int realHeight = view->maxLength() * view->height();
-                    int realX = view->geometry().right() - realThickness + 1;
+                    QRect viewGeometry = view->geometry();
 
-                    switch (view->alignment()) {
-                    case Latte::Types::Top:
-                        realGeometry = QRect(realX, view->y(),
-                                             realThickness, realHeight);
-                        break;
-
-                    case Latte::Types::Center:
-                    case Latte::Types::Justify:
-                        realGeometry = QRect(realX, qMax(view->geometry().y(), view->geometry().center().y() - realHeight / 2),
-                                             realThickness, realHeight);
-                        break;
-
-                    case Latte::Types::Bottom:
-                        realGeometry = QRect(realX, view->geometry().bottom() - realHeight + 1,
-                                             realThickness, realHeight);
-                        break;
+                    if (desktopUse) {
+                        //! ignore any real window slide outs in all cases
+                        viewGeometry.moveLeft(view->screen()->geometry().right() - view->screenEdgeMargin() - viewGeometry.width());
                     }
 
-                    available -= realGeometry;
+                    available -= viewGeometry;
+                } else {                    
+                    x = view->geometry().right() - realThickness + 1;
+                    available -= QRect(x, y, realThickness, h);
                 }
 
                 break;
@@ -688,32 +726,50 @@ QRect Corona::availableScreenRect(int id) const
 }
 
 QRect Corona::availableScreenRectWithCriteria(int id,
-                                              QString forLayout,
-                                              QList<Types::Visibility> modes,
-                                              QList<Plasma::Types::Location> edges,
-                                              bool includeExternalPanels) const
+                                              QString activityid,
+                                              QList<Types::Visibility> ignoreModes,
+                                              QList<Plasma::Types::Location> ignoreEdges,
+                                              bool ignoreExternalPanels,
+                                              bool desktopUse) const
 {
     const QScreen *screen = m_screenPool->screenForId(id);
-    CentralLayout *layout = centralLayout(forLayout);
+    bool inCurrentActivity{activityid.isEmpty()};
 
     if (!screen) {
         return {};
     }
 
-    QRect available = includeExternalPanels ? screen->availableGeometry() : screen->geometry();
+    QRect available = ignoreExternalPanels ? screen->geometry() : screen->availableGeometry();
 
-    if (!layout) {
+    QList<Latte::View *> views;
+
+    if (inCurrentActivity) {
+        views = m_layoutsManager->synchronizer()->viewsBasedOnActivityId(m_activitiesConsumer->currentActivity());
+    } else {
+        views = m_layoutsManager->synchronizer()->viewsBasedOnActivityId(activityid);
+    }
+
+    if (views.isEmpty()) {
         return available;
     }
 
-    bool allModes = modes.isEmpty();
-    bool allEdges = edges.isEmpty();
-    QList<Latte::View *> views = layout->latteViews();
+    //! blacklist irrelevant visibility modes
+    if (!ignoreModes.contains(Latte::Types::None)) {
+        ignoreModes << Latte::Types::None;
+    }
+
+    if (!ignoreModes.contains(Latte::Types::NormalWindow)) {
+        ignoreModes << Latte::Types::NormalWindow;
+    }
+
+    bool allEdges = ignoreEdges.isEmpty();
 
     for (const auto *view : views) {
         if (view && view->containment() && view->screen() == screen
-                && ((allEdges || edges.contains(view->location()))
-                    && (allModes || (view->visibility() && modes.contains(view->visibility()->mode()))))) {
+                && ((allEdges || !ignoreEdges.contains(view->location()))
+                    && (view->visibility() && !ignoreModes.contains(view->visibility()->mode())))) {
+
+            int appliedThickness = view->behaveAsPlasmaPanel() ? view->screenEdgeMargin() + view->normalThickness() : view->normalThickness();
 
             // Usually availableScreenRect is used by the desktop,
             // but Latte don't have desktop, then here just
@@ -721,19 +777,39 @@ QRect Corona::availableScreenRectWithCriteria(int id,
             // because the left and right are those who dodge others docks
             switch (view->location()) {
             case Plasma::Types::TopEdge:
-                available.setTop(view->y() + view->normalThickness());
+                if (view->behaveAsPlasmaPanel() && desktopUse) {
+                    //! ignore any real window slide outs in all cases
+                    available.setTop(qMax(available.top(), view->screen()->geometry().top() + appliedThickness));
+                } else {
+                    available.setTop(qMax(available.top(), view->y() + appliedThickness));
+                }
                 break;
 
             case Plasma::Types::BottomEdge:
-                available.setBottom(view->y() + view->height() - view->normalThickness());
+                if (view->behaveAsPlasmaPanel() && desktopUse) {
+                    //! ignore any real window slide outs in all cases
+                    available.setBottom(qMin(available.bottom(), view->screen()->geometry().bottom() - appliedThickness));
+                } else {
+                    available.setBottom(qMin(available.bottom(), view->y() + view->height() - appliedThickness));
+                }
                 break;
 
             case Plasma::Types::LeftEdge:
-                available.setLeft(view->x() + view->normalThickness());
+                if (view->behaveAsPlasmaPanel() && desktopUse) {
+                    //! ignore any real window slide outs in all cases
+                    available.setLeft(qMax(available.left(), view->screen()->geometry().left() + appliedThickness));
+                } else {
+                    available.setLeft(qMax(available.left(), view->x() + appliedThickness));
+                }
                 break;
 
             case Plasma::Types::RightEdge:
-                available.setRight(view->x() + view->width() - view->normalThickness());
+                if (view->behaveAsPlasmaPanel() && desktopUse) {
+                    //! ignore any real window slide outs in all cases
+                    available.setRight(qMin(available.right(), view->screen()->geometry().right() - appliedThickness));
+                } else {
+                    available.setRight(qMin(available.right(), view->x() + view->width() - appliedThickness));
+                }
                 break;
 
             default:
@@ -800,8 +876,10 @@ int Corona::primaryScreenId() const
     return m_screenPool->id(qGuiApp->primaryScreen()->name());
 }
 
-void Corona::closeApplication()
+void Corona::quitApplication()
 {
+    m_inQuit = true;
+
     //! this code must be called asynchronously because it is called
     //! also from qml (Settings window).
     QTimer::singleShot(300, [this]() {
@@ -825,7 +903,7 @@ void Corona::aboutApplication()
     aboutDialog = new KAboutApplicationDialog(KAboutData::applicationData());
     connect(aboutDialog.data(), &QDialog::finished, aboutDialog.data(), &QObject::deleteLater);
     m_wm->skipTaskBar(*aboutDialog);
-    m_wm->setKeepAbove(*aboutDialog, true);
+    m_wm->setKeepAbove(aboutDialog->winId(), true);
 
     aboutDialog->show();
 }
@@ -870,7 +948,7 @@ int Corona::screenForContainment(const Plasma::Containment *containment) const
     for (auto screen : qGuiApp->screens()) {
         // containment->lastScreen() == m_screenPool->id(screen->name()) to check if the lastScreen refers to a screen that exists/it's known
         if (containment->lastScreen() == m_screenPool->id(screen->name()) &&
-                (containment->activity() == m_activityConsumer->currentActivity() ||
+                (containment->activity() == m_activitiesConsumer->currentActivity() ||
                  containment->containmentType() == Plasma::Types::PanelContainment || containment->containmentType() == Plasma::Types::CustomPanelContainment)) {
             return containment->lastScreen();
         }
@@ -987,7 +1065,7 @@ void Corona::addViewForLayout(QString layoutName)
         defaultContainment->setLocation(Plasma::Types::BottomEdge);
     }
 
-    if (m_layoutsManager->memoryUsage() == Latte::Types::MultipleLayouts) {
+    if (m_layoutsManager->memoryUsage() == MemoryUsage::MultipleLayouts) {
         config.writeEntry("layoutId", layoutName);
     }
 
@@ -1001,12 +1079,11 @@ void Corona::addViewForLayout(QString layoutName)
     emit containmentCreated(defaultContainment);
 
     defaultContainment->createApplet(QStringLiteral("org.kde.latte.plasmoid"));
-    defaultContainment->createApplet(QStringLiteral("org.kde.plasma.analogclock"));
 }
 
 void Corona::loadDefaultLayout()
 {
-    addViewForLayout(m_layoutsManager->currentLayoutName());
+  //  addViewForLayout(m_layoutsManager->currentLayoutsNames());
 }
 
 QStringList Corona::containmentsIds()
@@ -1083,13 +1160,12 @@ void Corona::switchToLayout(QString layout)
         if (QFileInfo(layoutPath).exists()) {
             qDebug() << " Layout is going to be imported and loaded from file :: " << layoutPath;
 
-            QString importedLayout = m_layoutsManager->importer()->importLayoutHelper(layoutPath);
+            QString importedLayout = m_layoutsManager->importer()->importLayout(layoutPath);
 
             if (importedLayout.isEmpty()) {
                 qDebug() << i18n("The layout cannot be imported from file :: ") << layoutPath;
             } else {
-                m_layoutsManager->synchronizer()->loadLayouts();
-                m_layoutsManager->switchToLayout(importedLayout);
+               m_layoutsManager->switchToLayout(importedLayout);
             }
         } else {
             qDebug() << " Layout from missing file can not be imported and loaded :: " << layoutPath;
@@ -1101,10 +1177,10 @@ void Corona::switchToLayout(QString layout)
 
 void Corona::showSettingsWindow(int page)
 {
-    Types::LatteConfigPage p = Types::LayoutPage;
+    Settings::Dialog::ConfigurationPage p = Settings::Dialog::LayoutPage;
 
-    if (page >= Types::LayoutPage && page <= Types::PreferencesPage) {
-        p = static_cast<Types::LatteConfigPage>(page);
+    if (page >= Settings::Dialog::LayoutPage && page <= Settings::Dialog::PreferencesPage) {
+        p = static_cast<Settings::Dialog::ConfigurationPage>(page);
     }
 
     m_layoutsManager->showLatteSettingsDialog(p);
@@ -1120,18 +1196,17 @@ QStringList Corona::contextMenuData()
 {
     QStringList data;
     Types::ViewType viewType{Types::DockView};
+    auto view = m_layoutsManager->synchronizer()->viewForContainment(m_contextMenuViewId);
 
-    Latte::CentralLayout *currentLayout = m_layoutsManager->currentLayout();
-
-    if (currentLayout) {
-        viewType = currentLayout->latteViewType(m_contextMenuViewId);
+    if (view) {
+        viewType = view->type();
     }
 
     data << QString::number((int)m_layoutsManager->memoryUsage());
-    data << m_layoutsManager->currentLayoutName();
+    data << m_layoutsManager->synchronizer()->currentLayoutsNames().join(";;");
     data << QString::number((int)viewType);
 
-    for(const auto &layoutName : m_layoutsManager->menuLayouts()) {
+    for(const auto &layoutName : m_layoutsManager->synchronizer()->menuLayouts()) {
         if (m_layoutsManager->synchronizer()->centralLayout(layoutName)) {
             data << QString("1," + layoutName);
         } else {
@@ -1150,24 +1225,47 @@ void Corona::setBackgroundFromBroadcast(QString activity, QString screenName, QS
         filename = filename.remove(0,7);
     }
 
-    QMetaObject::invokeMethod(m_backgroundTracer->rootObject(),
-                              "setBackgroundFromBroadcast",
-                              Q_ARG(QVariant, activity),
-                              Q_ARG(QVariant, screenName),
-                              Q_ARG(QVariant, filename));
+    PlasmaExtended::BackgroundCache::self()->setBackgroundFromBroadcast(activity, screenName, filename);
 }
 
 void Corona::setBroadcastedBackgroundsEnabled(QString activity, QString screenName, bool enabled)
 {
-    QMetaObject::invokeMethod(m_backgroundTracer->rootObject(),
-                              "setBroadcastedBackgroundsEnabled",
-                              Q_ARG(QVariant, activity),
-                              Q_ARG(QVariant, screenName),
-                              Q_ARG(QVariant, enabled));
+    PlasmaExtended::BackgroundCache::self()->setBroadcastedBackgroundsEnabled(activity, screenName, enabled);
+}
+
+void Corona::toggleHiddenState(QString layoutName, QString screenName, int screenEdge)
+{
+    if (layoutName.isEmpty()) {
+        for(auto layout : m_layoutsManager->currentLayouts()) {
+            layout->toggleHiddenState(screenName, (Plasma::Types::Location)screenEdge);
+        }
+    } else {
+        Layout::GenericLayout *gLayout = layout(layoutName);
+
+        if (gLayout) {
+            gLayout->toggleHiddenState(screenName, (Plasma::Types::Location)screenEdge);
+        }
+    }
+}
+
+void Corona::importFullConfiguration(const QString &file)
+{
+    m_importFullConfigurationFile = file;
+    quitApplication();
 }
 
 inline void Corona::qmlRegisterTypes() const
-{
+{   
+    qmlRegisterUncreatableMetaObject(Latte::Settings::staticMetaObject,
+                                     "org.kde.latte.private.app",          // import statement
+                                     0, 1,                                 // major and minor version of the import
+                                     "Settings",                           // name in QML
+                                     "Error: only enums of latte app settings");
+
+    qmlRegisterType<Latte::BackgroundTracker>("org.kde.latte.private.app", 0, 1, "BackgroundTracker");
+    qmlRegisterType<Latte::Interfaces>("org.kde.latte.private.app", 0, 1, "Interfaces");
+
+
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     qmlRegisterType<QScreen>();
     qmlRegisterType<Latte::View>();
@@ -1176,6 +1274,7 @@ inline void Corona::qmlRegisterTypes() const
     qmlRegisterType<Latte::ViewPart::TrackerPart::AllScreensTracker>();
     qmlRegisterType<Latte::WindowSystem::SchemeColors>();
     qmlRegisterType<Latte::WindowSystem::Tracker::LastActiveWindow>();
+    qmlRegisterType<Latte::Types>();
 #else
     qmlRegisterAnonymousType<QScreen>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::View>("latte-dock", 1);
@@ -1184,6 +1283,7 @@ inline void Corona::qmlRegisterTypes() const
     qmlRegisterAnonymousType<Latte::ViewPart::TrackerPart::AllScreensTracker>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::WindowSystem::SchemeColors>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::WindowSystem::Tracker::LastActiveWindow>("latte-dock", 1);
+    qmlRegisterAnonymousType<Latte::Types>("latte-dock", 1);
 #endif
 }
 

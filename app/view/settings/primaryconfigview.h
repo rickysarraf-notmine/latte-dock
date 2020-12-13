@@ -22,13 +22,14 @@
 #define PRIMARYCONFIGVIEW_H
 
 // local
-#include "../../plasma/quick/configview.h"
+#include <coretypes.h>
+#include "subconfigview.h"
 #include "../../wm/windowinfowrap.h"
-#include "../../../liblatte2/types.h"
 
 //Qt
 #include <QObject>
 #include <QPointer>
+#include <QQuickView>
 #include <QTimer>
 #include <QWindow>
 
@@ -56,24 +57,28 @@ class View;
 
 namespace Latte {
 namespace ViewPart {
+class CanvasConfigView;
 class SecondaryConfigView;
+
+namespace Config{
+class IndicatorUiManager;
+}
 }
 }
 
 namespace Latte {
 namespace ViewPart {
 
-class PrimaryConfigView : public PlasmaQuick::ConfigView
+class PrimaryConfigView : public SubConfigView
 {
     Q_OBJECT
     //! used when the secondary config window can not be shown
     Q_PROPERTY(bool showInlineProperties READ showInlineProperties NOTIFY showInlinePropertiesChanged)
-
-    Q_PROPERTY(int complexity READ complexity WRITE setComplexity NOTIFY complexityChanged)
+    Q_PROPERTY(bool isReady READ isReady NOTIFY isReadyChanged)
 
     Q_PROPERTY(QRect availableScreenGeometry READ availableScreenGeometry NOTIFY availableScreenGeometryChanged)
 
-    Q_PROPERTY(Plasma::FrameSvg::EnabledBorders enabledBorders READ enabledBorders NOTIFY enabledBordersChanged)
+    Q_PROPERTY(Latte::ViewPart::Config::IndicatorUiManager *indicatorUiManager READ indicatorUiManager NOTIFY indicatorUiManagerChanged)
 
 public:
     enum ConfigViewType
@@ -82,38 +87,38 @@ public:
         SecondaryConfig
     };
 
-    PrimaryConfigView(Plasma::Containment *containment, Latte::View *view, QWindow *parent = nullptr);
+    PrimaryConfigView(Latte::View *view);
     ~PrimaryConfigView() override;
 
-    void init() override;
-    void requestActivate();
+    bool hasFocus() const;
 
-    Qt::WindowFlags wFlags() const;
+    bool isReady() const;
 
     bool showInlineProperties() const;
     bool sticker() const;
 
-    int complexity() const;
-    void setComplexity(int complexity);
-
     QRect availableScreenGeometry() const;
     QRect geometryWhenVisible() const;
 
-    Plasma::FrameSvg::EnabledBorders enabledBorders() const;
+    Config::IndicatorUiManager *indicatorUiManager();
 
-    QQuickView *secondaryWindow();
+    void setParentView(Latte::View *view, const bool &immediate = false) override;
+    void setOnActivities(QStringList activities);
+
+    void showConfigWindow();
+
+    void requestActivate() override;
 
 public slots:
+    Q_INVOKABLE void syncGeometry() override;
     Q_INVOKABLE void hideConfigWindow();
-    Q_INVOKABLE void setSticker(bool blockFocusLost);
-    Q_INVOKABLE void syncGeometry();
-    Q_INVOKABLE void updateLaunchersForGroup(int groupInt);
+    Q_INVOKABLE void setSticker(bool blockFocusLost);    
     Q_INVOKABLE void updateEffects();
 
 signals:
     void availableScreenGeometryChanged();
-    void complexityChanged();
-    void enabledBordersChanged();
+    void indicatorUiManagerChanged();
+    void isReadyChanged();
     void raiseDocksTemporaryChanged();
     void showInlinePropertiesChanged();
     void showSignal();
@@ -122,53 +127,53 @@ protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
     void focusOutEvent(QFocusEvent *ev) override;
-    bool event(QEvent *e) override;
 
-    void syncSlideEffect();
+    void init() override;
+    void initParentView(Latte::View *view) override;
+    void updateEnabledBorders() override;
 
 private slots:
     void immutabilityChanged(Plasma::Types::ImmutabilityType type);
     void updateAvailableScreenGeometry(View *origin = nullptr);
-    void updateEnabledBorders();
     void updateShowInlineProperties();
 
-    void createSecondaryWindow();
-    void deleteSecondaryWindow();
+    void showSecondaryWindow();
+    void hideSecondaryWindow();
+
+    void showCanvasWindow();
+    void hideCanvasWindow();
 
     void setShowInlineProperties(bool show);
 
-    void loadConfig();
-    void saveConfig();
 
 private:
-    void setupWaylandIntegration();
+    void setIsReady(bool ready);
+    void instantUpdateAvailableScreenGeometry();
 
+    bool inAdvancedMode() const;
+
+private:
     bool m_blockFocusLost{false};
     bool m_blockFocusLostOnStartup{true};
     bool m_originalByPassWM{false};
     bool m_inReverse{false};    //! it is used by the borders
+    bool m_isReady{false};
     bool m_showInlineProperties{false};
 
     Latte::Types::Visibility m_originalMode{Latte::Types::DodgeActive};
-    Latte::Types::SettingsComplexity m_complexity{Latte::Types::BasicSettings};
+
+    QTimer m_availableScreemGeometryTimer;
 
     QRect m_availableScreenGeometry;
     QRect m_geometryWhenVisible;
 
-    QPointer<Latte::View> m_latteView;
     QPointer<SecondaryConfigView> m_secConfigView;
-    QTimer m_screenSyncTimer;
-    QTimer m_thicknessSyncTimer;
-    QList<QMetaObject::Connection> connections;
+    QPointer<CanvasConfigView> m_canvasConfigView;
 
-    Plasma::FrameSvg::EnabledBorders m_enabledBorders{Plasma::FrameSvg::AllBorders};
+    Config::IndicatorUiManager *m_indicatorUiManager{nullptr};
 
     //only for the mask on disabled compositing, not to actually paint
     Plasma::FrameSvg *m_background{nullptr};
-
-    Latte::Corona *m_corona{nullptr};
-    Latte::WindowSystem::WindowId m_waylandWindowId;
-    KWayland::Client::PlasmaShellSurface *m_shellSurface{nullptr};
 };
 
 }

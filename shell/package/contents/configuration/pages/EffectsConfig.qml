@@ -26,10 +26,10 @@ import QtQuick.Dialogs 1.2
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.components 3.0 as PlasmaComponents3
-import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
+import org.kde.latte.private.containment 0.1 as LatteContainment
 
 import "../../controls" as LatteExtraControls
 
@@ -58,17 +58,11 @@ PlasmaComponents.Page {
                 Layout.minimumHeight: implicitHeight
                 Layout.topMargin: units.smallSpacing
 
-                checked: plasmoid.configuration.shadows !== Latte.Types.NoneShadow
+                checked: plasmoid.configuration.appletShadowsEnabled
                 text: i18n("Shadows")
                 tooltip: i18n("Enable/disable applet shadows")
 
-                onPressed: {
-                    if(plasmoid.configuration.shadows !== Latte.Types.AllAppletsShadow){
-                        plasmoid.configuration.shadows = Latte.Types.AllAppletsShadow;
-                    } else {
-                        plasmoid.configuration.shadows = Latte.Types.NoneShadow;
-                    }
-                }
+                onPressed: plasmoid.configuration.appletShadowsEnabled = !plasmoid.configuration.appletShadowsEnabled;
             }
 
             ColumnLayout {
@@ -190,24 +184,6 @@ PlasmaComponents.Page {
 
                     ExclusiveGroup {
                         id: shadowColorGroup
-
-                        property bool inStartup: true
-
-                        onCurrentChanged: {
-                            if (inStartup) {
-                                return;
-                            }
-
-                            if (current === defaultShadowBtn) {
-                                plasmoid.configuration.shadowColorType = Latte.Types.DefaultColorShadow;
-                            } else if (current === themeShadowBtn) {
-                                plasmoid.configuration.shadowColorType = Latte.Types.ThemeColorShadow;
-                            } else if (current === userShadowBtn) {
-                                plasmoid.configuration.shadowColorType = Latte.Types.UserColorShadow;
-                            }
-                        }
-
-                        Component.onCompleted: inStartup = false;
                     }
 
                     PlasmaComponents.Button {
@@ -215,10 +191,18 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
 
                         text: i18nc("default shadow", "Default")
-                        checked: plasmoid.configuration.shadowColorType === Latte.Types.DefaultColorShadow
-                        checkable: true
+                        checked: plasmoid.configuration.shadowColorType === type
+                        checkable: false
                         exclusiveGroup: shadowColorGroup
                         tooltip: i18n("Default shadow for applets")
+
+                        readonly property int type: LatteContainment.Types.DefaultColorShadow
+
+                        onPressedChanged: {
+                            if (pressed) {
+                                plasmoid.configuration.shadowColorType = type;
+                            }
+                        }
                     }
 
                     PlasmaComponents.Button {
@@ -226,10 +210,18 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
 
                         text: i18nc("theme shadow", "Theme")
-                        checked: plasmoid.configuration.shadowColorType === Latte.Types.ThemeColorShadow
-                        checkable: true
+                        checked: plasmoid.configuration.shadowColorType === type
+                        checkable: false
                         exclusiveGroup: shadowColorGroup
                         tooltip: i18n("Shadow from theme color palette")
+
+                        readonly property int type: LatteContainment.Types.ThemeColorShadow
+
+                        onPressedChanged: {
+                            if (pressed) {
+                                plasmoid.configuration.shadowColorType = type;
+                            }
+                        }
                     }
 
                     //overlayed button
@@ -239,10 +231,18 @@ PlasmaComponents.Page {
                         height: parent.height
                         text: " "
 
-                        checkable: true
-                        checked: plasmoid.configuration.shadowColorType === Latte.Types.UserColorShadow
+                        checkable: false
+                        checked: plasmoid.configuration.shadowColorType === type
                         tooltip: i18n("Use set shadow color")
                         exclusiveGroup: shadowColorGroup
+
+                        readonly property int type: LatteContainment.Types.UserColorShadow
+
+                        onPressedChanged: {
+                            if (pressed) {
+                                plasmoid.configuration.shadowColorType = type;
+                            }
+                        }
 
                         Rectangle{
                             anchors.fill: parent
@@ -349,97 +349,50 @@ PlasmaComponents.Page {
 
                         ExclusiveGroup {
                             id: animationsGroup
-                            onCurrentChanged: {
-                                if (current.checked)
-                                    plasmoid.configuration.durationTime = current.duration
-                            }
                         }
 
                         PlasmaComponents.Button {
                             Layout.fillWidth: true
                             text: i18n("x1")
                             checked: parent.duration === duration
-                            checkable: true
+                            checkable: false
                             exclusiveGroup: animationsGroup
 
                             readonly property int duration: 3
+
+                            onPressedChanged: {
+                                if (pressed) {
+                                    plasmoid.configuration.durationTime = duration;
+                                }
+                            }
                         }
                         PlasmaComponents.Button {
                             Layout.fillWidth: true
                             text: i18n("x2")
                             checked: parent.duration === duration
-                            checkable: true
+                            checkable: false
                             exclusiveGroup: animationsGroup
 
                             readonly property int duration: 2
+
+                            onPressedChanged: {
+                                if (pressed) {
+                                    plasmoid.configuration.durationTime = duration;
+                                }
+                            }
                         }
                         PlasmaComponents.Button {
                             Layout.fillWidth: true
                             text: i18n("x3")
                             checked: parent.duration === duration
-                            checkable: true
+                            checkable: false
                             exclusiveGroup: animationsGroup
 
                             readonly property int duration: 1
-                        }
-                    }
 
-                    ColumnLayout {
-                        spacing: 0
-                        visible: latteView.latteTasksArePresent
-
-                        LatteComponents.SubHeader {
-                            text: i18n("Tasks")
-                        }
-
-                        LatteComponents.CheckBoxesColumn {
-                            LatteComponents.CheckBox {
-                                Layout.maximumWidth: dialog.optionsWidth
-                                text: i18n("Bounce launchers when triggered")
-                                checked: plasmoid.configuration.animationLauncherBouncing
-
-                                onClicked: {
-                                    plasmoid.configuration.animationLauncherBouncing = !plasmoid.configuration.animationLauncherBouncing;
-                                }
-                            }
-
-                            LatteComponents.CheckBox {
-                                Layout.maximumWidth: dialog.optionsWidth
-                                text: i18n("Bounce tasks that need attention")
-                                checked: plasmoid.configuration.animationWindowInAttention
-
-                                onClicked: {
-                                    plasmoid.configuration.animationWindowInAttention = !plasmoid.configuration.animationWindowInAttention;
-                                }
-                            }
-
-                            LatteComponents.CheckBox {
-                                Layout.maximumWidth: dialog.optionsWidth
-                                text: i18n("Slide in and out single windows")
-                                checked: plasmoid.configuration.animationNewWindowSliding
-
-                                onClicked: {
-                                    plasmoid.configuration.animationNewWindowSliding = !plasmoid.configuration.animationNewWindowSliding;
-                                }
-                            }
-
-                            LatteComponents.CheckBox {
-                                Layout.maximumWidth: dialog.optionsWidth
-                                text: i18n("Grouped tasks bounce their new windows")
-                                checked: plasmoid.configuration.animationWindowAddedInGroup
-
-                                onClicked: {
-                                    plasmoid.configuration.animationWindowAddedInGroup = !plasmoid.configuration.animationWindowAddedInGroup;
-                                }
-                            }
-
-                            LatteComponents.CheckBox {
-                                Layout.maximumWidth: dialog.optionsWidth
-                                text: i18n("Grouped tasks slide out their closed windows")
-                                checked: plasmoid.configuration.animationWindowRemovedFromGroup
-
-                                onClicked: {
-                                    plasmoid.configuration.animationWindowRemovedFromGroup = !plasmoid.configuration.animationWindowRemovedFromGroup;
+                            onPressedChanged: {
+                                if (pressed) {
+                                    plasmoid.configuration.durationTime = duration;
                                 }
                             }
                         }
@@ -485,15 +438,6 @@ PlasmaComponents.Page {
 
                     ExclusiveGroup {
                         id: indicatorStyleGroup
-                        onCurrentChanged: {
-                            if (current.checked) {
-                                if (current === customIndicator.button) {
-                                    latteView.indicator.type = customIndicator.type
-                                } else {
-                                    latteView.indicator.type = current.type
-                                }
-                            }
-                        }
                     }
 
                     PlasmaComponents.Button {
@@ -501,22 +445,34 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
                         text: i18nc("latte indicator style", "Latte")
                         checked: parent.type === type
-                        checkable: true
+                        checkable: false
                         exclusiveGroup:  indicatorStyleGroup
                         tooltip: i18n("Use Latte style for your indicators")
 
                         readonly property string type: "org.kde.latte.default"
+
+                        onPressedChanged: {
+                            if (pressed) {
+                                latteView.indicator.type = type;
+                            }
+                        }
                     }
 
                     PlasmaComponents.Button {
                         Layout.fillWidth: true
                         text: i18nc("plasma indicator style", "Plasma")
                         checked: parent.type === type
-                        checkable: true
+                        checkable: false
                         exclusiveGroup:  indicatorStyleGroup
                         tooltip: i18n("Use Plasma style for your indicators")
 
                         readonly property string type: "org.kde.latte.plasma"
+
+                        onPressedChanged: {
+                            if (pressed) {
+                                latteView.indicator.type = type;
+                            }
+                        }
                     }
 
                     LatteExtraControls.CustomIndicatorButton {
@@ -525,109 +481,47 @@ PlasmaComponents.Page {
                         implicitWidth: latteBtn.implicitWidth
                         implicitHeight: latteBtn.implicitHeight
 
-                        checked: checkable ? parent.type === type : false
-                        buttonExclusiveGroup:  indicatorStyleGroup
+                        checked: parent.type === type
+                        exclusiveGroup:  indicatorStyleGroup
                         comboBoxMinimumPopUpWidth: 1.5 * customIndicator.width
                     }
                 }
 
-                LatteComponents.SubHeader {
-                    Layout.topMargin: units.smallSpacing
-                    isFirstSubCategory: true
-                    text: i18n("Paddings")
-                }
-
-                RowLayout {
+                //! BEGIN: Indicator specific sub-options
+                ColumnLayout {
+                    id: indicatorSpecificOptions
                     Layout.fillWidth: true
-                    spacing: units.smallSpacing
+                    Layout.topMargin: units.smallSpacing * 2
+                    spacing: 0
+                    enabled: latteView.indicator.enabled
 
-                    PlasmaComponents.Label {
-                        text: i18n("Length")
-                        horizontalAlignment: Text.AlignLeft
+                    // @since 0.10.0
+                    readonly property bool deprecatedOptionsAreHidden: true
+
+                    readonly property int optionsWidth: dialog.optionsWidth
+
+                    Component.onCompleted: {
+                        viewConfig.indicatorUiManager.setParentItem(indicatorSpecificOptions);
+                        viewConfig.indicatorUiManager.ui(latteView.indicator.type, latteView);
                     }
 
-                    LatteComponents.Slider {
-                        id: lengthIntMarginSlider
-                        Layout.fillWidth: true
+                    Connections {
+                        target: latteView.indicator
+                        onPluginChanged: viewConfig.indicatorUiManager.ui(latteView.indicator.type, latteView);
+                    }
 
-                        value: Math.round(latteView.indicator.padding * 100)
-                        from: 0
-                        to: maxMargin
-                        stepSize: 1
-                        wheelEnabled: false
-                        minimumInternalValue: latteView.indicator.info.minLengthPadding * 100
-
-                        readonly property int maxMargin: 80
-
-                        onPressedChanged: {
-                            if (!pressed) {
-                                latteView.indicator.padding = value / 100;
+                    Connections {
+                        target: viewConfig
+                        onIsReadyChanged: {
+                            if (viewConfig.isReady) {
+                                viewConfig.indicatorUiManager.ui(latteView.indicator.type, latteView);
                             }
                         }
                     }
-
-                    PlasmaComponents.Label {
-                        text: i18nc("number in percentage, e.g. 85 %","%0 %").arg(currentValue)
-                        horizontalAlignment: Text.AlignRight
-                        Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
-                        Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
-
-                        readonly property int currentValue: Math.max(lengthIntMarginSlider.minimumInternalValue, lengthIntMarginSlider.value)
-                    }
                 }
-
-                LatteComponents.SubHeader {
-                    Layout.topMargin: units.smallSpacing
-                    isFirstSubCategory: true
-                    text: i18n("Options")
-                }
-
-                LatteComponents.CheckBoxesColumn {
-                    LatteComponents.CheckBox {
-                        Layout.maximumWidth: dialog.optionsWidth
-                        text: i18n("Show indicators for applets")
-                        checked: latteView.indicator.enabledForApplets
-                        tooltip: i18n("Indicators are shown for applets")
-
-                        onClicked: {
-                            latteView.indicator.enabledForApplets = !latteView.indicator.enabledForApplets;
-                        }
-                    }
-                }
+                //! END: Indicator specific sub-options
             }
         }
-        //! END: Active Indicator General Settings
-
-        //! BEGIN: Indicator specific sub-options
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: units.smallSpacing
-            spacing: units.smallSpacing
-            visible: latteView.indicator.providesConfigUi
-            enabled: latteView.indicator.enabled
-
-            LatteComponents.Header {
-                text: i18n("%0 Indicator Options").arg(indicatorStyleGroup.current === customIndicator.button ? customIndicator.buttonText : indicatorStyleGroup.current.text)
-            }
-
-            ColumnLayout {
-                id: indicatorSpecificOptions
-                Layout.fillWidth: true
-                Layout.leftMargin: units.smallSpacing * 2
-                Layout.rightMargin: units.smallSpacing * 2
-                spacing: 0
-                readonly property int optionsWidth: dialog.optionsWidth
-
-                Component.onCompleted: {
-                    latteView.indicator.configUiFor(latteView.indicator.type, indicatorSpecificOptions);
-                }
-
-                Connections {
-                    target: latteView.indicator
-                    onPluginChanged: latteView.indicator.configUiFor(latteView.indicator.type, indicatorSpecificOptions);
-                }
-            }
-        }
-        //! END: Indicator specific sub-options
+        //! END: Active Indicator General Settings        
     }
 }

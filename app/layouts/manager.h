@@ -24,7 +24,8 @@
 // local
 #include "launcherssignals.h"
 #include "synchronizer.h"
-#include "settings/settingsdialog.h"
+#include "../apptypes.h"
+#include "../settings/dialogs/settingsdialog.h"
 
 // Qt
 #include <QAction>
@@ -68,12 +69,6 @@ namespace Layouts {
 class Manager : public QObject
 {
     Q_OBJECT
-
-    Q_PROPERTY(QString currentLayoutName READ currentLayoutName NOTIFY currentLayoutNameChanged)
-
-    Q_PROPERTY(QStringList layouts READ layouts NOTIFY layoutsChanged)
-    Q_PROPERTY(QStringList menuLayouts READ menuLayouts NOTIFY menuLayoutsChanged)
-
     Q_PROPERTY(LaunchersSignals *launchersSignals READ launchersSignals NOTIFY launchersSignalsChanged)
 
 public:
@@ -83,80 +78,59 @@ public:
     Latte::Corona *corona();
     Importer *importer();
 
-    void load();
+    void init();
     void loadLayoutOnStartup(QString layoutName);
+    void setOnAllActivities(QString layoutName);
+    void setOnActivities(QString layoutName, QStringList activities);
     void showInfoWindow(QString info, int duration, QStringList activities = {"0"});
     void unload();
 
-    QString currentLayoutName() const;
-    QString defaultLayoutName() const;
+    QStringList currentLayoutsNames() const;
 
-    QStringList layouts() const;
-    QStringList menuLayouts() const;
-    QStringList presetsPaths() const;
-    QStringList storedSharedLayouts() const;
+    MemoryUsage::LayoutsMemory memoryUsage() const;
+    void setMemoryUsage(MemoryUsage::LayoutsMemory memoryUsage);
 
-    Types::LayoutsMemoryUsage memoryUsage() const;
-    void setMemoryUsage(Types::LayoutsMemoryUsage memoryUsage);
+    //! switch to specified layout, default previousMemoryUsage means that it didn't change
+    bool switchToLayout(QString layoutName,  MemoryUsage::LayoutsMemory newMemoryUsage = MemoryUsage::Current);
 
     //! returns the current and central layout based on activities and user preferences
-    CentralLayout *currentLayout() const;
+    QList<CentralLayout *>currentLayouts() const;
     LaunchersSignals *launchersSignals() const;
     Synchronizer *synchronizer() const;
-
-    void importDefaultLayout(bool newInstanceIfPresent = false);
-    void importPresets(bool includeDefault = false);
 
 public slots:
     void showAboutDialog();
 
     void hideLatteSettingsDialog();
-    Q_INVOKABLE void showLatteSettingsDialog(int page = Latte::Types::LayoutPage);
-
-    //! switch to specified layout, default previousMemoryUsage means that it didn't change
-    Q_INVOKABLE bool switchToLayout(QString layoutName, int previousMemoryUsage = -1);
-
-    Q_INVOKABLE int layoutsMemoryUsage();
-
-    //! creates a new layout with layoutName based on the preset
-    Q_INVOKABLE QString newLayout(QString layoutName, QString preset = i18n("Default"));
-
+    Q_INVOKABLE void showLatteSettingsDialog(int firstPage = Settings::Dialog::LayoutPage, bool toggleCurrentPage = false);
     Q_INVOKABLE QStringList centralLayoutsNames();
-    Q_INVOKABLE QStringList sharedLayoutsNames();
 
 signals:
     void centralLayoutsChanged();
-    void currentLayoutChanged();
-    void currentLayoutNameChanged();
     void launchersSignalsChanged();
-    void layoutsChanged();
-    void menuLayoutsChanged();
 
     void currentLayoutIsSwitching(QString layoutName);
+
+    //! used from ConfigView(s) in order to be informed which is one should be shown
+    void lastConfigViewChangedFrom(Latte::View *view);
 
 private:
     void cleanupOnStartup(QString path); //!remove deprecated or oldstyle config options
     void clearUnloadedContainmentsFromLinkedFile(QStringList containmentsIds, bool bypassChecks = false);
 
-    //! it is used just in order to provide translations for the presets
-    void ghostForTranslatedPresets();
-
-    void importPreset(int presetNo, bool newInstanceIfPresent = false);
     void loadLatteLayout(QString layoutPath);
 
     void setMenuLayouts(QStringList layouts);
 
 private:
-    QStringList m_presetsPaths;
-
-    QPointer<Latte::SettingsDialog> m_latteSettingsDialog;
+    QPointer<Latte::Settings::Dialog::SettingsDialog> m_latteSettingsDialog;
 
     Latte::Corona *m_corona{nullptr};
     Importer *m_importer{nullptr};
     LaunchersSignals *m_launchersSignals{nullptr};
     Synchronizer *m_synchronizer{nullptr};
 
-    friend class Latte::SettingsDialog;
+    friend class Latte::Settings::Dialog::SettingsDialog;
     friend class Synchronizer;
 };
 

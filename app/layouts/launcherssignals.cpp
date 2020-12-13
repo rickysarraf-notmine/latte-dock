@@ -21,6 +21,7 @@
 #include "launcherssignals.h"
 
 // local
+#include <coretypes.h>
 #include "../lattecorona.h"
 #include "../layout/centrallayout.h"
 #include "../layouts/manager.h"
@@ -32,6 +33,7 @@
 // Plasma
 #include <Plasma/Applet>
 #include <Plasma/Containment>
+
 
 namespace Latte {
 namespace Layouts {
@@ -242,7 +244,7 @@ void LaunchersSignals::urlsDropped(QString layoutName, int launcherGroup, QStrin
     }
 }
 
-void LaunchersSignals::moveTask(QString layoutName, int senderId, int launcherGroup, int from, int to)
+void LaunchersSignals::moveTask(QString layoutName, uint senderId, int launcherGroup, int from, int to)
 {
     Types::LaunchersGroup group = static_cast<Types::LaunchersGroup>(launcherGroup);
 
@@ -278,7 +280,7 @@ void LaunchersSignals::moveTask(QString layoutName, int senderId, int launcherGr
     }
 }
 
-void LaunchersSignals::validateLaunchersOrder(QString layoutName, int senderId, int launcherGroup, QStringList launchers)
+void LaunchersSignals::validateLaunchersOrder(QString layoutName, uint senderId, int launcherGroup, QStringList launchers)
 {
     Types::LaunchersGroup group = static_cast<Types::LaunchersGroup>(launcherGroup);
 

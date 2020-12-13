@@ -24,7 +24,7 @@ import QtGraphicalEffects 1.0
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 /////Removing a Window from a group////
 Item{
@@ -41,7 +41,7 @@ Item{
     }
 
     function removeTask(){
-        if(!taskIcon.toBeDestroyed && root.animationWindowRemovedFromGroup){
+        if(!taskIcon.toBeDestroyed && taskItem.animations.windowRemovedFromGroupEnabled){
             removingAnimation.init();
         }
     }
@@ -65,19 +65,19 @@ Item{
 
             visible: false
 
-            Latte.IconItem{
+            LatteCore.IconItem{
                 id: tempRemoveIcon
-                anchors.rightMargin: root.position === PlasmaCore.Types.LeftPositioned ? root.thickMargin : 0
-                anchors.leftMargin: root.position === PlasmaCore.Types.RightPositioned ? root.thickMargin : 0
-                anchors.topMargin: root.position === PlasmaCore.Types.BottomPositioned ? root.thickMargin : 0
-                anchors.bottomMargin: root.position === PlasmaCore.Types.TopPositioned ? root.thickMargin : 0
+                anchors.rightMargin: root.location === PlasmaCore.Types.LeftEdge ? taskItem.metrics.margin.thickness : 0
+                anchors.leftMargin: root.location === PlasmaCore.Types.RightEdge ? taskItem.metrics.margin.thickness : 0
+                anchors.topMargin: root.location === PlasmaCore.Types.BottomEdge ? taskItem.metrics.margin.thickness : 0
+                anchors.bottomMargin: root.location === PlasmaCore.Types.TopEdge ? taskItem.metrics.margin.thickness : 0
 
                 anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined;
                 anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined;
-                anchors.right: root.position === PlasmaCore.Types.LeftPositioned ? parent.right : undefined;
-                anchors.left: root.position === PlasmaCore.Types.RightPositioned ? parent.left : undefined;
-                anchors.top: root.position === PlasmaCore.Types.BottomPositioned ? parent.top : undefined;
-                anchors.bottom: root.position === PlasmaCore.Types.TopPositioned ? parent.bottom : undefined;
+                anchors.right: root.location === PlasmaCore.Types.LeftEdge ? parent.right : undefined;
+                anchors.left: root.location === PlasmaCore.Types.RightEdge ? parent.left : undefined;
+                anchors.top: root.location === PlasmaCore.Types.BottomEdge ? parent.top : undefined;
+                anchors.bottom: root.location === PlasmaCore.Types.TopEdge ? parent.bottom : undefined;
 
                 width: iconImageBuffer.width
                 height: width
@@ -114,7 +114,7 @@ Item{
             ParallelAnimation{
                 id: componentRemoveAnimation
 
-                property int speed: 2*root.appliedDurationTime*units.longDuration
+                property int speed: 2 * taskItem.animations.speedFactor.normal * taskItem.animations.duration.large
                 property Item removingItem: parent
                 property int toPoint: 0
 
@@ -147,12 +147,12 @@ Item{
                 else
                     tempPoint = x;
 
-                if( (root.position === PlasmaCore.Types.BottomPositioned) ||
-                        (root.position === PlasmaCore.Types.RightPositioned) ){
-                    componentRemoveAnimation.toPoint = tempPoint + root.iconSize;
+                if( (root.location === PlasmaCore.Types.BottomEdge) ||
+                        (root.location === PlasmaCore.Types.RightEdge) ){
+                    componentRemoveAnimation.toPoint = tempPoint + taskItem.metrics.iconSize;
                 }
                 else{
-                    componentRemoveAnimation.toPoint = tempPoint - root.iconSize;
+                    componentRemoveAnimation.toPoint = tempPoint - taskItem.metrics.iconSize;
                 }
 
                 visible = true;

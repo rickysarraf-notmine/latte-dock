@@ -21,7 +21,7 @@ import QtQuick.Controls 1.4
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 Flickable{
     id: flickableContainer
@@ -32,7 +32,7 @@ Flickable{
     property int offset: 0
 
     readonly property bool animationsFinished: !horizontalAnimation.running && !verticalAnimation.running
-    readonly property bool centered: userPanelPosition === Latte.Types.Center
+    readonly property bool centered: root.alignment === LatteCore.Types.Center
     readonly property bool reversed: Qt.application.layoutDirection === Qt.RightToLeft
 
     readonly property bool contentsExceed:  {
@@ -56,53 +56,53 @@ Flickable{
 
     readonly property int scrollFirstPos: 0
     readonly property int scrollLastPos: contentsExtraSpace
-    readonly property int scrollStep: root.iconSize * 1.5
+    readonly property int scrollStep: metrics.totals.length * 3.5
     readonly property int currentPos: !root.vertical ? contentX : contentY
 
-    readonly property int autoScrollTriggerLength: root.iconSize + root.lengthMargins/2
+    readonly property int autoScrollTriggerLength: metrics.iconSize + metrics.totals.lengthEdge
 
     readonly property int alignment: {
-        if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
-            if (centered) return Latte.Types.LeftEdgeCenterAlign;
-            if (userPanelPosition === Latte.Types.Top) return Latte.Types.LeftEdgeTopAlign;
-            if (userPanelPosition === Latte.Types.Bottom) return Latte.Types.LeftEdgeBottomAlign;
+        if (root.location === PlasmaCore.Types.LeftEdge) {
+            if (centered) return LatteCore.Types.LeftEdgeCenterAlign;
+            if (root.alignment === LatteCore.Types.Top) return LatteCore.Types.LeftEdgeTopAlign;
+            if (root.alignment === LatteCore.Types.Bottom) return LatteCore.Types.LeftEdgeBottomAlign;
         }
 
-        if (plasmoid.location === PlasmaCore.Types.RightEdge) {
-            if (centered) return Latte.Types.RightEdgeCenterAlign;
-            if (userPanelPosition === Latte.Types.Top) return Latte.Types.RightEdgeTopAlign;
-            if (userPanelPosition === Latte.Types.Bottom) return Latte.Types.RightEdgeBottomAlign;
+        if (root.location === PlasmaCore.Types.RightEdge) {
+            if (centered) return LatteCore.Types.RightEdgeCenterAlign;
+            if (root.alignment === LatteCore.Types.Top) return LatteCore.Types.RightEdgeTopAlign;
+            if (root.alignment === LatteCore.Types.Bottom) return LatteCore.Types.RightEdgeBottomAlign;
         }
 
-        if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
-            if (centered) return Latte.Types.BottomEdgeCenterAlign;
+        if (root.location === PlasmaCore.Types.BottomEdge) {
+            if (centered) return LatteCore.Types.BottomEdgeCenterAlign;
 
-            if ((userPanelPosition === Latte.Types.Left && !reversed)
-                    || (userPanelPosition === Latte.Types.Right && reversed)) {
-                return Latte.Types.BottomEdgeLeftAlign;
+            if ((root.alignment === LatteCore.Types.Left && !reversed)
+                    || (root.alignment === LatteCore.Types.Right && reversed)) {
+                return LatteCore.Types.BottomEdgeLeftAlign;
             }
 
-            if ((userPanelPosition === Latte.Types.Right && !reversed)
-                    || (userPanelPosition === Latte.Types.Left && reversed)) {
-                return Latte.Types.BottomEdgeRightAlign;
-            }
-        }
-
-        if (plasmoid.location === PlasmaCore.Types.TopEdge) {
-            if (centered) return Latte.Types.TopEdgeCenterAlign;
-
-            if ((userPanelPosition === Latte.Types.Left && !reversed)
-                    || (userPanelPosition === Latte.Types.Right && reversed)) {
-                return Latte.Types.TopEdgeLeftAlign;
-            }
-
-            if ((userPanelPosition === Latte.Types.Right && !reversed)
-                    || (userPanelPosition === Latte.Types.Left && reversed)) {
-                return Latte.Types.TopEdgeRightAlign;
+            if ((root.alignment === LatteCore.Types.Right && !reversed)
+                    || (root.alignment === LatteCore.Types.Left && reversed)) {
+                return LatteCore.Types.BottomEdgeRightAlign;
             }
         }
 
-        return Latte.Types.BottomEdgeCenterAlign;
+        if (root.location === PlasmaCore.Types.TopEdge) {
+            if (centered) return LatteCore.Types.TopEdgeCenterAlign;
+
+            if ((root.alignment === LatteCore.Types.Left && !reversed)
+                    || (root.alignment === LatteCore.Types.Right && reversed)) {
+                return LatteCore.Types.TopEdgeLeftAlign;
+            }
+
+            if ((root.alignment === LatteCore.Types.Right && !reversed)
+                    || (root.alignment === LatteCore.Types.Left && reversed)) {
+                return LatteCore.Types.TopEdgeRightAlign;
+            }
+        }
+
+        return LatteCore.Types.BottomEdgeCenterAlign;
     }
 
     function increasePos() {
@@ -140,24 +140,24 @@ Flickable{
 
         if (!root.vertical) {
             if (cP.x < 0) {
-                distance = Math.abs(cP.x - root.iconSize);
+                distance = Math.abs(cP.x - metrics.iconSize);
                 decreasePosWithStep(distance);
             } else if ((cP.x+task.width) > scrollableList.width) {
-                distance = Math.abs(cP.x - scrollableList.width + task.width + root.iconSize);
+                distance = Math.abs(cP.x - scrollableList.width + task.width + metrics.iconSize);
                 increasePosWithStep(distance);
             }
         } else {
             if (cP.y < 0) {
-                distance = Math.abs(cP.y - root.iconSize);
+                distance = Math.abs(cP.y - metrics.iconSize);
                 decreasePosWithStep(distance);
             } else if ((cP.y+task.height) > scrollableList.height) {
-                distance = Math.abs(cP.y - scrollableList.height + task.height + root.iconSize);
+                distance = Math.abs(cP.y - scrollableList.height + task.height + metrics.iconSize);
                 increasePosWithStep(distance);
             }
         }
     }
 
-    function autoScrollFor(task) {
+    function autoScrollFor(task, duringDragging) {
         //! It has TWO IN-QUESTION issues that may have been solved by the
         //! initial checks
         //! 1. when the user uses the mouse wheel at the first or the last task
@@ -166,25 +166,29 @@ Flickable{
         //!    at the view boundaries, parabolic effect AND autoscroll at the
         //!    boundaries create animation breakage
 
-        if (!root.autoScrollTasksEnabled || !contentsExceed || root.tasksCount < 3
-                || (task.itemIndex===parabolicManager.lastRealTaskIndex && root.zoomFactor>1)) {
+        var block = !root.autoScrollTasksEnabled && !duringDragging;
+
+        if (block || !contentsExceed || root.tasksCount < 3
+                || (task.itemIndex===task.indexer.lastVisibleItemIndex && parabolic.factor.zoom>1)) {
             //last task with parabolic effect breaks the autoscolling behavior
             return;
         }
 
         var cP = task.mapToItem(scrollableList, 0, 0);
 
+        var localStep = horizontalAnimation.running || verticalAnimation.running ? 3.5 * metrics.totals.length : metrics.totals.length;
+
         if (!root.vertical) {
             if (currentPos !== scrollFirstPos && cP.x < autoScrollTriggerLength) {
-                decreasePosWithStep(root.iconSize*1.5);
+                decreasePosWithStep(localStep);
             } else if (currentPos !== scrollLastPos && (cP.x+task.width > (scrollableList.width-autoScrollTriggerLength))) {
-                increasePosWithStep(root.iconSize*1.5);
+                increasePosWithStep(localStep);
             }
         } else {
             if (currentPos !== scrollFirstPos && cP.y < autoScrollTriggerLength) {
-                decreasePosWithStep(root.iconSize*1.5);
+                decreasePosWithStep(localStep);
             } else if (currentPos !== scrollLastPos && (cP.y+task.height > (scrollableList.height-autoScrollTriggerLength))) {
-                increasePosWithStep(root.iconSize*1.5);
+                increasePosWithStep(localStep);
             }
         }
 
@@ -209,7 +213,7 @@ Flickable{
     Behavior on contentX {
         NumberAnimation {
             id: horizontalAnimation
-            duration: root.durationTime*1.7*units.longDuration
+            duration: animations.speedFactor.current*4.1*animations.duration.large
             easing.type: Easing.OutQuad
         }
     }
@@ -217,19 +221,19 @@ Flickable{
     Behavior on contentY {
         NumberAnimation {
             id: verticalAnimation
-            duration: root.durationTime*1.7*units.longDuration
+            duration: animations.speedFactor.current*4.1*animations.duration.large
             easing.type: Easing.OutQuad
         }
     }
 
     //////////////////////////BEGIN states
-    //user set Panel Positions
+    // Alignment
     // 0-Center, 1-Left, 2-Right, 3-Top, 4-Bottom
     states: [
         ///Left Edge
         State {
             name: "leftCenter"
-            when: flickableContainer.alignment === Latte.Types.LeftEdgeCenterAlign
+            when: flickableContainer.alignment === LatteCore.Types.LeftEdgeCenterAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -243,7 +247,7 @@ Flickable{
         },
         State {
             name: "leftTop"
-            when: flickableContainer.alignment === Latte.Types.LeftEdgeTopAlign
+            when: flickableContainer.alignment === LatteCore.Types.LeftEdgeTopAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -257,7 +261,7 @@ Flickable{
         },
         State {
             name: "leftBottom"
-            when: flickableContainer.alignment === Latte.Types.LeftEdgeBottomAlign
+            when: flickableContainer.alignment === LatteCore.Types.LeftEdgeBottomAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -272,7 +276,7 @@ Flickable{
         ///Right Edge
         State {
             name: "rightCenter"
-            when: flickableContainer.alignment === Latte.Types.RightEdgeCenterAlign
+            when: flickableContainer.alignment === LatteCore.Types.RightEdgeCenterAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -286,7 +290,7 @@ Flickable{
         },
         State {
             name: "rightTop"
-            when: flickableContainer.alignment === Latte.Types.RightEdgeTopAlign
+            when: flickableContainer.alignment === LatteCore.Types.RightEdgeTopAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -300,7 +304,7 @@ Flickable{
         },
         State {
             name: "rightBottom"
-            when: flickableContainer.alignment === Latte.Types.RightEdgeBottomAlign
+            when: flickableContainer.alignment === LatteCore.Types.RightEdgeBottomAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -315,7 +319,7 @@ Flickable{
         ///Bottom Edge
         State {
             name: "bottomCenter"
-            when: flickableContainer.alignment === Latte.Types.BottomEdgeCenterAlign
+            when: flickableContainer.alignment === LatteCore.Types.BottomEdgeCenterAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -329,7 +333,7 @@ Flickable{
         },
         State {
             name: "bottomLeft"
-            when: flickableContainer.alignment === Latte.Types.BottomEdgeLeftAlign
+            when: flickableContainer.alignment === LatteCore.Types.BottomEdgeLeftAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -343,7 +347,7 @@ Flickable{
         },
         State {
             name: "bottomRight"
-            when: flickableContainer.alignment === Latte.Types.BottomEdgeRightAlign
+            when: flickableContainer.alignment === LatteCore.Types.BottomEdgeRightAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -358,7 +362,7 @@ Flickable{
         ///Top Edge
         State {
             name: "topCenter"
-            when: flickableContainer.alignment === Latte.Types.TopEdgeCenterAlign
+            when: flickableContainer.alignment === LatteCore.Types.TopEdgeCenterAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -372,7 +376,7 @@ Flickable{
         },
         State {
             name: "topLeft"
-            when: flickableContainer.alignment === Latte.Types.TopEdgeLeftAlign
+            when: flickableContainer.alignment === LatteCore.Types.TopEdgeLeftAlign
 
             AnchorChanges {
                 target: flickableContainer
@@ -386,7 +390,7 @@ Flickable{
         },
         State {
             name: "topRight"
-            when: flickableContainer.alignment === Latte.Types.TopEdgeRightAlign
+            when: flickableContainer.alignment === LatteCore.Types.TopEdgeRightAlign
 
             AnchorChanges {
                 target: flickableContainer

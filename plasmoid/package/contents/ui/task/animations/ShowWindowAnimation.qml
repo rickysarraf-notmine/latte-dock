@@ -22,13 +22,15 @@ import QtQuick 2.0
 
 import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 ///item's added Animation
 SequentialAnimation{
     id:showWindowAnimation
-    property int speed: root.animationNewWindowSliding ? root.appliedDurationTime* (1.2*units.longDuration) : 0
+    property int speed: taskItem.animations.newWindowSlidingEnabled ? (1.2 * taskItem.animations.speedFactor.normal * taskItem.animations.duration.large) : 0
     property bool animationSent: false
+
+    readonly property string needLengthEvent: showWindowAnimation + "_showwindow"
 
     //Ghost animation that acts as a delayer, in order to fix #342
     PropertyAnimation {
@@ -36,7 +38,7 @@ SequentialAnimation{
         property: "opacity"
         to: 0
         //it is not depend to durationTime when animations are active
-        duration: root.animationNewWindowSliding ? 750 : 0
+        duration: taskItem.animations.newWindowSlidingEnabled ? 750 : 0
         easing.type: Easing.InQuad
     }
     //end of ghost animation
@@ -45,7 +47,7 @@ SequentialAnimation{
         script:{
             if (!showWindowAnimation.animationSent) {
                 showWindowAnimation.animationSent = true;
-                root.signalAnimationsNeedLength(1);
+                taskItem.animations.needLength.addEvent(needLengthEvent);
             }
         }
     }
@@ -87,7 +89,7 @@ SequentialAnimation{
         }
 
         if(taskItem.isWindow || taskItem.isStartup){
-            taskInitComponent.createObject(wrapper);
+            publishGeometryTimer.start();
             if (taskItem.isDemandingAttention){
                 taskItem.groupWindowAdded();
             }
@@ -95,7 +97,7 @@ SequentialAnimation{
         taskItem.inAnimation = false;
 
         if (showWindowAnimation.animationSent) {
-            root.signalAnimationsNeedLength(-1);
+            taskItem.animations.needLength.removeEvent(needLengthEvent);
             showWindowAnimation.animationSent = false;
         }
     }
@@ -124,24 +126,24 @@ SequentialAnimation{
         //Animation Add/Remove (3) - when is launcher with no window, animations enabled
         var animation2 = ((!hasShownLauncher || !tasksModel.launcherInCurrentActivity(taskItem.launcherUrl))
                           && taskItem.isWindow
-                          && Latte.WindowSystem.compositingActive);
+                          && LatteCore.WindowSystem.compositingActive);
 
         var animation3 = (!tasksExtendedManager.immediateLauncherExists(taskItem.launcherUrl)
                           && taskItem.isLauncher
-                          && Latte.WindowSystem.compositingActive);
+                          && LatteCore.WindowSystem.compositingActive);
 
         var activities = tasksModel.launcherActivities(taskItem.launcherUrl);
         var animation6 = (root.inActivityChange && taskItem.isWindow
                           && activities.indexOf(activityInfo.currentActivity)>=0
                           && activities.indexOf(activityInfo.previousActivity) === -1
-                          && Latte.WindowSystem.compositingActive);
+                          && LatteCore.WindowSystem.compositingActive);
 
 
         //startup without launcher, animation should be blocked
         var launcherExists = !(!hasShownLauncher || !tasksModel.launcherInCurrentActivity(taskItem.launcherUrl));
 
         //var hideStartup =  launcherExists && taskItem.isStartup; //! fix #976
-        var hideWindow =  root.showWindowsOnlyFromLaunchers && !launcherExists && taskItem.isWindow;
+        var hideWindow =  (root.showWindowsOnlyFromLaunchers || root.disableAllWindowsFunctionality) && !launcherExists && taskItem.isWindow;
 
         if (tasksExtendedManager.immediateLauncherExists(taskItem.launcherUrl) && taskItem.isLauncher) {
             tasksExtendedManager.removeImmediateLauncher(taskItem.launcherUrl);
@@ -155,7 +157,7 @@ SequentialAnimation{
             wrapper.tempScaleHeight = 0;
             wrapper.opacity = 0;
             taskItem.inAnimation = false;
-        } else if (!Latte.WindowSystem.compositingActive || root.inDraggingPhase
+        } else if (!LatteCore.WindowSystem.compositingActive || root.inDraggingPhase
                    || taskItem.isSeparator) {
             isForcedHidden = false;
             taskItem.visible = true;
@@ -165,7 +167,7 @@ SequentialAnimation{
             wrapper.opacity = 1;
             taskItem.inAnimation = false;
         } else if (( animation2 || animation3 || animation6 || isForcedHidden)
-                   && (root.durationTime !== 0) && !launcherIsAlreadyShown){
+                   && (taskItem.animations.speedFactor.current !== 0) && !launcherIsAlreadyShown){
             isForcedHidden = false;
             taskItem.visible = true;
             wrapper.tempScaleWidth = 0;
@@ -198,7 +200,7 @@ SequentialAnimation{
         if (animationSent){
             //console.log("SAFETY REMOVAL 2: animation removing ended");
             animationSent = false;
-            root.signalAnimationsNeedLength(-1);
+            taskItem.animations.needLength.removeEvent(needLengthEvent);
         }
     }
 }

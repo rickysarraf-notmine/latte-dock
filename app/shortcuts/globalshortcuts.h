@@ -22,7 +22,7 @@
 #define GLOBALSHORTCUTS_H
 
 // local
-#include "../liblatte2/types.h"
+#include <coretypes.h>
 
 // Qt
 #include <QAction>
@@ -31,6 +31,7 @@
 
 // KDE
 #include <kmodifierkeyinfo.h>
+
 
 namespace Plasma {
 class Containment;
@@ -75,6 +76,7 @@ private:
 
     bool activateLatteEntry(Latte::View *view, int index, Qt::Key modifier, bool *delayedExecution);
     bool activatePlasmaTaskManager(const Latte::View *view, int index, Qt::Key modifier, bool *delayedExecution);
+    bool activateEntryForView(Latte::View *view, int index, Qt::Key modifier);
     bool viewAtLowerEdgePriority(Latte::View *test, Latte::View *base);
     bool viewAtLowerScreenPriority(Latte::View *test, Latte::View *base);
     bool viewsToHideAreValid();

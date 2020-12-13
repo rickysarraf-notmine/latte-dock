@@ -21,10 +21,10 @@
 #include "xwindowinterface.h"
 
 // local
+#include <coretypes.h>
 #include "tasktools.h"
-#include "view/screenedgeghostwindow.h"
 #include "view/view.h"
-#include "../liblatte2/extras.h"
+#include "view/helpers/screenedgeghostwindow.h"
 
 // Qt
 #include <QDebug>
@@ -40,6 +40,7 @@
 // X11
 #include <NETWM>
 #include <xcb/xcb.h>
+#include <xcb/shape.h>
 
 namespace Latte {
 namespace WindowSystem {
@@ -50,8 +51,9 @@ XWindowInterface::XWindowInterface(QObject *parent)
     m_currentDesktop = QString(KWindowSystem::self()->currentDesktop());
 
     connect(KWindowSystem::self(), &KWindowSystem::activeWindowChanged, this, &AbstractWindowInterface::activeWindowChanged);
-    connect(KWindowSystem::self(), &KWindowSystem::windowAdded, this, &AbstractWindowInterface::windowAdded);
     connect(KWindowSystem::self(), &KWindowSystem::windowRemoved, this, &AbstractWindowInterface::windowRemoved);
+
+    connect(KWindowSystem::self(), &KWindowSystem::windowAdded, this, &XWindowInterface::windowAddedProxy);
 
     connect(KWindowSystem::self(), &KWindowSystem::currentDesktopChanged, this, [&](int desktop) {
         m_currentDesktop = QString(desktop);
@@ -65,8 +67,7 @@ XWindowInterface::XWindowInterface(QObject *parent)
 
 
     for(auto wid : KWindowSystem::self()->windows()) {
-        emit windowAdded(wid);
-        windowChangedProxy(wid,0,0);
+        windowAddedProxy(wid);
     }
 }
 
@@ -74,17 +75,54 @@ XWindowInterface::~XWindowInterface()
 {
 }
 
-void XWindowInterface::setViewExtraFlags(QWindow &view)
+void XWindowInterface::setViewExtraFlags(QObject *view,bool isPanelWindow, Latte::Types::Visibility mode)
 {
+    WId winId = -1;
+
+    QQuickView *quickView = qobject_cast<QQuickView *>(view);
+
+    if (quickView) {
+        winId = quickView->winId();
+    }
+
+    if (!quickView) {
+        QQuickWindow *quickWindow = qobject_cast<QQuickWindow *>(view);
+
+        if (quickWindow) {
+            winId = quickWindow->winId();
+        }
+    }
+
     NETWinInfo winfo(QX11Info::connection()
-                     , static_cast<xcb_window_t>(view.winId())
-                     , static_cast<xcb_window_t>(view.winId())
+                     , static_cast<xcb_window_t>(winId)
+                     , static_cast<xcb_window_t>(winId)
                      , 0, 0);
 
     winfo.setAllowedActions(NET::ActionChangeDesktop);
-    KWindowSystem::setType(view.winId(), NET::Dock);
-    KWindowSystem::setState(view.winId(), NET::SkipTaskbar | NET::SkipPager);
-    KWindowSystem::setOnAllDesktops(view.winId(), true);
+
+    if (isPanelWindow) {
+        KWindowSystem::setType(winId, NET::Dock);
+    } else {
+        KWindowSystem::setType(winId, NET::Normal);
+    }
+
+#if KF5_VERSION_MINOR >= 45
+    KWindowSystem::setState(winId, NET::SkipTaskbar | NET::SkipPager | NET::SkipSwitcher);
+#else
+    KWindowSystem::setState(winId, NET::SkipTaskbar | NET::SkipPager);
+#endif
+
+    KWindowSystem::setOnAllDesktops(winId, true);
+
+    //! Layer to be applied
+    if (mode == Latte::Types::WindowsCanCover || mode == Latte::Types::WindowsAlwaysCover) {
+        setKeepBelow(winId, true);
+    } else if (mode == Latte::Types::NormalWindow) {
+        setKeepBelow(winId, false);
+        setKeepAbove(winId, false);
+    } else {
+        setKeepAbove(winId, true);
+    }
 }
 
 void XWindowInterface::setViewStruts(QWindow &view, const QRect &rect
@@ -131,7 +169,7 @@ void XWindowInterface::setViewStruts(QWindow &view, const QRect &rect
     }
 
     default:
-        qWarning() << "wrong location:" << qEnumToStr(location);
+        qWarning() << "wrong location:" << location;
         return;
     }
 
@@ -143,7 +181,7 @@ void XWindowInterface::setViewStruts(QWindow &view, const QRect &rect
                                     );
 }
 
-void XWindowInterface::switchToNextVirtualDesktop() const
+void XWindowInterface::switchToNextVirtualDesktop()
 {
     int desktops = KWindowSystem::numberOfDesktops();
 
@@ -161,7 +199,7 @@ void XWindowInterface::switchToNextVirtualDesktop() const
     KWindowSystem::setCurrentDesktop(nextPos);
 }
 
-void XWindowInterface::switchToPreviousVirtualDesktop() const
+void XWindowInterface::switchToPreviousVirtualDesktop()
 {
     int desktops = KWindowSystem::numberOfDesktops();
     if (desktops <= 1) {
@@ -183,31 +221,22 @@ void XWindowInterface::setWindowOnActivities(QWindow &window, const QStringList 
     KWindowSystem::setOnActivities(window.winId(), activities);
 }
 
-void XWindowInterface::removeViewStruts(QWindow &view) const
+void XWindowInterface::removeViewStruts(QWindow &view)
 {
     KWindowSystem::setStrut(view.winId(), 0, 0, 0, 0);
 }
 
-WindowId XWindowInterface::activeWindow() const
+WindowId XWindowInterface::activeWindow()
 {
     return KWindowSystem::self()->activeWindow();
 }
 
-void XWindowInterface::setKeepAbove(const QDialog &dialog, bool above) const
-{
-    if (above) {
-        KWindowSystem::setState(dialog.winId(), NET::KeepAbove);
-    } else {
-        KWindowSystem::clearState(dialog.winId(), NET::KeepAbove);
-    }
-}
-
-void XWindowInterface::skipTaskBar(const QDialog &dialog) const
+void XWindowInterface::skipTaskBar(const QDialog &dialog)
 {
     KWindowSystem::setState(dialog.winId(), NET::SkipTaskbar);
 }
 
-void XWindowInterface::slideWindow(QWindow &view, AbstractWindowInterface::Slide location) const
+void XWindowInterface::slideWindow(QWindow &view, AbstractWindowInterface::Slide location)
 {
     auto slideLocation = KWindowEffects::NoEdge;
 
@@ -235,12 +264,12 @@ void XWindowInterface::slideWindow(QWindow &view, AbstractWindowInterface::Slide
     KWindowEffects::slideWindow(view.winId(), slideLocation, -1);
 }
 
-void XWindowInterface::enableBlurBehind(QWindow &view) const
+void XWindowInterface::enableBlurBehind(QWindow &view)
 {
     KWindowEffects::enableBlurBehind(view.winId());
 }
 
-void XWindowInterface::setActiveEdge(QWindow *view, bool active) const
+void XWindowInterface::setActiveEdge(QWindow *view, bool active)
 {
     ViewPart::ScreenEdgeGhostWindow *window = qobject_cast<ViewPart::ScreenEdgeGhostWindow *>(view);
 
@@ -299,12 +328,120 @@ void XWindowInterface::setActiveEdge(QWindow *view, bool active) const
     xcb_change_property(c, XCB_PROP_MODE_REPLACE, window->winId(), atom->atom, XCB_ATOM_CARDINAL, 32, 1, &value);
 }
 
-WindowInfoWrap XWindowInterface::requestInfoActive() const
+#if KF5_VERSION_MINOR >= 65
+QRect XWindowInterface::visibleGeometry(const WindowId &wid, const QRect &frameGeometry) const
+{
+    NETWinInfo ni(QX11Info::connection(), wid.toUInt(), QX11Info::appRootWindow(), 0, NET::WM2GTKFrameExtents);
+    NETStrut struts = ni.gtkFrameExtents();
+    QMargins margins(struts.left, struts.top, struts.right, struts.bottom);
+    QRect visibleGeometry = frameGeometry;
+
+    if (!margins.isNull()) {
+        visibleGeometry -= margins;
+    }
+
+    return visibleGeometry;
+}
+#endif
+
+
+void XWindowInterface::setFrameExtents(QWindow *view, const QMargins &margins)
+{
+    if (!view) {
+        return;
+    }
+
+#if KF5_VERSION_MINOR >= 65
+    NETWinInfo ni(QX11Info::connection(), view->winId(), QX11Info::appRootWindow(), 0, NET::WM2GTKFrameExtents);
+
+    if (margins.isNull()) {
+        //! delete property
+        xcb_connection_t *c = QX11Info::connection();
+        const QByteArray atomName = QByteArrayLiteral("_GTK_FRAME_EXTENTS");
+        xcb_intern_atom_cookie_t atomCookie = xcb_intern_atom_unchecked(c, false, atomName.length(), atomName.constData());
+        QScopedPointer<xcb_intern_atom_reply_t, QScopedPointerPodDeleter> atom(xcb_intern_atom_reply(c, atomCookie, nullptr));
+
+        if (!atom) {
+            return;
+        }
+
+        // qDebug() << "   deleting gtk frame extents atom..";
+
+        xcb_delete_property(c, view->winId(), atom->atom);
+    } else {
+        NETStrut struts;
+        struts.left = margins.left();
+        struts.top = margins.top();
+        struts.right = margins.right();
+        struts.bottom = margins.bottom();
+
+        ni.setGtkFrameExtents(struts);
+    }
+
+  /*NETWinInfo ni2(QX11Info::connection(), view->winId(), QX11Info::appRootWindow(), 0, NET::WM2GTKFrameExtents);
+    NETStrut applied = ni2.gtkFrameExtents();
+    QMargins amargins(applied.left, applied.top, applied.right, applied.bottom);
+    qDebug() << "     window gtk frame extents applied :: " << amargins;*/
+#endif
+}
+
+void XWindowInterface::checkShapeExtension()
+{
+    if (!m_shapeExtensionChecked) {
+        xcb_connection_t *c = QX11Info::connection();
+        xcb_prefetch_extension_data(c, &xcb_shape_id);
+        const xcb_query_extension_reply_t *extension = xcb_get_extension_data(c, &xcb_shape_id);
+        if (extension->present) {
+            // query version
+            auto cookie = xcb_shape_query_version(c);
+            QScopedPointer<xcb_shape_query_version_reply_t, QScopedPointerPodDeleter> version(xcb_shape_query_version_reply(c, cookie, nullptr));
+            if (!version.isNull()) {
+                m_shapeAvailable = (version->major_version * 0x10 + version->minor_version) >= 0x11;
+            }
+        }
+        m_shapeExtensionChecked = true;
+    }
+}
+
+void XWindowInterface::setInputMask(QWindow *window, const QRect &rect)
+{
+    if (!window || !window->isVisible()) {
+        return;
+    }
+
+    xcb_connection_t *c = QX11Info::connection();
+
+    if (!m_shapeExtensionChecked) {
+        checkShapeExtension();
+    }
+
+    if (!m_shapeAvailable) {
+        return;
+    }
+
+    if (!rect.isEmpty()) {
+        xcb_rectangle_t xcbrect;
+        xcbrect.x = qMax(SHRT_MIN, rect.x());
+        xcbrect.y = qMax(SHRT_MIN, rect.y());
+        xcbrect.width = qMin((int)USHRT_MAX, rect.width());
+        xcbrect.height = qMin((int)USHRT_MAX, rect.height());
+
+        // set input shape, so that it doesn't accept any input events
+        xcb_shape_rectangles(c, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT,
+                             XCB_CLIP_ORDERING_UNSORTED, window->winId(), 0, 0, 1, &xcbrect);
+    } else {
+        // delete the shape
+        xcb_shape_mask(c, XCB_SHAPE_SO_INTERSECT, XCB_SHAPE_SK_INPUT,
+                       window->winId(), 0, 0, XCB_PIXMAP_NONE);
+    }
+}
+
+WindowInfoWrap XWindowInterface::requestInfoActive()
 {
     return requestInfo(KWindowSystem::activeWindow());
 }
 
-WindowInfoWrap XWindowInterface::requestInfo(WindowId wid) const
+WindowInfoWrap XWindowInterface::requestInfo(WindowId wid)
 {
     const KWindowInfo winfo{wid.value<WId>(), NET::WMFrameExtents
                 | NET::WMWindowType
@@ -318,19 +455,16 @@ WindowInfoWrap XWindowInterface::requestInfo(WindowId wid) const
                 | NET::WM2AllowedActions
                 | NET::WM2TransientFor};
 
-    //! update desktop id
-
-    bool isDesktop{false};
-    if (winfo.windowClassName() == "plasmashell" && isPlasmaDesktop(winfo.geometry())) {
-        isDesktop = true;
-        windowsTracker()->setPlasmaDesktop(wid);
-    }
-
     WindowInfoWrap winfoWrap;
 
-    if (!winfo.valid()) {
+    const auto winClass = QString(winfo.windowClassName());
+
+    //!used to track Plasma DesktopView windows because during startup can not be identified properly
+    bool plasmaBlockedWindow = (winClass == QLatin1String("plasmashell") && !isAcceptableWindow(wid));
+
+    if (!winfo.valid() || plasmaBlockedWindow) {
         winfoWrap.setIsValid(false);
-    } else if (isValidWindow(winfo) && !isDesktop) {
+    } else if (isValidWindow(wid)) {
         winfoWrap.setIsValid(true);
         winfoWrap.setWid(wid);
         winfoWrap.setParentId(winfo.transientFor());
@@ -342,11 +476,20 @@ WindowInfoWrap XWindowInterface::requestInfo(WindowId wid) const
         winfoWrap.setIsShaded(winfo.hasState(NET::Shaded));
         winfoWrap.setIsOnAllDesktops(winfo.onAllDesktops());
         winfoWrap.setIsOnAllActivities(winfo.activities().empty());
+#if KF5_VERSION_MINOR >= 65
+        winfoWrap.setGeometry(visibleGeometry(wid, winfo.frameGeometry()));
+#else
         winfoWrap.setGeometry(winfo.frameGeometry());
+#endif
         winfoWrap.setIsKeepAbove(winfo.hasState(NET::KeepAbove));
+        winfoWrap.setIsKeepBelow(winfo.hasState(NET::KeepBelow));
+        winfoWrap.setHasSkipPager(winfo.hasState(NET::SkipPager));
+#if KF5_VERSION_MINOR >= 45
+        winfoWrap.setHasSkipSwitcher(winfo.hasState(NET::SkipSwitcher));
+#endif
         winfoWrap.setHasSkipTaskbar(winfo.hasState(NET::SkipTaskbar));
 
-        //! Window Abilities
+        //! BEGIN:Window Abilities
         winfoWrap.setIsClosable(winfo.actionSupported(NET::ActionClose));
         winfoWrap.setIsFullScreenable(winfo.actionSupported(NET::ActionFullScreen));
         winfoWrap.setIsMaximizable(winfo.actionSupported(NET::ActionMax));
@@ -355,40 +498,26 @@ WindowInfoWrap XWindowInterface::requestInfo(WindowId wid) const
         winfoWrap.setIsResizable(winfo.actionSupported(NET::ActionResize));
         winfoWrap.setIsShadeable(winfo.actionSupported(NET::ActionShade));
         winfoWrap.setIsVirtualDesktopsChangeable(winfo.actionSupported(NET::ActionChangeDesktop));
-        //! Window Abilities
+        //! END:Window Abilities
 
         winfoWrap.setDisplay(winfo.visibleName());
         winfoWrap.setDesktops({QString(winfo.desktop())});
         winfoWrap.setActivities(winfo.activities());
-    } else if (m_desktopId == wid) {
-        winfoWrap.setIsValid(true);
-        winfoWrap.setIsPlasmaDesktop(true);
-        winfoWrap.setWid(wid);
-        winfoWrap.setParentId(0);
-        winfoWrap.setHasSkipTaskbar(true);
+    }
 
-        //! Window Abilities
-        winfoWrap.setIsClosable(false);
-        winfoWrap.setIsFullScreenable(false);
-        winfoWrap.setIsGroupable(false);
-        winfoWrap.setIsMaximizable(false);
-        winfoWrap.setIsMinimizable(false);
-        winfoWrap.setIsMovable(false);
-        winfoWrap.setIsResizable(false);
-        winfoWrap.setIsShadeable(false);
-        winfoWrap.setIsVirtualDesktopsChangeable(false);
-        //! Window Abilities
+    if (plasmaBlockedWindow) {
+        windowRemoved(wid);
     }
 
     return winfoWrap;
 }
 
-AppData XWindowInterface::appDataFor(WindowId wid) const
+AppData XWindowInterface::appDataFor(WindowId wid)
 {
     return appDataFromUrl(windowUrl(wid));
 }
 
-QUrl XWindowInterface::windowUrl(WindowId wid) const
+QUrl XWindowInterface::windowUrl(WindowId wid)
 {
     const KWindowInfo info(wid.value<WId>(), 0, NET::WM2WindowClass | NET::WM2DesktopFileName);
 
@@ -423,34 +552,30 @@ QUrl XWindowInterface::windowUrl(WindowId wid) const
                                  rulesConfig, info.windowClassName());
 }
 
-
-bool XWindowInterface::windowCanBeDragged(WindowId wid) const
+bool XWindowInterface::windowCanBeDragged(WindowId wid)
 {
     WindowInfoWrap winfo = requestInfo(wid);
     return (winfo.isValid()
             && !winfo.isMinimized()
             && winfo.isMovable()
-            && inCurrentDesktopActivity(winfo)
-            && !winfo.isPlasmaDesktop());
+            && inCurrentDesktopActivity(winfo));
 }
 
-bool XWindowInterface::windowCanBeMaximized(WindowId wid) const
+bool XWindowInterface::windowCanBeMaximized(WindowId wid)
 {
-
     WindowInfoWrap winfo = requestInfo(wid);
     return (winfo.isValid()
             && !winfo.isMinimized()
             && winfo.isMaximizable()
-            && inCurrentDesktopActivity(winfo)
-            && !winfo.isPlasmaDesktop());
+            && inCurrentDesktopActivity(winfo));
 }
 
-void XWindowInterface::requestActivate(WindowId wid) const
+void XWindowInterface::requestActivate(WindowId wid)
 {
     KWindowSystem::activateWindow(wid.toInt());
 }
 
-QIcon XWindowInterface::iconFor(WindowId wid) const
+QIcon XWindowInterface::iconFor(WindowId wid)
 {
     QIcon icon;
 
@@ -462,16 +587,21 @@ QIcon XWindowInterface::iconFor(WindowId wid) const
     return icon;
 }
 
-WindowId XWindowInterface::winIdFor(QString appId, QRect geometry) const
+WindowId XWindowInterface::winIdFor(QString appId, QRect geometry)
 {
     return activeWindow();
 }
 
-void XWindowInterface::requestClose(WindowId wid) const
+WindowId XWindowInterface::winIdFor(QString appId, QString title)
+{
+    return activeWindow();
+}
+
+void XWindowInterface::requestClose(WindowId wid)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
-    if (!wInfo.isValid() || wInfo.isPlasmaDesktop()) {
+    if (!wInfo.isValid()) {
         return;
     }
 
@@ -479,11 +609,11 @@ void XWindowInterface::requestClose(WindowId wid) const
     ri.closeWindowRequest(wInfo.wid().toUInt());
 }
 
-void XWindowInterface::requestMoveWindow(WindowId wid, QPoint from) const
+void XWindowInterface::requestMoveWindow(WindowId wid, QPoint from)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
-    if (!wInfo.isValid() || wInfo.isPlasmaDesktop() || !inCurrentDesktopActivity(wInfo)) {
+    if (!wInfo.isValid() || !inCurrentDesktopActivity(wInfo)) {
         return;
     }
 
@@ -505,11 +635,11 @@ void XWindowInterface::requestMoveWindow(WindowId wid, QPoint from) const
     ri.moveResizeRequest(wInfo.wid().toUInt(), validX, validY, NET::Move);
 }
 
-void XWindowInterface::requestToggleIsOnAllDesktops(WindowId wid) const
+void XWindowInterface::requestToggleIsOnAllDesktops(WindowId wid)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
-    if (!wInfo.isValid() || wInfo.isPlasmaDesktop()) {
+    if (!wInfo.isValid()) {
         return;
     }
 
@@ -525,11 +655,11 @@ void XWindowInterface::requestToggleIsOnAllDesktops(WindowId wid) const
     }
 }
 
-void XWindowInterface::requestToggleKeepAbove(WindowId wid) const
+void XWindowInterface::requestToggleKeepAbove(WindowId wid)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
-    if (!wInfo.isValid() || wInfo.isPlasmaDesktop()) {
+    if (!wInfo.isValid()) {
         return;
     }
 
@@ -542,11 +672,40 @@ void XWindowInterface::requestToggleKeepAbove(WindowId wid) const
     }
 }
 
-void XWindowInterface::requestToggleMinimized(WindowId wid) const
+void XWindowInterface::setKeepAbove(WindowId wid, bool active)
+{
+    if (wid.toUInt() <= 0) {
+        return;
+    }
+
+    if (active) {
+        KWindowSystem::setState(wid.toUInt(), NET::KeepAbove);
+        KWindowSystem::clearState(wid.toUInt(), NET::KeepBelow);
+    } else {
+        KWindowSystem::clearState(wid.toUInt(), NET::KeepAbove);
+    }
+}
+
+void XWindowInterface::setKeepBelow(WindowId wid, bool active)
+{
+    if (wid.toUInt() <= 0) {
+        return;
+    }
+
+    if (active) {
+        KWindowSystem::setState(wid.toUInt(), NET::KeepBelow);
+        KWindowSystem::clearState(wid.toUInt(), NET::KeepAbove);
+    } else {
+        KWindowSystem::clearState(wid.toUInt(), NET::KeepBelow);
+    }
+}
+
+
+void XWindowInterface::requestToggleMinimized(WindowId wid)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
-    if (!wInfo.isValid() || wInfo.isPlasmaDesktop() || !inCurrentDesktopActivity(wInfo)) {
+    if (!wInfo.isValid() || !inCurrentDesktopActivity(wInfo)) {
         return;
     }
 
@@ -563,7 +722,7 @@ void XWindowInterface::requestToggleMinimized(WindowId wid) const
     }
 }
 
-void XWindowInterface::requestToggleMaximized(WindowId wid) const
+void XWindowInterface::requestToggleMaximized(WindowId wid)
 {
     WindowInfoWrap wInfo = requestInfo(wid);
 
@@ -586,62 +745,73 @@ void XWindowInterface::requestToggleMaximized(WindowId wid) const
     }
 }
 
-bool XWindowInterface::isValidWindow(WindowId wid) const
+bool XWindowInterface::isValidWindow(WindowId wid)
 {
     if (windowsTracker()->isValidFor(wid)) {
         return true;
     }
 
-    const KWindowInfo winfo{wid.value<WId>(), NET::WMWindowType | NET::WMState};
-
-    return isValidWindow(winfo);
+    return isAcceptableWindow(wid);
 }
 
-bool XWindowInterface::isValidWindow(const KWindowInfo &winfo) const
+bool XWindowInterface::isAcceptableWindow(WindowId wid)
 {
-    if (windowsTracker()->isValidFor(winfo.win())) {
+    const KWindowInfo info(wid.toUInt(), NET::WMGeometry | NET::WMState, NET::WM2WindowClass);
+
+    const auto winClass = QString(info.windowClassName());
+
+    //! ignored windows do not trackd
+    if (hasBlockedTracking(wid)) {
+        return false;
+    }
+
+    //! whitelisted/approved windows
+    if (isWhitelistedWindow(wid)) {
         return true;
     }
 
-    //! ignored windows from tracking
-    if (m_ignoredWindows.contains(winfo.win())) {
-        return false;
-    }
-
-    if (m_desktopId == winfo.win()) {
-        return false;
-    }
-
-    bool hasSkipTaskbar = winfo.hasState(NET::SkipTaskbar);
-    bool hasSkipPager = winfo.hasState(NET::SkipPager);
-
+    //! Window Checks
+    bool hasSkipTaskbar = info.hasState(NET::SkipTaskbar);
+    bool hasSkipPager = info.hasState(NET::SkipPager);
     bool isSkipped = hasSkipTaskbar && hasSkipPager;
+
+    if (isSkipped
+            && ((winClass == QLatin1String("yakuake")
+                 || (winClass == QLatin1String("krunner"))) )) {
+        registerWhitelistedWindow(wid);
+    } else if (winClass == QLatin1String("plasmashell")) {
+        if (isSkipped && isSidepanel(info.geometry())) {
+            registerWhitelistedWindow(wid);
+            return true;
+        } else if (isPlasmaPanel(info.geometry()) || isFullScreenWindow(info.geometry())) {
+            registerPlasmaIgnoredWindow(wid);
+            return false;
+        }
+    } else if ((winClass == QLatin1String("latte-dock"))
+               || (winClass == QLatin1String("ksmserver"))) {
+        if (isFullScreenWindow(info.geometry())) {
+            registerIgnoredWindow(wid);
+            return false;
+        }
+    }
 
     return !isSkipped;
 }
 
-void XWindowInterface::windowChangedProxy(WId wid, NET::Properties prop1, NET::Properties2 prop2)
+void XWindowInterface::windowAddedProxy(WId wid)
 {
-    const KWindowInfo info(wid, NET::WMGeometry, NET::WM2WindowClass);
-
-    const auto winClass = info.windowClassName();
-
-    //! ignored windows do not trackd
-    if (m_ignoredWindows.contains(wid)) {
+    if (!isAcceptableWindow(wid)) {
         return;
     }
 
-    if (winClass == "plasmashell") {
-        //! update desktop id
-        if (isPlasmaDesktop(info.geometry())) {
-            m_desktopId = wid;
-            windowsTracker()->setPlasmaDesktop(wid);
-            considerWindowChanged(wid);
-            return;
-        } else if (isPlasmaPanel(info.geometry())) {
-            registerPlasmaPanel(wid);
-            return;
-        }
+    emit windowAdded(wid);
+    considerWindowChanged(wid);
+}
+
+void XWindowInterface::windowChangedProxy(WId wid, NET::Properties prop1, NET::Properties2 prop2)
+{
+    if (!isValidWindow(wid)) {
+        return;
     }
 
     //! accept only NET::Properties events,
@@ -657,14 +827,9 @@ void XWindowInterface::windowChangedProxy(WId wid, NET::Properties prop1, NET::P
     if ( !(prop1 & NET::WMState)
          && !(prop1 & NET::WMGeometry)
          && !(prop1 & NET::ActiveWindow)
-         && !(prop1 & NET::WMDesktop)
          && !(prop1 & (NET::WMName | NET::WMVisibleName)
               && !(prop2 & NET::WM2TransientFor)
               && !(prop2 & NET::WM2Activities)) ) {
-        return;
-    }
-
-    if (!isValidWindow(wid)) {
         return;
     }
 

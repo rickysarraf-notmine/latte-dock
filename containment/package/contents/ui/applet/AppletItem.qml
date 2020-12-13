@@ -27,12 +27,13 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.kquickcontrolsaddons 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 import "colorizer" as Colorizer
 import "communicator" as Communicator
 import "indicator" as Indicator
+import "../debugger" as Debugger
 
 Item {
     id: appletItem
@@ -41,16 +42,20 @@ Item {
     width: isInternalViewSplitter && !root.inConfigureAppletsMode ? 0 : computeWidth
     height: isInternalViewSplitter && !root.inConfigureAppletsMode ? 0 : computeHeight
 
+    //any applets that exceed their limits should not take events from their surrounding applets
+    clip: !isSeparator
+
     signal mousePressed(int x, int y, int button);
     signal mouseReleased(int x, int y, int button);
 
     property bool animationsEnabled: true
-    property bool animationWasSent: false  //protection flag for animation broadcasting
-    property bool canBeHovered: true
+    property bool parabolicEffectIsSupported: true
     property bool canShowAppletNumberBadge: !isSeparator && !isHidden && !isLattePlasmoid
                                             && !isSpacer && !isInternalViewSplitter
+
+    //! Fill Applet(s)
     property bool inFillCalculations: false //temp record, is used in calculations for fillWidth,fillHeight applets
-    property bool needsFillSpace: { //fill flag, it is used in calculations for fillWidth,fillHeight applets
+    property bool isAutoFillApplet: {
         if (!applet || !applet.Layout)
             return false;
 
@@ -61,10 +66,12 @@ Item {
         else
             return false;
     }
+    property int maxAutoFillLength: -1 //it is used in calculations for fillWidth,fillHeight applets
+    property int minAutoFillLength: -1 //it is used in calculations for fillWidth,fillHeight applets
 
     property bool userBlocksColorizing: false
-    property bool appletBlocksColorizing: !communicator.latteSideColoringEnabled
-    property bool appletBlocksParabolicEffect: communicator.parabolicEffectLocked
+    property bool appletBlocksColorizing: !communicator.requires.latteSideColoringEnabled
+    property bool appletBlocksParabolicEffect: communicator.requires.parabolicEffectLocked
     property bool lockZoom: false
 
     property bool isActive: (isExpanded
@@ -72,10 +79,10 @@ Item {
                              && applet.pluginName !== "org.kde.activeWindowControl"
                              && applet.pluginName !== "org.kde.plasma.appmenu")
 
-    property bool isExpanded: applet && applet.status >= PlasmaCore.Types.NeedsAttentionStatus
-                              && applet.status !== PlasmaCore.Types.HiddenStatus
+    property bool isExpanded: false
 
-    property bool isHidden: applet && applet.status === PlasmaCore.Types.HiddenStatus ? true : false
+    property bool isHidden: (applet && applet.status === PlasmaCore.Types.HiddenStatus)
+                            || (isInternalViewSplitter && !root.inConfigureAppletsMode)
     property bool isInternalViewSplitter: (internalSplitterId > 0)
     property bool isLattePlasmoid: latteApplet !== null
     property bool isZoomed: false
@@ -84,19 +91,19 @@ Item {
     property bool isSpacer: applet && (applet.pluginName === "org.kde.latte.spacer")
     property bool isSystray: applet && (applet.pluginName === "org.kde.plasma.systemtray" || applet.pluginName === "org.nomad.systemtray" )
 
-    property bool firstChildOfStartLayout: index === layoutsContainer.startLayout.firstVisibleIndex
-    property bool firstChildOfMainLayout: index === layoutsContainer.mainLayout.firstVisibleIndex
-    property bool lastChildOfMainLayout: index === layoutsContainer.mainLayout.lastVisibleIndex
-    property bool lastChildOfEndLayout: index === layoutsContainer.endLayout.lastVisibleIndex
+    property bool firstChildOfStartLayout: index === appletItem.layouter.startLayout.firstVisibleIndex
+    property bool firstChildOfMainLayout: index === appletItem.layouter.mainLayout.firstVisibleIndex
+    property bool lastChildOfMainLayout: index === appletItem.layouter.mainLayout.lastVisibleIndex
+    property bool lastChildOfEndLayout: index === appletItem.layouter.endLayout.lastVisibleIndex
 
     readonly property bool atScreenEdge: {
-        if (root.panelAlignment !== Latte.Types.Justify || root.inConfigureAppletsMode || plasmoid.configuration.offset!==0) {
+        if (root.panelAlignment === LatteCore.Types.Center) {
             return false;
         }
 
-        if (root.panelAlignment === Latte.Types.Justify) {
+        if (root.panelAlignment === LatteCore.Types.Justify) {
             //! Justify case
-            if (plasmoid.configuration.maxLength!==100) {
+            if (root.maxLengthPerCentage!==100 || plasmoid.configuration.offset!==0) {
                 return false;
             }
 
@@ -117,86 +124,143 @@ Item {
             return false;
         }
 
-        //! [disabled] because it is probably not needed at all. If in the future there is a report
-        //! describing a case that this would be useful this disablement choice can be rethought
-        /*if (root.panelAlignment === Latte.Types.Left) {
+        if (root.panelAlignment === LatteCore.Types.Left && plasmoid.configuration.offset===0) {
             //! Left case
             return firstChildOfMainLayout;
-        } else if (root.panelAlignment === Latte.Types.Right) {
+        } else if (root.panelAlignment === LatteCore.Types.Right && plasmoid.configuration.offset===0) {
             //! Right case
-            return lastChildOfMainLayout
+            return lastChildOfMainLayout;
         }
 
-        if (root.panelAlignment === Latte.Types.Top) {
+        if (root.panelAlignment === LatteCore.Types.Top && plasmoid.configuration.offset===0) {
             return firstChildOfMainLayout && latteView && latteView.y === latteView.screenGeometry.y;
-        } else if (root.panelAlignment === Latte.Types.Bottom) {
+        } else if (root.panelAlignment === LatteCore.Types.Bottom && plasmoid.configuration.offset===0) {
             return lastChildOfMainLayout && latteView && ((latteView.y + latteView.height) === (latteView.screenGeometry.y + latteView.screenGeometry.height));
-        }*/
+        }
 
         return false;
     }
 
     //applet is in starting edge
     property bool firstAppletInContainer: (index >=0) &&
-                                          ((index === layoutsContainer.startLayout.firstVisibleIndex)
-                                           || (index === layoutsContainer.mainLayout.firstVisibleIndex)
-                                           || (index === layoutsContainer.endLayout.firstVisibleIndex))
+                                          ((index === layouter.startLayout.firstVisibleIndex)
+                                           || (index === layouter.mainLayout.firstVisibleIndex)
+                                           || (index === layouter.endLayout.firstVisibleIndex))
     //applet is in ending edge
     property bool lastAppletInContainer: (index >=0) &&
-                                         ((index === layoutsContainer.startLayout.lastVisibleIndex)
-                                          || (index === layoutsContainer.mainLayout.lastVisibleIndex)
-                                          || (index === layoutsContainer.endLayout.lastVisibleIndex))
+                                         ((index === layouter.startLayout.lastVisibleIndex)
+                                          || (index === layouter.mainLayout.lastVisibleIndex)
+                                          || (index === layouter.endLayout.lastVisibleIndex))
 
-    readonly property bool acceptMouseEvents: applet && !isLattePlasmoid && !originalAppletBehavior && !appletItem.isSeparator && !communicator.parabolicEffectLocked
-    readonly property bool originalAppletBehavior: (root.zoomFactor === 1 && !lockZoom /*hacky flag to keep Latte behavior*/)
-                                                   || (root.zoomFactor>1 && !canBeHovered)
-                                                   || (root.zoomFactor>1 && canBeHovered && lockZoom)
+    readonly property bool acceptMouseEvents: applet && !isLattePlasmoid && !originalAppletBehavior && !appletItem.isSeparator && !communicator.requires.parabolicEffectLocked
+
+    //! This property is an effort in order to group behaviors into one property. This property is responsible to enable/disable
+    //! Applets OnTop MouseArea which is used for ParabolicEffect and ThinTooltips. For Latte panels things
+    //! are pretty straight, the original plasma behavior is replicated so parabolic effect and thin tooltips are disabled.
+    //! For Latte docks things are a bit more complicated. Applets that can not support parabolic effect inside docks
+    //! are presenting their original plasma behavior and also applets that even though can be zoomed user has
+    //! chosed to lock its parabolic effect.
+    readonly property bool originalAppletBehavior: root.behaveAsPlasmaPanel
+                                                   || (root.behaveAsDockWithMask && !parabolicEffectIsSupported)
+                                                   || (root.behaveAsDockWithMask && parabolicEffectIsSupported && lockZoom)
 
     readonly property bool isSquare: communicator.overlayLatteIconIsActive
+    readonly property bool screenEdgeMarginSupported: communicator.requires.screenEdgeMarginSupported
 
-    property int animationTime: appliedDurationTime * (1.2 *units.shortDuration)
-    property int hoveredIndex: layoutsContainer.hoveredIndex
+    property int animationTime: appletItem.animations.speedFactor.normal * (1.2*appletItem.animations.duration.small)
     property int index: -1
     property int maxWidth: root.isHorizontal ? root.height : root.width
     property int maxHeight: root.isHorizontal ? root.height : root.width
     property int internalSplitterId: 0
 
     property int previousIndex: -1
-    property int sizeForFill: -1 //it is used in calculations for fillWidth,fillHeight applets
-    property int spacersMaxSize: Math.max(0,Math.ceil(0.55 * root.iconSize) - root.lengthMargins)
+    property int spacersMaxSize: Math.max(0,Math.ceil(0.55 * metrics.iconSize) - metrics.totals.lengthEdges)
     property int status: applet ? applet.status : -1
 
+    //! separators tracking
+    readonly property bool tailAppletIsSeparator: {
+        if (isSeparator || index<0) {
+            return false;
+        }
+
+        var tail = index - 1;
+
+        while(tail>=0 && indexer.hidden.indexOf(tail)>=0) {
+            //! when a tail applet contains sub-indexing and does not influence
+            //! tracking is considered hidden
+            tail = tail - 1;
+        }
+
+        if (tail >= 0 && indexer.clients.indexOf(tail)>=0) {
+            //! tail applet contains items sub-indexing
+            var tailBridge = indexer.getClientBridge(tail);
+
+            if (tailBridge && tailBridge.client) {
+                return tailBridge.client.lastHeadItemIsSeparator;
+            }
+        }
+
+        // tail applet is normal
+        return (indexer.separators.indexOf(tail)>=0);
+    }
+
+    readonly property bool headAppletIsSeparator: {
+        if (isSeparator || index<0) {
+            return false;
+        }
+
+        var head = index + 1;
+
+        while(head>=0 && indexer.hidden.indexOf(head)>=0) {
+            //! when a head applet contains sub-indexing and does not influence
+            //! tracking is considered hidden
+            head = head + 1;
+        }
+
+        if (head >= 0 && indexer.clients.indexOf(head)>=0) {
+            //! head applet contains items sub-indexing
+            var headBridge = indexer.getClientBridge(head);
+
+            if (headBridge && headBridge.client) {
+                return headBridge.client.firstTailItemIsSeparator;
+            }
+        }
+
+        // head applet is normal
+        return (indexer.separators.indexOf(head)>=0);
+    }
+
     //! local margins
-    readonly property bool parabolicEffectMarginsEnabled: root.zoomFactor>1 && !originalAppletBehavior
+    readonly property bool parabolicEffectMarginsEnabled: appletItem.parabolic.factor.zoom>1 && !originalAppletBehavior && !communicator.parabolicEffectIsSupported
 
-    property int lengthAppletIntMargin: root.lengthAppletIntMarginFactor === -1 || parabolicEffectMarginsEnabled ?
-                                            root.lengthIntMargin : root.lengthAppletIntMarginFactor * root.iconSize
+    property int lengthAppletPadding: metrics.fraction.lengthAppletPadding === -1 || parabolicEffectMarginsEnabled ?
+                                          metrics.padding.length : metrics.padding.lengthApplet
 
-    property int lengthAppletFullMargin: lengthAppletIntMargin + root.lengthExtMargin
+    property int lengthAppletFullMargin: 0
     property int lengthAppletFullMargins: 2 * lengthAppletFullMargin
 
     property int internalWidthMargins: {
         if (root.isVertical) {
-            return root.thickMargins;
+            return metrics.totals.thicknessEdges;
         }
 
         /*TODO, Fitt's case: is temporary until the atScreenEdge applets are aligned properly to the corner and the wrapper
-          is taking all the space needed in order to fill right. For atScreenEdge appplets that should be: applet size + lengthAppletIntMargin + lengthAppletExtMargin.
+          is taking all the space needed in order to fill right. For atScreenEdge appplets that should be: applet size + lengthAppletPadding + lengthAppletExtMargin.
           The indicator should follow also the applet alignment in this in order to feel right
           */
-        return 2 * lengthAppletIntMargin;
+        return 2 * lengthAppletPadding;
     }
 
     property int internalHeightMargins: {
         if (root.isHorizontal) {
-            return root.thickMargins;
+            return root.metrics.totals.thicknessEdges;
         }
 
         /*TODO,Fitt's case: is temporary until the atScreenEdge applets are aligned properly to the corner and the wrapper
-          is taking all the space needed in order to fill right. For atScreenEdge appplets that should be: applet size + lengthAppletIntMargin + lengthAppletExtMargin.
+          is taking all the space needed in order to fill right. For atScreenEdge appplets that should be: applet size + lengthAppletPadding + lengthAppletExtMargin.
           The indicator should follow also the applet alignment in this in order to feel right
           */
-        return 2 * lengthAppletIntMargin;
+        return 2 * lengthAppletPadding;
     }
 
     //! are set by the indicator
@@ -221,10 +285,19 @@ Item {
 
     property Item tooltipVisualParent: titleTooltipParent
 
-    property Item communicatorAlias: communicator
-    property Item wrapperAlias: wrapper
+    readonly property alias communicator: _communicator
+    readonly property alias wrapper: _wrapper
 
-    property bool containsMouse: appletMouseArea.containsMouse /*|| appletMouseAreaBottom.containsMouse*/
+    property Item animations: null
+    property Item debug: null
+    property Item indexer: null
+    property Item layouter: null
+    property Item metrics: null
+    property Item parabolic: null
+    property Item shortcuts: null
+    property Item userRequests: null
+
+    property bool containsMouse: appletMouseArea.containsMouse || (isLattePlasmoid && latteApplet.containsMouse)
     property bool pressed: viewSignalsConnector.pressed || clickedAnimation.running
 
 
@@ -237,8 +310,20 @@ Item {
     property int oldY: y
 
     onXChanged: {
-        if (!foreDropArea.visible || movingForResize || !root.dragInfo.entered) {
+        if (root.isVertical) {
+            return;
+        }
+
+        if (movingForResize) {
             movingForResize = false;
+            return;
+        }
+
+        var draggingAppletInConfigure = root.dragOverlay && root.dragOverlay.currentApplet;
+        var isCurrentAppletInDragging = draggingAppletInConfigure && (root.dragOverlay.currentApplet === appletItem);
+        var dropApplet = root.dragInfo.entered && foreDropArea.visible
+
+        if (isCurrentAppletInDragging || !draggingAppletInConfigure && !dropApplet) {
             return;
         }
 
@@ -262,11 +347,22 @@ Item {
     }
 
     onYChanged: {
-        if (!foreDropArea.visible || movingForResize || !root.dragInfo.entered) {
+        if (root.isHorizontal) {
+            return;
+        }
+
+        if (movingForResize) {
             movingForResize = false;
             return;
         }
 
+        var draggingAppletInConfigure = root.dragOverlay && root.dragOverlay.currentApplet;
+        var isCurrentAppletInDragging = draggingAppletInConfigure && (root.dragOverlay.currentApplet === appletItem);
+        var dropApplet = root.dragInfo.entered && foreDropArea.visible
+
+        if (isCurrentAppletInDragging || !draggingAppletInConfigure && !dropApplet) {
+            return;
+        }
         if (!root.isVertical) {
             translation.x = oldX - x;
             translation.y = 0;
@@ -292,16 +388,16 @@ Item {
 
     NumberAnimation {
         id: translAnim
-        duration: units.longDuration
+        duration: appletItem.animations.duration.large
         easing.type: Easing.InOutQuad
         target: translation
         properties: "x,y"
         to: 0
     }
 
-    Behavior on lengthAppletIntMargin {
+    Behavior on lengthAppletPadding {
         NumberAnimation {
-            duration: 0.8 * root.animationTime
+            duration: 0.8 * appletItem.animations.duration.proposed
             easing.type: Easing.OutCubic
         }
     }
@@ -321,9 +417,12 @@ Item {
         //console.log(" APPLET :: " + mouse.x +  " _ " + mouse.y);
         //console.log(" WRAPPER :: " + choords.x + " _ " + choords.y);
 
-        if (appletItemContainsMouse && !wrapperContainsMouse) {
+        var inThicknessNeutralArea = !wrapperContainsMouse && (appletItem.metrics.margin.screenEdge>0);
+        var appletNeutralAreaEnabled = !(inThicknessNeutralArea && root.dragActiveWindowEnabled);
+
+        if (appletItemContainsMouse && !wrapperContainsMouse && appletNeutralAreaEnabled) {
             //console.log("PASSED");
-            latteView.toggleAppletExpanded(applet.id);
+            latteView.extendedInterface.toggleAppletExpanded(applet.id);
         } else {
             //console.log("REJECTED");
         }
@@ -332,7 +431,7 @@ Item {
     function checkIndex(){
         index = -1;
 
-        for(var i=0; i<layoutsContainer.startLayout.count; ++i){
+        for(var i=0; i<appletItem.layouter.startLayout.count; ++i){
             var child = layoutsContainer.startLayout.children[i];
             if (child === appletItem){
                 index = layoutsContainer.startLayout.beginIndex + i;
@@ -340,7 +439,7 @@ Item {
             }
         }
 
-        for(var i=0; i<layoutsContainer.mainLayout.count; ++i){
+        for(var i=0; i<appletItem.layouter.mainLayout.count; ++i){
             var child = layoutsContainer.mainLayout.children[i];
             if (child === appletItem){
                 index = layoutsContainer.mainLayout.beginIndex + i;
@@ -348,7 +447,7 @@ Item {
             }
         }
 
-        for(var i=0; i<layoutsContainer.endLayout.count; ++i){
+        for(var i=0; i<appletItem.layouter.endLayout.count; ++i){
             var child = layoutsContainer.endLayout.children[i];
             if (child === appletItem){
                 //create a very high index in order to not need to exchange hovering messages
@@ -364,9 +463,9 @@ Item {
             else
                 latteApplet.disableLeftSpacer = true;
 
-            if( index === layoutsContainer.startLayout.beginIndex + layoutsContainer.startLayout.count - 1
-                    || index===layoutsContainer.mainLayout.beginIndex + layoutsContainer.mainLayout.count - 1
-                    || index === layoutsContainer.endLayout.beginIndex + layoutsContainer.endLayout.count - 1)
+            if( index === layoutsContainer.startLayout.beginIndex + appletItem.layouter.startLayout.count - 1
+                    || index===layoutsContainer.mainLayout.beginIndex + appletItem.layouter.mainLayout.count - 1
+                    || index === layoutsContainer.endLayout.beginIndex + appletItem.layouter.endLayout.count - 1)
                 latteApplet.disableRightSpacer = false;
             else
                 latteApplet.disableRightSpacer = true;
@@ -376,37 +475,45 @@ Item {
     //this functions gets the signal from the plasmoid, it can be used for signal items
     //outside the LatteApplet Plasmoid
     //property int debCounter: 0;
-    function clearZoom(){
-        if (layoutsContainer.hoveredIndex === -1 && root.latteAppletHoveredIndex === -1) {
+
+    function sltClearZoom(){
+        if (communicator.parabolicEffectIsSupported) {
+            communicator.bridge.parabolic.client.sglClearZoom();
+        } else {
             restoreAnimation.start();
         }
     }
 
-    function checkCanBeHovered(){
-        canBeHoveredTimer.start();
+    function updateParabolicEffectIsSupported(){
+        parabolicEffectIsSupportedTimer.start();
     }
 
     //! Reduce calculations and give the time to applet to adjust to prevent binding loops
     Timer{
-        id: canBeHoveredTimer
+        id: parabolicEffectIsSupportedTimer
         interval: 100
         onTriggered: {
             if (wrapper.zoomScale !== 1) {
                 return;
             }
 
-            var maxSize = root.iconSize + root.thickMargins;
-            var maxForMinimumSize = root.iconSize + root.thickMargins;
+            if (appletItem.isLattePlasmoid) {
+                appletItem.parabolicEffectIsSupported = true;
+                return;
+            }
+
+            var maxSize = appletItem.metrics.iconSize + lengthAppletFullMargins;
+            var maxForMinimumSize = appletItem.metrics.iconSize + lengthAppletFullMargins;
 
             if ( isSystray
-                    || appletItem.needsFillSpace
+                    || appletItem.isAutoFillApplet
                     || (((applet && root.isHorizontal && (applet.width > maxSize || applet.Layout.minimumWidth > maxForMinimumSize))
                          || (applet && root.isVertical && (applet.height > maxSize || applet.Layout.minimumHeight > maxForMinimumSize)))
                         && !appletItem.isSpacer
                         && !communicator.canShowOverlaiedLatteIcon) ) {
-                appletItem.canBeHovered = false;
+                appletItem.parabolicEffectIsSupported = false;
             } else {
-                appletItem.canBeHovered = true;
+                appletItem.parabolicEffectIsSupported = true;
             }
         }
     }
@@ -427,10 +534,6 @@ Item {
         return false;
     }
 
-    function refersEntryIndex(entryIndex) {
-        return (entryIndex === parabolicManager.pseudoAppletIndex(appletItem.index));
-    }
-
     ///END functions
 
     //BEGIN connections
@@ -440,28 +543,9 @@ Item {
         }
     }
 
-    onHoveredIndexChanged:{
-        if ( (Math.abs(hoveredIndex-index) > 1) && (hoveredIndex !== -1) ) {
-            wrapper.zoomScale = 1;
-        }
-
-        if (Math.abs(hoveredIndex-index) >= 1) {
-            hiddenSpacerLeft.nScale = 0;
-            hiddenSpacerRight.nScale = 0;
-        }
-    }
-
     onIndexChanged: {
         if (appletItem.latteApplet) {
             root.latteAppletPos = index;
-        }
-
-        if (isHidden) {
-            parabolicManager.setHidden(previousIndex, index);
-        }
-
-        if (isSeparator) {
-            parabolicManager.setSeparator(previousIndex, index);
         }
 
         if (index>-1) {
@@ -475,25 +559,8 @@ Item {
         }
     }
 
-    onIsHiddenChanged: {
-        if (isHidden) {
-            parabolicManager.setHidden(-1, index);
-        } else {
-            parabolicManager.setHidden(index, -1);
-        }
-    }
-
-    onIsSeparatorChanged: {
-        if (isSeparator) {
-            parabolicManager.setSeparator(-1, index);
-        } else {
-            parabolicManager.setSeparator(index, -1);
-        }
-
-    }
-
     onIsSystrayChanged: {
-        checkCanBeHovered();
+        updateParabolicEffectIsSupported();
     }
 
     onLatteAppletChanged: {
@@ -504,37 +571,22 @@ Item {
             appletItem.latteApplet.latteView = root;
             appletItem.latteApplet.forceHidePanel = true;
 
-            appletItem.latteApplet.signalAnimationsNeedBothAxis.connect(slotAnimationsNeedBothAxis);
-            appletItem.latteApplet.signalAnimationsNeedLength.connect(slotAnimationsNeedLength);
-            appletItem.latteApplet.signalAnimationsNeedThickness.connect(slotAnimationsNeedThickness);
-            appletItem.latteApplet.signalActionsBlockHiding.connect(slotActionsBlockHiding);
             appletItem.latteApplet.signalPreviewsShown.connect(slotPreviewsShown);
-            appletItem.latteApplet.clearZoomSignal.connect(titleTooltipDialog.hide);
         }
     }
 
-    onNeedsFillSpaceChanged: checkCanBeHovered();
+    onIsAutoFillAppletChanged: updateParabolicEffectIsSupported();
 
     Component.onCompleted: {
         checkIndex();
         root.updateIndexes.connect(checkIndex);
-        root.clearZoomSignal.connect(clearZoom);
         root.destroyInternalViewSplitters.connect(slotDestroyInternalViewSplitters);
+
+        parabolic.sglClearZoom.connect(sltClearZoom);
     }
 
     Component.onDestruction: {
-        if (animationWasSent) {
-            root.slotAnimationsNeedBothAxis(-1);
-            animationWasSent = false;
-        }
-
-        if (isSeparator){
-            parabolicManager.setSeparator(previousIndex, -1);
-        }
-
-        if (isHidden) {
-            parabolicManager.setHidden(previousIndex, -1);
-        }
+        appletItem.animations.needBothAxis.removeEvent(appletItem);
 
         if(root.latteAppletPos>=0 && root.latteAppletPos === index){
             root.latteApplet = null;
@@ -543,91 +595,50 @@ Item {
         }
 
         root.updateIndexes.disconnect(checkIndex);
-        root.clearZoomSignal.disconnect(clearZoom);
         root.destroyInternalViewSplitters.disconnect(slotDestroyInternalViewSplitters);
 
+        parabolic.sglClearZoom.disconnect(sltClearZoom);
+
         if (appletItem.latteApplet) {
-            appletItem.latteApplet.signalAnimationsNeedBothAxis.disconnect(slotAnimationsNeedBothAxis);
-            appletItem.latteApplet.signalAnimationsNeedLength.disconnect(slotAnimationsNeedLength);
-            appletItem.latteApplet.signalAnimationsNeedThickness.disconnect(slotAnimationsNeedThickness);
-            appletItem.latteApplet.signalActionsBlockHiding.disconnect(slotActionsBlockHiding);
             appletItem.latteApplet.signalPreviewsShown.disconnect(slotPreviewsShown);
-            appletItem.latteApplet.clearZoomSignal.disconnect(titleTooltipDialog.hide);
         }
     }
 
-    Connections{
-        target: root
+    //! Bindings
 
-        /* onGlobalDirectRenderChanged:{
-            if (root.globalDirectRender && restoreAnimation.running) {
-                // console.log("CLEAR APPLET SCALE !!!!");
-                //restoreAnimation.stop();
-                //wrapper.zoomScale = 1;
-            }
-        }*/
-
-        onLatteAppletHoveredIndexChanged: {
-            if ( (root.zoomFactor>1) && (root.latteAppletHoveredIndex >= 0) ){
-                var distance = 2;
-                //for Tasks plasmoid distance of 2 is not always safe there are
-                //cases that needs to be 3, when an internal separator there is
-                //between the hovered task and the current applet
-                if (root.hasInternalSeparator) {
-                    if (index < root.latteAppletPos) {
-                        var firstTaskIndex = root.latteApplet.parabolicManager.availableHigherIndex(0);
-
-                        distance = firstTaskIndex+2;
-                    } else if (index > root.latteAppletPos) {
-                        var lastTaskIndex = root.latteApplet.parabolicManager.availableLowerIndex(root.tasksCount-1);
-
-                        distance = root.tasksCount-1-lastTaskIndex+2;
-                    }
-                }
-
-                if(Math.abs(index-root.latteAppletPos+root.latteAppletHoveredIndex)>=Math.max(2,distance)) {
-                    appletItem.clearZoom();
-                }
-            }
-        }
-
-        onSignalActivateEntryAtIndex: {
-            if (parabolicManager.pseudoIndexBelongsToLatteApplet(entryIndex) && appletItem.isLattePlasmoid) {
-                latteApplet.activateTaskAtIndex(entryIndex - latteApplet.tasksBaseIndex);
-            } else if (root.unifiedGlobalShortcuts && refersEntryIndex(entryIndex)) {
-                latteView.toggleAppletExpanded(applet.id);
-            }
-        }
-
-        onSignalNewInstanceForEntryAtIndex: {
-            if (parabolicManager.pseudoIndexBelongsToLatteApplet(entryIndex) && appletItem.isLattePlasmoid) {
-                latteApplet.newInstanceForTaskAtIndex(entryIndex - latteApplet.tasksBaseIndex);
-            } else if (root.unifiedGlobalShortcuts && refersEntryIndex(entryIndex)) {
-                latteView.toggleAppletExpanded(applet.id);
-            }
-        }
+    Binding {
+        //! is used to aboid loop binding warnings on startup
+        target: appletItem
+        property: "lengthAppletFullMargin"
+        when: !communicator.inStartup
+        value: lengthAppletPadding + metrics.margin.length;
     }
 
+    //! Connections
     Connections{
-        target: layoutsContainer
-        onHoveredIndexChanged:{
-            //for applets it is safe to consider that a distance of 2
-            //is enough to clearZoom
-            if ( (root.zoomFactor>1) && (layoutsContainer.hoveredIndex>=0)
-                    && (Math.abs(index-layoutsContainer.hoveredIndex)>=2))
-                appletItem.clearZoom();
+        target: appletItem.shortcuts
 
-            if ((restoreAnimation.running) && (layoutsContainer.hoveredIndex !== -1)) {
-                restoreAnimation.stop();
+        onSglActivateEntryAtIndex: {
+            if (!appletItem.shortcuts.unifiedGlobalShortcuts) {
+                return;
+            }
+
+            var visibleIndex = appletItem.indexer.visibleIndex(appletItem.index);
+
+            if (visibleIndex === entryIndex && !communicator.positionShortcutsAreSupported) {
+                latteView.extendedInterface.toggleAppletExpanded(applet.id);
             }
         }
-    }
 
-    Connections{
-        target: root
-        onLatteAppletHoveredIndexChanged: {
-            if ((restoreAnimation.running) && (root.latteAppletHoveredIndex !== -1)) {
-                restoreAnimation.stop();
+        onSglNewInstanceForEntryAtIndex: {
+            if (!appletItem.shortcuts.unifiedGlobalShortcuts) {
+                return;
+            }
+
+            var visibleIndex = appletItem.indexer.visibleIndex(appletItem.index);
+
+            if (visibleIndex === entryIndex && !communicator.positionShortcutsAreSupported) {
+                latteView.extendedInterface.toggleAppletExpanded(applet.id);
             }
         }
     }
@@ -638,6 +649,7 @@ Item {
         enabled: !appletItem.isLattePlasmoid && !appletItem.isSeparator && !appletItem.isSpacer && !appletItem.isHidden
 
         property bool pressed: false
+        property bool blockWheel: false
 
         onMousePressed: {
             if (appletItem.containsPos(pos)) {
@@ -659,25 +671,52 @@ Item {
                 appletItem.mouseReleased(local.x, local.y, button);
             }
         }
+
+        onWheelScrolled: {
+            if (!appletItem.applet || !root.mouseWheelActions || viewSignalsConnector.blockWheel
+                    || (root.latteViewIsHidden || root.inSlidingIn || root.inSlidingOut)) {
+                return;
+            }
+
+            blockWheel = true;
+            scrollDelayer.start();
+
+            if (appletItem.containsPos(pos) && root.latteView.extendedInterface.appletIsExpandable(applet.id)) {
+                var angle = angleDelta.y / 8;
+                var expanded = root.latteView.extendedInterface.appletIsExpanded(applet.id);
+
+                if ((angle > 12 && !expanded) /*positive direction*/
+                        || (angle < -12 && expanded) /*negative direction*/) {
+                    latteView.extendedInterface.toggleAppletExpanded(applet.id);
+                }
+            }
+        }
     }
 
+    Connections {
+        target: root.latteView ? root.latteView.extendedInterface : null
+        enabled: !appletItem.isLattePlasmoid && !appletItem.isSeparator && !appletItem.isSpacer && !appletItem.isHidden
+
+        onExpandedAppletStateChanged: {
+            if (latteView.extendedInterface.hasExpandedApplet && appletItem.applet) {
+                appletItem.isExpanded = latteView.extendedInterface.appletIsExpandable(appletItem.applet.id)
+                        && latteView.extendedInterface.appletIsExpanded(appletItem.applet.id);
+            } else {
+                appletItem.isExpanded = false;
+            }
+        }
+    }
     ///END connections
 
     //! It is used for any communication needed with the underlying applet
     Communicator.Engine{
-        id: communicator
+        id: _communicator
 
         //set up the overlayed appletItems and properties for when a overlaiedIconItem must be presented to the user
         //because the plasma widgets specific implementation breaks the Latte experience
         onOverlayLatteIconIsActiveChanged:{
             if (!overlayLatteIconIsActive && applet.opacity===0) {
                 applet.opacity = 1;
-
-                wrapper.disableScaleWidth = false;
-                wrapper.disableScaleHeight = false;
-
-                wrapper.updateLayoutWidth();
-                wrapper.updateLayoutHeight();
             } else if (overlayLatteIconIsActive && applet.opacity>0) {
                 applet.opacity = 0;
 
@@ -685,12 +724,6 @@ Item {
                     applet.parent =  wrapper.containerForOverlayIcon;
                     applet.anchors.fill = wrapper.containerForOverlayIcon;
                 }
-
-                wrapper.disableScaleWidth = false;
-                wrapper.disableScaleHeight = false;
-
-                wrapper.updateLayoutWidth();
-                wrapper.updateLayoutHeight();
             }
         }
     }
@@ -761,10 +794,12 @@ Item {
             }
 
             ItemWrapper{
-                id: wrapper
+                id: _wrapper
 
                 TitleTooltipParent{
                     id: titleTooltipParent
+                    metrics: appletItem.metrics
+                    parabolic: appletItem.parabolic
                 }
             }
 
@@ -781,7 +816,7 @@ Item {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 1.2 * root.animationTime
+                        duration: 1.2 * appletItem.animations.duration.proposed
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -798,27 +833,59 @@ Item {
 
             //! Applet Shortcut Visual Badge
             Item {
-                anchors.centerIn: parent
+                id: shortcutBadgeContainer
+
                 width: {
                     if (root.isHorizontal) {
-                        return rectangled ? root.iconSize * wrapper.zoomScale : wrapper.width
+                        return appletItem.metrics.iconSize * wrapper.zoomScale
                     } else {
-                        return root.iconSize * wrapper.zoomScale
-                    }
-                }
-                height: {
-                    if (root.isHorizontal) {
-                        return root.iconSize * wrapper.zoomScale
-                    } else {
-                        return rectangled ? root.iconSize * wrapper.zoomScale : wrapper.height
+                        return badgeThickness;
                     }
                 }
 
-                property bool rectangled: canBeHovered && !lockZoom
+                height: {
+                    if (root.isHorizontal) {
+                        return badgeThickness;
+                    } else {
+                        return appletItem.metrics.iconSize * wrapper.zoomScale
+                    }
+                }
+
+                readonly property int badgeThickness: {
+                    if (plasmoid.location === PlasmaCore.Types.BottomEdge
+                            || plasmoid.location === PlasmaCore.Types.RightEdge) {
+                        return ((appletItem.metrics.iconSize + appletItem.metrics.margin.thickness) * wrapper.zoomScale) + appletItem.metrics.margin.screenEdge;
+                    }
+
+                    return ((appletItem.metrics.iconSize + appletItem.metrics.margin.thickness) * wrapper.zoomScale);
+                }
 
                 ShortcutBadge{
                     anchors.fill: parent
                 }
+
+                states:[
+                    State{
+                        name: "horizontal"
+                        when: plasmoid.formFactor === PlasmaCore.Types.Horizontal
+
+                        AnchorChanges{
+                            target: shortcutBadgeContainer;
+                            anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                            anchors.right: undefined; anchors.left: undefined; anchors.top: undefined; anchors.bottom: parent.bottom;
+                        }
+                    },
+                    State{
+                        name: "vertical"
+                        when: plasmoid.formFactor === PlasmaCore.Types.Vertical
+
+                        AnchorChanges{
+                            target: shortcutBadgeContainer;
+                            anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                            anchors.right: parent.right; anchors.left: undefined; anchors.top: undefined; anchors.bottom: undefined;
+                        }
+                    }
+                ]
             }
         }
 
@@ -837,17 +904,89 @@ Item {
     }
 
     Loader {
-        anchors.fill: parent
+        id: addingAreaLoader
+        width: root.isHorizontal ? parent.width : parent.width - appletItem.metrics.margin.screenEdge
+        height: root.isHorizontal ? parent.height - appletItem.metrics.margin.screenEdge : parent.height
+
         active: isLattePlasmoid
+
         sourceComponent: LatteComponents.AddingArea{
+            id: addingAreaItem
             anchors.fill: parent
-            radius: root.iconSize/10
+            // width: root.isHorizontal ? parent.width : parent.width - appletItem.metrics.margin.screenEdge
+            // height: root.isHorizontal ? parent.height - appletItem.metrics.margin.screenEdge : parent.height
+
+            radius: appletItem.metrics.iconSize/10
             opacity: root.addLaunchersMessage ? 1 : 0
             backgroundOpacity: 0.75
-            duration: root.durationTime
+            duration: appletItem.animations.speedFactor.current
 
             title: i18n("Tasks Area")
         }
+
+        //! AddingAreaItem States
+        states:[
+            State{
+                name: "bottom"
+                when: plasmoid.location === PlasmaCore.Types.BottomEdge
+
+                AnchorChanges{
+                    target: addingAreaLoader
+                    anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                    anchors.right: undefined; anchors.left: undefined; anchors.top: undefined; anchors.bottom: parent.bottom;
+                }
+                PropertyChanges{
+                    target: addingAreaLoader
+                    anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: appletItem.metrics.margin.screenEdge;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
+            },
+            State{
+                name: "top"
+                when: plasmoid.location === PlasmaCore.Types.TopEdge
+
+                AnchorChanges{
+                    target: addingAreaLoader
+                    anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                    anchors.right: undefined; anchors.left: undefined; anchors.top: parent.top; anchors.bottom: undefined;
+                }
+                PropertyChanges{
+                    target: addingAreaLoader
+                    anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: appletItem.metrics.margin.screenEdge;    anchors.bottomMargin: 0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
+            },
+            State{
+                name: "left"
+                when: plasmoid.location === PlasmaCore.Types.LeftEdge
+
+                AnchorChanges{
+                    target: addingAreaLoader
+                    anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                    anchors.right: undefined; anchors.left: parent.left; anchors.top: undefined; anchors.bottom: undefined;
+                }
+                PropertyChanges{
+                    target: addingAreaLoader
+                    anchors.leftMargin: appletItem.metrics.margin.screenEdge;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
+            },
+            State{
+                name: "right"
+                when: plasmoid.location === PlasmaCore.Types.RightEdge
+
+                AnchorChanges{
+                    target: addingAreaLoader
+                    anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                    anchors.right: parent.right; anchors.left: undefined; anchors.top: undefined; anchors.bottom: undefined;
+                }
+                PropertyChanges{
+                    target: addingAreaLoader
+                    anchors.leftMargin: 0;    anchors.rightMargin: appletItem.metrics.margin.screenEdge;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
+            }
+        ]
     }
 
     MouseArea{
@@ -867,9 +1006,7 @@ Item {
         property bool blockWheel: false
 
         onEntered: {
-            if (containsMouse && !originalAppletBehavior && !communicator.parabolicEffectLocked && appletItem.canBeHovered){
-                root.stopCheckRestoreZoomTimer();
-            }
+            appletItem.parabolic.stopRestoreZoomTimer();
 
             if (restoreAnimation.running) {
                 restoreAnimation.stop();
@@ -879,18 +1016,7 @@ Item {
                 root.showTooltipLabel(appletItem, applet.title);
             }
 
-            //console.log("entered applet:" + layoutsContainer.hoveredIndex);
-
-
-            if (layoutsContainer.hoveredIndex === -1 && root.latteAppletHoveredIndex===-1) {
-                root.startDirectRenderDelayerDuringEntering();
-            }
-
-            if (!(root.latteViewIsHidden || root.inSlidingIn || root.inSlidingOut)){
-                layoutsContainer.hoveredIndex = index;
-            }
-
-            if (originalAppletBehavior || communicator.parabolicEffectLocked || !canBeHovered) {
+            if (originalAppletBehavior || communicator.requires.parabolicEffectLocked || !parabolicEffectIsSupported) {
                 return;
             }
 
@@ -901,11 +1027,11 @@ Item {
 
             if (root.isHorizontal){
                 layoutsContainer.currentSpot = mouseX;
-                wrapper.calculateScales(mouseX);
+                wrapper.calculateParabolicScales(mouseX);
             }
             else{
                 layoutsContainer.currentSpot = mouseY;
-                wrapper.calculateScales(mouseY);
+                wrapper.calculateParabolicScales(mouseY);
             }
         }
 
@@ -916,13 +1042,13 @@ Item {
 
             root.hideTooltipLabel();
 
-            if (root.zoomFactor>1){
-                root.startCheckRestoreZoomTimer();
+            if (appletItem.parabolic.factor.zoom>1){
+                appletItem.parabolic.startRestoreZoomTimer();
             }
         }
 
         onPositionChanged: {
-            if (originalAppletBehavior || !canBeHovered) {
+            if (originalAppletBehavior || !parabolicEffectIsSupported) {
                 mouse.accepted = false;
                 return;
             }
@@ -932,33 +1058,27 @@ Item {
                 return;
             }
 
-            if (layoutsContainer.hoveredIndex === -1 && root.latteAppletHoveredIndex===-1) {
-                root.startDirectRenderDelayerDuringEntering();
+            var rapidMovement = appletItem.parabolic.lastIndex>=0 && Math.abs(appletItem.parabolic.lastIndex-index)>1;
+
+            if (rapidMovement) {
+                parabolic.setDirectRenderingEnabled(true);
             }
 
-            if (!(root.latteViewIsHidden || root.inSlidingIn || root.inSlidingOut)){
-                layoutsContainer.hoveredIndex = index;
-            }
-
-            if (!root.globalDirectRender && !root.directRenderDelayerIsRunning) {
-                root.setGlobalDirectRender(true);
-            }
-
-            if( ((wrapper.zoomScale == 1 || wrapper.zoomScale === root.zoomFactor) && !root.globalDirectRender) || root.globalDirectRender) {
+            if( ((wrapper.zoomScale == 1 || wrapper.zoomScale === appletItem.parabolic.factor.zoom) && !parabolic.directRenderingEnabled) || parabolic.directRenderingEnabled) {
                 if (root.isHorizontal){
                     var step = Math.abs(layoutsContainer.currentSpot-mouse.x);
-                    if (step >= root.animationStep){
+                    if (step >= appletItem.animations.hoverPixelSensitivity){
                         layoutsContainer.currentSpot = mouse.x;
 
-                        wrapper.calculateScales(mouse.x);
+                        wrapper.calculateParabolicScales(mouse.x);
                     }
                 }
                 else{
                     var step = Math.abs(layoutsContainer.currentSpot-mouse.y);
-                    if (step >= root.animationStep){
+                    if (step >= appletItem.animations.hoverPixelSensitivity){
                         layoutsContainer.currentSpot = mouse.y;
 
-                        wrapper.calculateScales(mouse.y);
+                        wrapper.calculateParabolicScales(mouse.y);
                     }
                 }
             }
@@ -971,43 +1091,37 @@ Item {
         //! when parabolic effect was used
         onPressed: mouse.accepted = false;
         onReleased: mouse.accepted = false;
+    }
 
-        onWheel: {
-            if (isSeparator || !root.mouseWheelActions || blockWheel
-                    || (root.latteViewIsHidden || root.inSlidingIn || root.inSlidingOut)){
-                wheel.accepted = false;
-                return;
-            }
+    //! Debug Elements
+    Loader{
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
 
-            var angle = wheel.angleDelta.y / 8;
+        active: appletItem.debug.layouterEnabled
+        sourceComponent: Debugger.Tag{
+            label.text: (root.isHorizontal ? appletItem.width : appletItem.height) + labeltext
+            label.color: appletItem.isAutoFillApplet ? "green" : "white"
 
-            blockWheel = true;
-            scrollDelayer.start();
-
-            if (angle > 12) {
-                //positive direction
-                if (!isExpanded) {
-                    latteView.toggleAppletExpanded(applet.id);
+            readonly property string labeltext: {
+                if (appletItem.isAutoFillApplet) {
+                    return " / max_fill:"+appletItem.maxAutoFillLength + " / min_fill:"+appletItem.minAutoFillLength;
                 }
-            } else if (angle < -12) {
-                //negative direction
-                if (isExpanded) {
-                    latteView.toggleAppletExpanded(applet.id);
-                }
+
+                return "";
             }
         }
+    }
 
-        //! A timer is needed in order to handle also touchpads that probably
-        //! send too many signals very fast. This way the signals per sec are limited.
-        //! The user needs to have a steady normal scroll in order to not
-        //! notice a annoying delay
-        Timer{
-            id: scrollDelayer
+    //! A timer is needed in order to handle also touchpads that probably
+    //! send too many signals very fast. This way the signals per sec are limited.
+    //! The user needs to have a steady normal scroll in order to not
+    //! notice a annoying delay
+    Timer{
+        id: scrollDelayer
+        interval: 500
 
-            interval: 700
-
-            onTriggered: appletMouseArea.blockWheel = false;
-        }
+        onTriggered: viewSignalsConnector.blockWheel = false;
     }
 
     //BEGIN states
@@ -1060,23 +1174,7 @@ Item {
             target: wrapper
             property: "zoomScale"
             to: 1
-            duration: 4 * appletItem.animationTime
-            easing.type: Easing.InCubic
-        }
-
-        PropertyAnimation {
-            target: hiddenSpacerLeft
-            property: "nScale"
-            to: 0
-            duration: 4 * appletItem.animationTime
-            easing.type: Easing.InCubic
-        }
-
-        PropertyAnimation {
-            target: hiddenSpacerRight
-            property: "nScale"
-            to: 0
-            duration: 4 * appletItem.animationTime
+            duration: 3 * appletItem.animationTime
             easing.type: Easing.InCubic
         }
     }
@@ -1087,14 +1185,14 @@ Item {
         id: clickedAnimation
         alwaysRunToEnd: true
         running: appletItem.isSquare && !originalAppletBehavior && appletItem.pressed
-                 && (root.durationTime > 0) && !indicators.info.providesClickedAnimation
+                 && (appletItem.animations.speedFactor.current > 0) && !indicators.info.providesClickedAnimation
 
         ParallelAnimation{
             PropertyAnimation {
                 target: wrapper.clickedEffect
                 property: "brightness"
                 to: -0.35
-                duration: units.longDuration
+                duration: appletItem.animations.duration.large
                 easing.type: Easing.OutQuad
             }
         }
@@ -1103,7 +1201,7 @@ Item {
                 target: wrapper.clickedEffect
                 property: "brightness"
                 to: 0
-                duration: units.longDuration
+                duration: appletItem.animations.duration.large
                 easing.type: Easing.OutQuad
             }
         }

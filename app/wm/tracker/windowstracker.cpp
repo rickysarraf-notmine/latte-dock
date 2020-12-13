@@ -26,12 +26,12 @@
 #include "trackedviewinfo.h"
 #include "../abstractwindowinterface.h"
 #include "../schemecolors.h"
+#include "../../apptypes.h"
 #include "../../lattecorona.h"
 #include "../../layout/genericlayout.h"
 #include "../../layouts/manager.h"
 #include "../../view/view.h"
 #include "../../view/positioner.h"
-#include "../../../liblatte2/types.h"
 
 namespace Latte {
 namespace WindowSystem {
@@ -125,7 +125,7 @@ void Windows::init()
     });
 
     connect(m_wm, &AbstractWindowInterface::currentActivityChanged, this, [&] {
-        if (m_wm->corona()->layoutsManager()->memoryUsage() == Types::MultipleLayouts) {
+        if (m_wm->corona()->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
             //! this is needed in MultipleLayouts because there is a chance that multiple
             //! layouts are providing different available screen geometries in different Activities
             updateAvailableScreenGeometries();
@@ -155,8 +155,10 @@ void Windows::initViewHints(Latte::View *view)
 
     setActiveWindowMaximized(view, false);
     setActiveWindowTouching(view, false);
+    setActiveWindowTouchingEdge(view, false);
     setExistsWindowActive(view, false);
     setExistsWindowTouching(view, false);
+    setExistsWindowTouchingEdge(view, false);
     setExistsWindowMaximized(view, false);
     setIsTouchingBusyVerticalView(view, false);
     setActiveWindowScheme(view, nullptr);
@@ -342,6 +344,25 @@ void Windows::setActiveWindowTouching(Latte::View *view, bool activeTouching)
     emit activeWindowTouchingChanged(view);
 }
 
+bool Windows::activeWindowTouchingEdge(Latte::View *view) const
+{
+    if (!m_views.contains(view)) {
+        return false;
+    }
+
+    return m_views[view]->activeWindowTouchingEdge();
+}
+
+void Windows::setActiveWindowTouchingEdge(Latte::View *view, bool activeTouchingEdge)
+{
+    if (!m_views.contains(view) || m_views[view]->activeWindowTouchingEdge() == activeTouchingEdge) {
+        return;
+    }
+
+    m_views[view]->setActiveWindowTouchingEdge(activeTouchingEdge);
+    emit activeWindowTouchingEdgeChanged(view);
+}
+
 bool Windows::existsWindowActive(Latte::View *view) const
 {
     if (!m_views.contains(view)) {
@@ -398,6 +419,26 @@ void Windows::setExistsWindowTouching(Latte::View *view, bool windowTouching)
     m_views[view]->setExistsWindowTouching(windowTouching);
     emit existsWindowTouchingChanged(view);
 }
+
+bool Windows::existsWindowTouchingEdge(Latte::View *view) const
+{
+    if (!m_views.contains(view)) {
+        return false;
+    }
+
+    return m_views[view]->existsWindowTouchingEdge();
+}
+
+void Windows::setExistsWindowTouchingEdge(Latte::View *view, bool windowTouchingEdge)
+{
+    if (!m_views.contains(view) || m_views[view]->existsWindowTouchingEdge() == windowTouchingEdge) {
+        return;
+    }
+
+    m_views[view]->setExistsWindowTouchingEdge(windowTouchingEdge);
+    emit existsWindowTouchingEdgeChanged(view);
+}
+
 
 bool Windows::isTouchingBusyVerticalView(Latte::View *view) const
 {
@@ -568,7 +609,7 @@ bool Windows::isValidFor(const WindowId &wid) const
         return false;
     }
 
-    return m_windows[wid].isValid() && !m_windows[wid].isPlasmaDesktop();
+    return m_windows[wid].isValid();
 }
 
 QIcon Windows::iconFor(const WindowId &wid)
@@ -662,32 +703,20 @@ bool Windows::intersects(Latte::View *view, const WindowInfoWrap &winfo)
 
 bool Windows::isActive(const WindowInfoWrap &winfo)
 {
-    return (winfo.isValid() && winfo.isActive() && !winfo.isPlasmaDesktop() && !winfo.isMinimized());
+    return (winfo.isValid() && winfo.isActive() && !winfo.isMinimized());
 }
 
 bool Windows::isActiveInViewScreen(Latte::View *view, const WindowInfoWrap &winfo)
 {
-    return (winfo.isValid() && winfo.isActive() && !winfo.isPlasmaDesktop() &&  !winfo.isMinimized()
+    return (winfo.isValid() && winfo.isActive() &&  !winfo.isMinimized()
             && m_views[view]->availableScreenGeometry().contains(winfo.geometry().center()));
 }
 
 bool Windows::isMaximizedInViewScreen(Latte::View *view, const WindowInfoWrap &winfo)
 {
- /*   auto viewIntersectsMaxVert = [&]() noexcept -> bool {
-            return ((winfo.isMaxVert()
-                     || (view->screen() && view->screen()->availableSize().height() <= winfo.geometry().height()))
-                    && intersects(view, winfo));
-};
-
-    auto viewIntersectsMaxHoriz = [&]() noexcept -> bool {
-            return ((winfo.isMaxHoriz()
-                     || (view->screen() && view->screen()->availableSize().width() <= winfo.geometry().width()))
-                    && intersects(view, winfo));
-};*/
-
     //! updated implementation to identify the screen that the maximized window is present
     //! in order to avoid: https://bugs.kde.org/show_bug.cgi?id=397700
-    return (winfo.isValid() && !winfo.isPlasmaDesktop() && !winfo.isMinimized()
+    return (winfo.isValid() && !winfo.isMinimized()
             && !winfo.isShaded()
             && winfo.isMaximized()
             && m_views[view]->availableScreenGeometry().contains(winfo.geometry().center()));
@@ -695,52 +724,61 @@ bool Windows::isMaximizedInViewScreen(Latte::View *view, const WindowInfoWrap &w
 
 bool Windows::isTouchingView(Latte::View *view, const WindowSystem::WindowInfoWrap &winfo)
 {
-    return (winfo.isValid() && !winfo.isPlasmaDesktop() && intersects(view, winfo));
+    return (winfo.isValid() && intersects(view, winfo));
+}
+
+bool Windows::isTouchingViewEdge(Latte::View *view, const QRect &windowgeometry)
+{
+    if (!view) {
+        return false;
+    }
+
+    bool inViewThicknessEdge{false};
+    bool inViewLengthBoundaries{false};
+
+    QRect screenGeometry = view->screenGeometry();
+
+    bool inCurrentScreen{screenGeometry.contains(windowgeometry.topLeft()) || screenGeometry.contains(windowgeometry.bottomRight())};
+
+    if (inCurrentScreen) {
+        if (view->location() == Plasma::Types::TopEdge) {
+            inViewThicknessEdge = (windowgeometry.y() == view->absoluteGeometry().bottom() + 1);
+        } else if (view->location() == Plasma::Types::BottomEdge) {
+            inViewThicknessEdge = (windowgeometry.bottom() == view->absoluteGeometry().top() - 1);
+        } else if (view->location() == Plasma::Types::LeftEdge) {
+            inViewThicknessEdge = (windowgeometry.x() == view->absoluteGeometry().right() + 1);
+        } else if (view->location() == Plasma::Types::RightEdge) {
+            inViewThicknessEdge = (windowgeometry.right() == view->absoluteGeometry().left() - 1);
+        }
+
+        if (view->formFactor() == Plasma::Types::Horizontal) {
+            int yCenter = view->absoluteGeometry().center().y();
+
+            QPoint leftChecker(windowgeometry.left(), yCenter);
+            QPoint rightChecker(windowgeometry.right(), yCenter);
+
+            bool fulloverlap = (windowgeometry.left()<=view->absoluteGeometry().left()) && (windowgeometry.right()>=view->absoluteGeometry().right());
+
+            inViewLengthBoundaries = fulloverlap || view->absoluteGeometry().contains(leftChecker) || view->absoluteGeometry().contains(rightChecker);
+        } else if (view->formFactor() == Plasma::Types::Vertical) {
+            int xCenter = view->absoluteGeometry().center().x();
+
+            QPoint topChecker(xCenter, windowgeometry.top());
+            QPoint bottomChecker(xCenter, windowgeometry.bottom());
+
+            bool fulloverlap = (windowgeometry.top()<=view->absoluteGeometry().top()) && (windowgeometry.bottom()>=view->absoluteGeometry().bottom());
+
+            inViewLengthBoundaries = fulloverlap || view->absoluteGeometry().contains(topChecker) || view->absoluteGeometry().contains(bottomChecker);
+        }
+    }
+
+    return (inViewThicknessEdge && inViewLengthBoundaries);
 }
 
 bool Windows::isTouchingViewEdge(Latte::View *view, const WindowInfoWrap &winfo)
 {
-    if (winfo.isValid() && !winfo.isPlasmaDesktop() &&  !winfo.isMinimized()) {
-        bool inViewThicknessEdge{false};
-        bool inViewLengthBoundaries{false};
-
-        QRect screenGeometry = view->screenGeometry();
-
-        bool inCurrentScreen{screenGeometry.contains(winfo.geometry().topLeft()) || screenGeometry.contains(winfo.geometry().bottomRight())};
-
-        if (inCurrentScreen) {
-            if (view->location() == Plasma::Types::TopEdge) {
-                inViewThicknessEdge = (winfo.geometry().y() == view->absoluteGeometry().bottom() + 1);
-            } else if (view->location() == Plasma::Types::BottomEdge) {
-                inViewThicknessEdge = (winfo.geometry().bottom() == view->absoluteGeometry().top() - 1);
-            } else if (view->location() == Plasma::Types::LeftEdge) {
-                inViewThicknessEdge = (winfo.geometry().x() == view->absoluteGeometry().right() + 1);
-            } else if (view->location() == Plasma::Types::RightEdge) {
-                inViewThicknessEdge = (winfo.geometry().right() == view->absoluteGeometry().left() - 1);
-            }
-
-            if (view->formFactor() == Plasma::Types::Horizontal) {
-                int yCenter = view->absoluteGeometry().center().y();
-
-                QPoint leftChecker(winfo.geometry().left(), yCenter);
-                QPoint rightChecker(winfo.geometry().right(), yCenter);
-
-                bool fulloverlap = (winfo.geometry().left()<=view->absoluteGeometry().left()) && (winfo.geometry().right()>=view->absoluteGeometry().right());
-
-                inViewLengthBoundaries = fulloverlap || view->absoluteGeometry().contains(leftChecker) || view->absoluteGeometry().contains(rightChecker);
-            } else if (view->formFactor() == Plasma::Types::Vertical) {
-                int xCenter = view->absoluteGeometry().center().x();
-
-                QPoint topChecker(xCenter, winfo.geometry().top());
-                QPoint bottomChecker(xCenter, winfo.geometry().bottom());
-
-                bool fulloverlap = (winfo.geometry().top()<=view->absoluteGeometry().top()) && (winfo.geometry().bottom()>=view->absoluteGeometry().bottom());
-
-                inViewLengthBoundaries = fulloverlap || view->absoluteGeometry().contains(topChecker) || view->absoluteGeometry().contains(bottomChecker);
-            }
-        }
-
-        return (inViewThicknessEdge && inViewLengthBoundaries);
+    if (winfo.isValid() &&  !winfo.isMinimized()) {
+        return isTouchingViewEdge(view, winfo.geometry());
     }
 
     return false;
@@ -764,28 +802,16 @@ void Windows::updateAvailableScreenGeometries()
 {
     for (const auto view : m_views.keys()) {
         if (m_views[view]->enabled()) {
-            int currentScrId = view->positioner()->currentScreenId();
-            QRect tempAvailableScreenGeometry = m_wm->corona()->availableScreenRectWithCriteria(currentScrId, {Types::AlwaysVisible}, {});
+            int currentscrid = view->positioner()->currentScreenId();
+            QString activityid = view->layout() ? view->layout()->lastUsedActivity() : QString();
+
+            QRect tempAvailableScreenGeometry = m_wm->corona()->availableScreenRectWithCriteria(currentscrid, activityid, m_ignoreModes, {});
 
             if (tempAvailableScreenGeometry != m_views[view]->availableScreenGeometry()) {
                 m_views[view]->setAvailableScreenGeometry(tempAvailableScreenGeometry);
-
                 updateHints(view);
             }
         }
-    }
-}
-
-void Windows::setPlasmaDesktop(WindowId wid)
-{
-    if (!m_windows.contains(wid)) {
-        return;
-    }
-
-    if (!m_windows[wid].isPlasmaDesktop()) {
-        m_windows[wid].setIsPlasmaDesktop(true);
-        qDebug() << " plasmashell updated...";
-        updateAllHints();
     }
 }
 
@@ -822,8 +848,10 @@ void Windows::updateExtraViewHints()
                 bool sameScreen = (verView->positioner()->currentScreenId() == horView->positioner()->currentScreenId());
 
                 if (verView->formFactor() == Plasma::Types::Vertical && sameScreen) {
-                    bool topTouch = verView->isTouchingTopViewAndIsBusy() && horView->location() == Plasma::Types::TopEdge;
-                    bool bottomTouch = verView->isTouchingBottomViewAndIsBusy() && horView->location() == Plasma::Types::BottomEdge;
+                    bool hasEdgeTouch = isTouchingViewEdge(horView, verView->absoluteGeometry());
+
+                    bool topTouch = horView->location() == Plasma::Types::TopEdge && verView->isTouchingTopViewAndIsBusy() && hasEdgeTouch;
+                    bool bottomTouch = horView->location() == Plasma::Types::BottomEdge && verView->isTouchingBottomViewAndIsBusy() && hasEdgeTouch;
 
                     if (topTouch || bottomTouch) {
                         touchingBusyVerticalView = true;
@@ -848,7 +876,9 @@ void Windows::updateHints(Latte::View *view)
     bool foundActive{false};
     bool foundActiveInCurScreen{false};
     bool foundActiveTouchInCurScreen{false};
+    bool foundActiveEdgeTouchInCurScreen{false};
     bool foundTouchInCurScreen{false};
+    bool foundTouchEdgeInCurScreen{false};
     bool foundMaximizedInCurScreen{false};
 
     bool foundActiveGroupTouchInCurScreen{false};
@@ -860,7 +890,11 @@ void Windows::updateHints(Latte::View *view)
     WindowId maxWinId;
     WindowId activeWinId;
     WindowId touchWinId;
+    WindowId touchEdgeWinId;
     WindowId activeTouchWinId;
+    WindowId activeTouchEdgeWinId;
+
+    //qDebug() << " -- TRACKING REPORT (SCREEN)--";
 
     //! First Pass
     for (const auto &winfo : m_windows) {
@@ -868,9 +902,14 @@ void Windows::updateHints(Latte::View *view)
             existsFaultyWindow = true;
         }
 
-        if (winfo.isPlasmaDesktop() || !m_wm->inCurrentDesktopActivity(winfo) || m_wm->isRegisteredPlasmaPanel(winfo.wid())) {
+        if ( !m_wm->inCurrentDesktopActivity(winfo)
+             || m_wm->hasBlockedTracking(winfo.wid())
+             || winfo.isMinimized()) {
             continue;
         }
+
+        //qDebug() << " _ _ _ ";
+        //qDebug() << "TRACKING | WINDOW INFO :: " << winfo.wid() << " _ " << winfo.appName() << " _ " << winfo.geometry() << " _ " << winfo.display();
 
         if (isActive(winfo)) {
             foundActive = true;
@@ -881,30 +920,40 @@ void Windows::updateHints(Latte::View *view)
             activeWinId = winfo.wid();
         }
 
-        if (isTouchingViewEdge(view, winfo) || isTouchingView(view, winfo)) {
+        //! Maximized windows flags
+        if ((winfo.isActive() && isMaximizedInViewScreen(view, winfo)) //! active maximized windows have higher priority than the rest maximized windows
+                || (!foundMaximizedInCurScreen && isMaximizedInViewScreen(view, winfo))) {
+            foundMaximizedInCurScreen = true;
+            maxWinId = winfo.wid();
+        }
+
+        //! Touching windows flags
+
+        bool touchingViewEdge = isTouchingViewEdge(view, winfo);
+        bool touchingView =  isTouchingView(view, winfo);
+
+        if (touchingView) {
             if (winfo.isActive()) {
-                //qDebug() << " ACTIVE-TOUCH :: " << winfo.wid() << " _ " << winfo.appName() << " _ " << winfo.geometry() << " _ " << winfo.display();
                 foundActiveTouchInCurScreen = true;
                 activeTouchWinId = winfo.wid();
-
-                if (isMaximizedInViewScreen(view, winfo)) {
-                    //! active maximized windows have higher priority than the rest maximized windows
-                    foundMaximizedInCurScreen = true;
-                    maxWinId = winfo.wid();
-                }
             } else {
-                //qDebug() << " TOUCH :: " << winfo.wid() << " _ " << winfo.appName() << " _ " << winfo.geometry() << " _ " << winfo.display();
                 foundTouchInCurScreen = true;
                 touchWinId = winfo.wid();
             }
+        }
 
-            if (!foundMaximizedInCurScreen && isMaximizedInViewScreen(view, winfo)) {
-                foundMaximizedInCurScreen = true;
-                maxWinId = winfo.wid();
+        if (touchingViewEdge) {
+            if (winfo.isActive()) {
+                foundActiveEdgeTouchInCurScreen = true;
+                activeTouchEdgeWinId = winfo.wid();
+            } else {
+                foundTouchEdgeInCurScreen = true;
+                touchEdgeWinId = winfo.wid();
             }
         }
 
-        //qDebug() << "window geometry ::: " << winfo.geometry();
+        //qDebug() << "TRACKING |       ACTIVE:"<< foundActive <<  " ACT_CUR_SCR:" << foundTouchInCurScreen << " MAXIM:"<<foundMaximizedInCurScreen;
+        //qDebug() << "TRACKING |       TOUCHING VIEW EDGE:"<< touchingViewEdge << " TOUCHING VIEW:" << foundTouchInCurScreen;
     }
 
     if (existsFaultyWindow) {
@@ -925,7 +974,9 @@ void Windows::updateHints(Latte::View *view)
         WindowId mainWindowId = activeInfo.isChildWindow() ? activeInfo.parentId() : activeWinId;
 
         for (const auto &winfo : m_windows) {
-            if (winfo.isPlasmaDesktop() || !m_wm->inCurrentDesktopActivity(winfo) || m_wm->isRegisteredPlasmaPanel(winfo.wid())) {
+            if (!m_wm->inCurrentDesktopActivity(winfo)
+                    || m_wm->hasBlockedTracking(winfo.wid())
+                    || winfo.isMinimized()) {
                 continue;
             }
 
@@ -937,7 +988,7 @@ void Windows::updateHints(Latte::View *view)
                 continue;
             }
 
-            if (isTouchingViewEdge(view, winfo) || isTouchingView(view, winfo)) {
+            if (isTouchingView(view, winfo)) {
                 foundActiveGroupTouchInCurScreen = true;
                 break;
             }
@@ -958,19 +1009,25 @@ void Windows::updateHints(Latte::View *view)
     //! assign flags
     setExistsWindowActive(view, foundActiveInCurScreen);
     setActiveWindowTouching(view, foundActiveTouchInCurScreen || foundActiveGroupTouchInCurScreen);
-    setActiveWindowMaximized(view, (maxWinId.toInt()>0 && (maxWinId == activeTouchWinId)));
+    setActiveWindowTouchingEdge(view, foundActiveEdgeTouchInCurScreen);
+    setActiveWindowMaximized(view, (maxWinId.toInt()>0 && (maxWinId == activeTouchWinId || maxWinId == activeTouchEdgeWinId)));
     setExistsWindowMaximized(view, foundMaximizedInCurScreen);
     setExistsWindowTouching(view, (foundTouchInCurScreen || foundActiveTouchInCurScreen || foundActiveGroupTouchInCurScreen));
+    setExistsWindowTouchingEdge(view, (foundActiveEdgeTouchInCurScreen || foundTouchEdgeInCurScreen));
 
     //! update color schemes for active and touching windows
     setActiveWindowScheme(view, (foundActiveInCurScreen ? m_wm->schemesTracker()->schemeForWindow(activeWinId) : nullptr));
 
     if (foundActiveTouchInCurScreen) {
         setTouchingWindowScheme(view, m_wm->schemesTracker()->schemeForWindow(activeTouchWinId));
+    } else if (foundActiveEdgeTouchInCurScreen) {
+        setTouchingWindowScheme(view, m_wm->schemesTracker()->schemeForWindow(activeTouchEdgeWinId));
     } else if (foundMaximizedInCurScreen) {
         setTouchingWindowScheme(view, m_wm->schemesTracker()->schemeForWindow(maxWinId));
     } else if (foundTouchInCurScreen) {
         setTouchingWindowScheme(view, m_wm->schemesTracker()->schemeForWindow(touchWinId));
+    } else if (foundTouchEdgeInCurScreen) {
+        setTouchingWindowScheme(view, m_wm->schemesTracker()->schemeForWindow(touchEdgeWinId));
     } else {
         setTouchingWindowScheme(view, nullptr);
     }
@@ -981,11 +1038,12 @@ void Windows::updateHints(Latte::View *view)
     }
 
     //! Debug
-    //qDebug() << " -- TRACKING REPORT (SCREEN)--";
+    //qDebug() << "TRACKING |      _________ FINAL RESULTS ________";
     //qDebug() << "TRACKING | SCREEN: " << view->positioner()->currentScreenId() << " , EDGE:" << view->location() << " , ENABLED:" << enabled(view);
     //qDebug() << "TRACKING | activeWindowTouching: " << foundActiveTouchInCurScreen << " ,activeWindowMaximized: " << activeWindowMaximized(view);
     //qDebug() << "TRACKING | existsWindowActive: " << foundActiveInCurScreen << " , existsWindowMaximized:" << existsWindowMaximized(view)
     //         << " , existsWindowTouching:"<<existsWindowTouching(view);
+    //qDebug() << "TRACKING | activeEdgeWindowTouch: " <<  activeWindowTouchingEdge(view) << " , existsEdgeWindowTouch:" << existsWindowTouchingEdge(view);
     //qDebug() << "TRACKING | existsActiveGroupTouching: " << foundActiveGroupTouchInCurScreen;
 }
 
@@ -1010,7 +1068,9 @@ void Windows::updateHints(Latte::Layout::GenericLayout *layout) {
             existsFaultyWindow = true;
         }
 
-        if (winfo.isPlasmaDesktop() || !m_wm->inCurrentDesktopActivity(winfo) || m_wm->isRegisteredPlasmaPanel(winfo.wid())) {
+        if (!m_wm->inCurrentDesktopActivity(winfo)
+                || m_wm->hasBlockedTracking(winfo.wid())
+                || winfo.isMinimized()) {
             continue;
         }
 

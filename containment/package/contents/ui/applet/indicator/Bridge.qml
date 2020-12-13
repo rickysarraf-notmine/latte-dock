@@ -19,8 +19,6 @@
 
 import QtQuick 2.7
 
-import org.kde.latte 0.2 as Latte
-
 Item{
     id: indicatorBridge
     anchors.fill: parent
@@ -29,9 +27,9 @@ Item{
 
     readonly property bool active: appletIsValid &&
                                    ((indicators.isEnabled
-                                     && appletItem.communicatorAlias.activeIndicatorEnabled
-                                     && indicators.enabledForApplets)
-                                    || (!indicators.enabledForApplets && appletItem.communicatorAlias.overlayLatteIconIsActive))
+                                     && appletItem.communicator.requires.activeIndicatorEnabled
+                                     && indicators.info.enabledForApplets)
+                                    || (!indicators.info.enabledForApplets && appletItem.communicator.overlayLatteIconIsActive))
 
     /* Indicators Properties in order use them*/
     readonly property bool isTask: false
@@ -58,26 +56,26 @@ Item{
     readonly property int windowsCount: 0
     readonly property int windowsMinimizedCount: 0
 
-    readonly property int currentIconSize: root.iconSize
-    readonly property int maxIconSize: root.maxIconSize
-    readonly property real scaleFactor: appletIsValid ? appletItem.wrapperAlias.zoomScale : 1
-    readonly property real panelOpacity: root.currentPanelOpacity
+    readonly property int currentIconSize: appletIsValid ? appletItem.metrics.iconSize : metrics.iconSize
+    readonly property int maxIconSize: appletIsValid ? appletItem.metrics.maxIconSize : metrics.maxIconSize
+    readonly property real scaleFactor: appletIsValid ? appletItem.wrapper.zoomScale : 1
+    readonly property real panelOpacity: root.background.currentOpacity
     readonly property color shadowColor: root.appShadowColorSolid
 
-    readonly property bool animationsEnabled: root.animationsEnabled
-    readonly property real durationTime: root.durationTime
+    readonly property bool animationsEnabled: appletIsValid ? appletItem.animations.active : animations.active
+    readonly property real durationTime: appletIsValid ? appletItem.animations.speedFactor.current : animations.speedFactor.current
 
     readonly property bool progressVisible: false /*since 0.9.2*/
     readonly property real progress: 0 /*since 0.9.2*/
 
-    readonly property bool usePlasmaTabsStyle: !indicators.enabledForApplets
+    readonly property int screenEdgeMargin: appletIsValid ? appletItem.metrics.margin.screenEdge : metrics.margin.screenEdge /*since 0.10*/
 
     readonly property QtObject palette: colorizerManager.applyTheme
 
     //!icon colors
     property color iconBackgroundColor: {
         if (appletIsValid) {
-            return isSquare ? appletItem.wrapperAlias.overlayIconLoader.backgroundColor : colorizerManager.buttonFocusColor;
+            return isSquare ? appletItem.wrapper.overlayIconLoader.backgroundColor : colorizerManager.buttonFocusColor;
         }
 
         return "black";
@@ -85,7 +83,7 @@ Item{
 
     property color iconGlowColor:{
         if (appletIsValid) {
-            return isSquare ? appletItem.wrapperAlias.overlayIconLoader.glowColor : colorizerManager.focusGlowColor;
+            return isSquare ? appletItem.wrapper.overlayIconLoader.glowColor : colorizerManager.focusGlowColor;
         }
 
         return "white";

@@ -24,83 +24,33 @@ import org.kde.plasma.plasmoid 2.0
 
 ////bouncing task, e.g. on launcher activating and when a new window is
 ////added in a group task
-SequentialAnimation{
+Item{
     id:launcherAnimation
-
     property bool launchedAlready: false
-    property int speed: root.durationTime * 0.9 * units.longDuration
+    property int speed: 0.9 * taskItem.animations.speedFactor.current * taskItem.animations.duration.large
 
-    SequentialAnimation{
-        ScriptAction {
-            script: taskItem.launcherAction();
-        }
+    readonly property string needThicknessEvent: launcherAnimation + "_launcher"
 
-        //Ghost animation that acts as a delayer
-        PropertyAnimation {
-            target: wrapper
-            property: "opacity"
-            to: 1
-            duration:  50
-            easing.type: Easing.InQuad
-        }
-        //end of ghost animation
-
-        ParallelAnimation{
-            PropertyAnimation {
-                target: wrapper
-                property: (icList.orientation == Qt.Vertical) ? "tempScaleWidth" : "tempScaleHeight"
-                to: taskItem.containsMouse ? 1+2*(root.maxZoomFactor-1) : 1 + (0.65 * (root.maxZoomFactor-1))
-                duration: launcherAnimation.speed
-                easing.type: Easing.OutQuad
-            }
-
-            PropertyAnimation {
-                target: wrapper
-                property: (icList.orientation == Qt.Horizontal) ? "tempScaleWidth" : "tempScaleHeight"
-                to: 1
-                duration: launcherAnimation.speed
-                easing.type: Easing.OutQuad
-            }
-        }
-
-        PropertyAnimation {
-            target: wrapper
-            property: (icList.orientation == Qt.Vertical) ? "tempScaleWidth" : "tempScaleHeight"
-            to: 1
-            duration: 4*launcherAnimation.speed
-            easing.type: Easing.OutBounce
-        }
-
-        ParallelAnimation{
-            PropertyAnimation {
-                target: wrapper
-                property: (icList.orientation == Qt.Vertical) ? "tempScaleHeight" : "tempScaleWidth"
-                to: 1
-                duration: root.durationTime*launcherAnimation.speed
-                easing.type: Easing.OutBounce
-            }
-
-            PropertyAnimation {
-                target: wrapper
-                property: "mScale"
-                to: 1
-                duration: root.durationTime*launcherAnimation.speed
-                easing.type: Easing.OutQuad
-            }
-        }
+    Loader {
+        id: launcherAnimationLoader
+        source: "launcher/BounceAnimation.qml"
     }
 
-    onStopped: {
-        if (!taskItem.inRemoveStage) {
-            taskItem.inBouncingAnimation = false;
-            tasksExtendedManager.removeWaitingLauncher(taskItem.launcherUrl);
+    Connections {
+        target: launcherAnimationLoader.item
+
+        onStopped: {
+            if (!taskItem.inRemoveStage) {
+                taskItem.inBouncingAnimation = false;
+                tasksExtendedManager.removeWaitingLauncher(taskItem.launcherUrl);
+            }
+
+            taskItem.parabolic.setDirectRenderingEnabled(false);
+            clearAnimationsSignals();
+
+            taskItem.setBlockingAnimation(false);
+            taskItem.animationEnded();
         }
-
-        root.setGlobalDirectRender(false);
-        clearAnimationsSignals();
-
-        taskItem.setBlockingAnimation(false);
-        taskItem.animationEnded();
     }
 
     function clearAnimationsSignals() {
@@ -109,7 +59,7 @@ SequentialAnimation{
         }
 
         if ( launchedAlready ) {
-            root.signalAnimationsNeedThickness(-1);
+            taskItem.animations.needThickness.removeEvent(needThicknessEvent);
         }
 
         launchedAlready = false;
@@ -119,15 +69,9 @@ SequentialAnimation{
         //console.log ("Nooo 1 : "+root.noTasksInAnimation);
         if(!launchedAlready) {
             launchedAlready = true;
-            root.signalAnimationsNeedThickness(1);
+            taskItem.animations.needThickness.addEvent(needThicknessEvent);
 
-            if (root.latteView)
-                root.latteView.disableDirectRender();
-            else
-                icList.directRender=false;
-
-            parabolicManager.clearTasksGreaterThan(index);
-            parabolicManager.clearTasksLowerThan(index);
+            taskItem.parabolic.setDirectRenderingEnabled(false);
 
             root.noTasksInAnimation++;
             taskItem.inBouncingAnimation = true;
@@ -147,28 +91,28 @@ SequentialAnimation{
 
         wrapper.tempScaleWidth = wrapper.mScale;
         wrapper.tempScaleHeight = wrapper.mScale;
-        icList.hoveredIndex = -1;
     }
 
-    function bounceLauncher(){
-        if(root.animationLauncherBouncing){
+    function startLauncherAnimation(){
+        if(taskItem.animations.launcherBouncingEnabled){
             taskItem.animationStarted();
             init();
-            start();
-        } else{
-            stopped();
+            taskItem.launcherAction();
+            launcherAnimationLoader.item.start();
+        } else {
+            launcherAnimationLoader.item.stop();
             taskItem.launcherAction();
         }
     }
 
 
     Component.onCompleted: {
-        wrapper.runLauncherAnimation.connect(bounceLauncher);
+        wrapper.runLauncherAnimation.connect(startLauncherAnimation);
     }
 
     Component.onDestruction: {
         clearAnimationsSignals();
-        wrapper.runLauncherAnimation.disconnect(bounceLauncher);
+        wrapper.runLauncherAnimation.disconnect(startLauncherAnimation);
     }
 }
 /////////////////// end of launcher animation

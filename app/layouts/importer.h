@@ -23,6 +23,7 @@
 
 // Qt
 #include <QObject>
+#include <QTemporaryDir>
 
 namespace Latte {
 namespace Layouts {
@@ -70,6 +71,12 @@ public:
 
     bool exportFullConfiguration(QString file);
 
+    QString storageTmpDir() const;
+    //! imports the specific layout and return the new layout name.
+    //! if the function didn't succeed returns an empty string
+    QString importLayout(QString fileName);
+
+
     static Importer::LatteFileVersion fileVersion(QString file);
 
     static bool importHelper(QString fileName);
@@ -80,16 +87,19 @@ public:
     //! returns all application data standard paths
     //! local paths have higher priority by default
     static QStringList standardPaths(bool localfirst = true);
-    static QStringList standardPathsFor(QString subPath, bool localfirst = true);
+    static QStringList standardPathsFor(QString subPath, bool localfirst = true);   
 
     //! check if this layout exists already in the latte directory
     static bool layoutExists(QString layoutName);
     //! imports the specific layout and return the new layout name.
-    //! if the function didn't succeed return an empty string
+    //! if the function didn't succeed returns an empty string
     static QString importLayoutHelper(QString fileName);
 
-    //! return the file path of a layout either existing or not
-    static QString layoutFilePath(QString layoutName);
+    //! returns the file path of a layout either existing or not
+    static QString layoutUserFilePath(QString layoutName);
+    //! returns the layouts user directory
+    static QString layoutUserDir();
+
     static QString nameOfConfigFile(const QString &fileName);
     static QString uniqueLayoutName(QString name);
 
@@ -100,10 +110,15 @@ public:
     //! close correctly, e.g. there was a crash.
     static QStringList checkRepairMultipleLayoutsLinkedFile();
 
+signals:
+    void newLayoutAdded(const QString &path);
+
 private:
     //! checks if this old layout can be imported. If it can it returns
     //! the new layout path and an empty string if it cant
     QString layoutCanBeImported(QString oldAppletsPath, QString newName, QString exportDirectory = QString());
+
+    QTemporaryDir m_storageTmpDir;
 
     Layouts::Manager *m_manager;
 };

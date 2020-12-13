@@ -26,8 +26,6 @@ import org.kde.draganddrop 2.0
 
 import org.kde.taskmanager 0.1 as TaskManager
 
-import org.kde.latte 0.2 as Latte
-
 import "../../code/tools.js" as TaskTools
 
 Item {
@@ -84,6 +82,12 @@ Item {
             return ((event.mimeData.formats.indexOf("text/x-plasmoidservicename") === 0) && isSeparator);
         }
 
+        onHoveredItemChanged: {
+            if (hoveredItem && windowsPreviewDlg.activeItem && hoveredItem !== windowsPreviewDlg.activeItem ) {
+                windowsPreviewDlg.hide(6.7);
+            }
+        }
+
         onDragEnter:{
             dArea.containsDrag = true;
 
@@ -126,7 +130,9 @@ Item {
                 return;
             }
 
-            var above = target.childAtPos(event.x, event.y);
+            var eventToTarget = mapToItem(target, event.x, event.y);
+
+            var above = target.childAtPos(eventToTarget.x, eventToTarget.y);
 
             // If we're mixing launcher tasks with other tasks and are moving
             // a (small) launcher task across a non-launcher task, don't allow
@@ -156,7 +162,7 @@ Item {
             //I use the ignoredItem in order to reduce the move calls as much
             //as possible
             if (tasksModel.sortMode == TaskManager.TasksModel.SortManual && root.dragSource && ignoredItem == null) {
-                var insertAt = TaskTools.insertIndexAt(above, event.x, event.y);
+                var insertAt = TaskTools.insertIndexAt(above, eventToTarget.x, eventToTarget.y);
 
                 if (root.dragSource != above && root.dragSource.itemIndex != insertAt) {
                     //      console.log(root.dragSource.itemIndex + " - "+insertAt);
@@ -165,27 +171,16 @@ Item {
 
                     var pos = root.dragSource.itemIndex;
                     tasksModel.move(pos, insertAt);
-                    //! disable syncing for moving launchers action in favor of validatorOrder launchersSignal
-                    /*  if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
-                        latteView.layoutsManager.launchersSignals.moveTask(root.viewLayoutName,
-                                                                                   plasmoid.id,
-                                                                                   latteView.launchersGroup, pos, insertAt);
-                    }*/
-                    root.separatorsUpdated();
+
                     ignoreItemTimer.restart();
                 }
             } else if (!root.dragSource && above && hoveredItem != above) {
                 hoveredItem = above;
-                if (!onlyLaunchers) {
-                    //! it is needed when dropping a url on a launcher in order to not break parabolic effect
-                    root.setHoveredIndex(hoveredItem.itemIndex);
-                }
                 //root.dropNewLauncher = true;
                 activationTimer.restart();
             } else if (!above) {
                 //root.dropNewLauncher = true;
                 hoveredItem = null;
-                root.setHoveredIndex(-1);
                 activationTimer.stop();
             }
 
@@ -197,10 +192,8 @@ Item {
         onDragLeave: {
             dArea.containsDrag = false;
             hoveredItem = null;
-            root.setHoveredIndex(-1);
             root.dropNewLauncher = false;
             onlyLaunchers = false;
-            root.separatorsUpdated();
             activationTimer.stop();
         }
 
@@ -209,7 +202,6 @@ Item {
             dArea.containsDrag = false;
             root.dropNewLauncher = false;
             onlyLaunchers = false;
-            root.separatorsUpdated();
 
             if (event.mimeData.formats.indexOf("application/x-orgkdeplasmataskmanager_taskbuttonitem") >= 0) {
                 return;

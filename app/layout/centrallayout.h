@@ -23,26 +23,25 @@
 
 // local
 #include "genericlayout.h"
+#include "../data/layoutdata.h"
 
 // Qt
 #include <QObject>
 
 namespace Latte {
 class Corona;
-class SharedLayout;
 }
 
 namespace Latte {
 
-//! CentralLayout is a very IMPORTANT layout that is responsible for specific Activities or not
-//! and it is used for all memory modes (SINGLE/MULTIPLE) at all times.
+//! CentralLayout is a layout that is assigned to ALL Activities, FREE Activities or SPRECIFIC Activities.
+//! It is a real running layout instance.
 //!
 //! It holds all the important settings in order to provide specific
 //! behavior for the Activities is assigned at.
 //! for example: activities for which its views should be shown,
 //! if the maximized windows will be borderless,
-//! if the layout will be shown at user layout contextmenu,
-//! which shared layout will be used on top of that layout.
+//! if the layout will be shown at user layout contextmenu.
 //!
 
 class CentralLayout : public Layout::GenericLayout
@@ -61,48 +60,26 @@ public:
     bool showInMenu() const;
     void setShowInMenu(bool show);
 
-    QString sharedLayoutName() const;
-    void setSharedLayoutName(QString name);
+    bool isForFreeActivities() const;
+    bool isOnAllActivities() const;
 
     QStringList activities() const;
     void setActivities(QStringList activities);
 
-    SharedLayout *sharedLayout() const;
-    void setSharedLayout(SharedLayout *layout);
-
-    //! OVERRIDE GeneralLayout implementations
-    void addView(Plasma::Containment *containment, bool forceOnPrimary = false, int explicitScreen = -1, Layout::ViewsMap *occupied = nullptr);
-    void syncLatteViewsToScreens(Layout::ViewsMap *occupiedMap = nullptr) override;
-    void unloadContainments() override;
-    bool configViewIsShown() const override;
     const QStringList appliedActivities() override;
-    Types::ViewType latteViewType(int containmentId) const override;
-    QList<Latte::View *> latteViews() override;
-
-    int viewsCount(int screen) const override;
-    int viewsCount(QScreen *screen) const override;
-    int viewsCount() const override;
+    Types::ViewType latteViewType(uint containmentId) const override;
 
     Layout::Type type() const override;
+    Data::Layout data() const;
 
-    //! Available edges for specific view in that screen
-    QList<Plasma::Types::Location> availableEdgesForView(QScreen *scr, Latte::View *forView) const override;
-    //! All free edges in that screen
-    QList<Plasma::Types::Location> freeEdges(QScreen *scr) const override;
-    QList<Plasma::Types::Location> freeEdges(int screen) const override;
-
-    QList<Latte::View *> sortedLatteViews(QList<Latte::View *> views = QList<Latte::View *>()) override;
-    QList<Latte::View *> viewsWithPlasmaShortcuts() override;
+public:
+    Q_INVOKABLE bool isCurrent() override;
 
 signals:
-    void activitiesChanged();
     void disableBordersForMaximizedWindowsChanged();
     void showInMenuChanged();
-    void sharedLayoutNameChanged();
 
 private slots:
-    void disconnectSharedConnections();
-
     void loadConfig();
     void saveConfig();
 
@@ -110,20 +87,10 @@ private:
     void init();
     void importLocalLayout(QString file);
 
-    bool kwin_disabledMaximizedBorders() const;
-    void kwin_setDisabledMaximizedBorders(bool disable);
-
 private:
     bool m_disableBordersForMaximizedWindows{false};
     bool m_showInMenu{false};
-    QString m_sharedLayoutName;
     QStringList m_activities;
-
-    QPointer<Latte::View> m_lastSettingsView;
-
-    QPointer<SharedLayout> m_sharedLayout;
-
-    QList<QMetaObject::Connection> m_sharedConnections;
 };
 
 }

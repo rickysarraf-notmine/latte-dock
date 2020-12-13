@@ -56,9 +56,6 @@ class Indicator: public QObject
     Q_PROPERTY(bool enabledForApplets READ enabledForApplets WRITE setEnabledForApplets NOTIFY enabledForAppletsChanged)
     Q_PROPERTY(bool latteTasksArePresent READ latteTasksArePresent NOTIFY latteTasksArePresentChanged)
     Q_PROPERTY(bool pluginIsReady READ pluginIsReady NOTIFY pluginIsReadyChanged)
-    Q_PROPERTY(bool providesConfigUi READ providesConfigUi NOTIFY providesConfigUiChanged)
-
-    Q_PROPERTY(float padding READ padding WRITE setPadding NOTIFY paddingChanged)
 
     Q_PROPERTY(QString type READ type WRITE setType NOTIFY pluginChanged)
     Q_PROPERTY(QString customType READ customType NOTIFY customPluginChanged)
@@ -98,13 +95,11 @@ public:
     bool enabledForApplets() const;
     void setEnabledForApplets(bool enabled);
 
+    bool isCustomIndicator() const;
+
     bool latteTasksArePresent();
-    bool providesConfigUi() const;
 
     bool pluginIsReady();
-
-    float padding() const;
-    void setPadding(float padding);
 
     QString type() const;
     void setType(QString type);
@@ -128,12 +123,6 @@ public:
     void load(QString type);
     void unloadIndicators();
 
-public slots:
-    Q_INVOKABLE void configUiFor(QString type, QQuickItem *parent);
-    Q_INVOKABLE void addIndicator();
-    Q_INVOKABLE void downloadIndicator();
-    Q_INVOKABLE void removeIndicator(QString pluginId);
-
 signals:
     void customPluginsChanged();
     void enabledChanged();
@@ -141,11 +130,9 @@ signals:
     void customPluginChanged();
     void infoChanged();
     void latteTasksArePresentChanged();
-    void paddingChanged();
     void plasmaComponentChanged();
     void pluginChanged();
     void pluginIsReadyChanged();
-    void providesConfigUiChanged();
     void resourcesChanged();
 
 private:
@@ -153,7 +140,6 @@ private:
     void saveConfig();
 
     void setPluginIsReady(bool ready);
-    void setProvidesConfigUi(bool provides);
 
     void setCustomType(QString type);
 
@@ -165,9 +151,6 @@ private:
     bool m_enabled{true};
     bool m_enabledForApplets{true};
     bool m_pluginIsReady{false};
-    bool m_providesConfigUi{true};
-
-    float m_padding{0.08};
 
     QString m_pluginPath;
     QString m_type{"org.kde.latte.default"};
@@ -186,7 +169,6 @@ private:
     QPointer<IndicatorPart::Resources> m_resources;
 
     QPointer<KDeclarative::ConfigPropertyMap> m_configuration;
-    QPointer<KDeclarative::QmlObjectSharedEngine> m_lastCreatedConfigUi;
 };
 
 }

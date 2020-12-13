@@ -10,7 +10,7 @@ add_custom_target(fake-target
     SOURCES ${QML_SRCS})
 
 # qmllint: qml static syntax checker
-if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
+if(${CMAKE_BUILD_TYPE} MATCHES "Debug" AND NOT DEFINED ECM_ENABLE_SANITIZERS)
     find_program(QMLLINT qmllint)
 
     if(EXISTS "${QMLLINT}")

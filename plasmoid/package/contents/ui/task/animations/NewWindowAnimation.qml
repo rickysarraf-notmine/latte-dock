@@ -25,49 +25,32 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
 ////////////////// new window and needs attention animation
-SequentialAnimation{
+Item{
     id:newWindowAnimation
 
-    property int speed: root.appliedDurationTime*1.2*units.longDuration
+    property int speed: 1.2 * taskItem.animations.speedFactor.normal * taskItem.animations.duration.large
     property bool isDemandingAttention: taskItem.inAttention
     property bool containsMouse: taskItem.containsMouse
-    property bool needsThicknessSent: false //flag to check if the signal for thickness was sent
 
-    SequentialAnimation{
-        alwaysRunToEnd: true
+    readonly property string needThicknessEvent: newWindowAnimation + "_newwindow"
 
-        ParallelAnimation{
-            PropertyAnimation {
-                target: wrapper
-                property: (icList.orientation == Qt.Vertical) ? "tempScaleWidth" : "tempScaleHeight"
-                to: 1 + (thickPercentage * 2 * (root.animationsZoomFactor-1))
-                duration: newWindowAnimation.speed
-                easing.type: Easing.OutQuad
+    Loader {
+        id: newWindowAnimationLoader
+        source: "newwindow/BounceAnimation.qml"
+    }
 
-                property real thickPercentage: taskItem.inAttentionAnimation ? 0.8 : 0.6
-            }
+    Connections {
+        target: newWindowAnimationLoader.item
 
-            PropertyAnimation {
-                target: wrapper
-                property: (icList.orientation == Qt.Horizontal) ? "tempScaleWidth" : "tempScaleHeight"
-                to: 1
-                duration: newWindowAnimation.speed
-                easing.type: Easing.OutQuad
-            }
-        }
-
-        PropertyAnimation {
-            target: wrapper
-            property: (icList.orientation == Qt.Vertical) ? "tempScaleWidth" : "tempScaleHeight"
-            to: 1
-            duration: 4.4*newWindowAnimation.speed
-            easing.type: Easing.OutBounce
+        onStopped: {
+            taskItem.animations.needThickness.removeEvent(needThicknessEvent);
+            newWindowAnimation.clear();
         }
     }
 
     function clear(){
-        loops = 1;
-        newWindowAnimation.stop();
+        newWindowAnimationLoader.item.loops = 1;
+        newWindowAnimationLoader.item.stop();
         //  iconImageBuffer.anchors.centerIn = iconImageBuffer.parent;
 
         wrapper.tempScaleWidth = 1;
@@ -78,21 +61,9 @@ SequentialAnimation{
         taskItem.inNewWindowAnimation = false;
     }
 
-    onStopped: {
-        sendEndOfNeedThicknessAnimation();
-        clear();
-    }
-
     onIsDemandingAttentionChanged: {
         if(isDemandingAttention){
-            bounceNewWindow();
-        }
-    }
-
-    function sendEndOfNeedThicknessAnimation(){
-        if (needsThicknessSent) {
-            needsThicknessSent = false;
-            root.signalAnimationsNeedThickness(-1);
+            startNewWindowAnimation();
         }
     }
 
@@ -104,36 +75,29 @@ SequentialAnimation{
         wrapper.tempScaleHeight = wrapper.mScale;
 
         if(!isDemandingAttention)
-            loops = 1;
+            newWindowAnimationLoader.item.loops = 1;
         else {
-            loops = 20;
+            newWindowAnimationLoader.item.loops = 20;
             taskItem.inAttentionAnimation = true;
         }
 
-        if (!needsThicknessSent) {
-            needsThicknessSent = true;
-            root.signalAnimationsNeedThickness(1);
-        }
-
-        // icList.hoveredIndex = -1;
+        taskItem.animations.needThickness.addEvent(needThicknessEvent);
     }
 
-    function bounceNewWindow(){
-        //if (isDemandingAttention && !root.dockIsHidden && (root.zoomFactor > 1)){
-
-        if (!root.dockIsHidden && ((root.animationWindowInAttention && isDemandingAttention)
-                                   || root.animationWindowAddedInGroup)){
+    function startNewWindowAnimation(){
+        if (!root.dockIsHidden && ((taskItem.animations.windowInAttentionEnabled && isDemandingAttention)
+                                   || taskItem.animations.windowAddedInGroupEnabled)){
             newWindowAnimation.init();
-            start();
+            newWindowAnimationLoader.item.start();
         }
     }
 
     Component.onCompleted: {
-        taskItem.groupWindowAdded.connect(bounceNewWindow);
+        taskItem.groupWindowAdded.connect(startNewWindowAnimation);
     }
 
     Component.onDestruction: {
-        taskItem.groupWindowAdded.disconnect(bounceNewWindow);
-        sendEndOfNeedThicknessAnimation();
+        taskItem.groupWindowAdded.disconnect(startNewWindowAnimation);
+        taskItem.animations.needThickness.removeEvent(needThicknessEvent);
     }
 }

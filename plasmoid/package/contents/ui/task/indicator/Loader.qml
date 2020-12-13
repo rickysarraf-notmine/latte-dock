@@ -22,14 +22,12 @@ import QtQuick 2.7
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 Loader {
     id: indicatorLoader
-    anchors.bottom: (root.position === PlasmaCore.Types.BottomPositioned) ? parent.bottom : undefined
-    anchors.top: (root.position === PlasmaCore.Types.TopPositioned) ? parent.top : undefined
-    anchors.left: (root.position === PlasmaCore.Types.LeftPositioned) ? parent.left : undefined
-    anchors.right: (root.position === PlasmaCore.Types.RightPositioned) ? parent.right : undefined
+    anchors.bottom: (root.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
+    anchors.top: (root.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
+    anchors.left: (root.location === PlasmaCore.Types.LeftEdge) ? parent.left : undefined
+    anchors.right: (root.location === PlasmaCore.Types.RightEdge) ? parent.right : undefined
 
     anchors.horizontalCenter: !root.vertical ? parent.horizontalCenter : undefined
     anchors.verticalCenter: root.vertical ? parent.verticalCenter : undefined
@@ -47,7 +45,7 @@ Loader {
             return visualLockedWidth;
         }
 
-        return !root.vertical ? taskItem.wrapperAlias.width - 2*taskItem.wrapperAlias.mScale*root.lengthExtMargin : taskItem.wrapperAlias.width;
+        return !root.vertical ? taskItem.wrapperAlias.width - 2*taskItem.wrapperAlias.mScale*taskItem.metrics.margin.length: taskItem.wrapperAlias.width;
     }
 
     height: {
@@ -55,13 +53,15 @@ Loader {
             return visualLockedHeight;
         }
 
-        return root.vertical ? taskItem.wrapperAlias.height - 2*taskItem.wrapperAlias.mScale*root.lengthExtMargin : taskItem.wrapperAlias.height;
+        return root.vertical ? taskItem.wrapperAlias.height - 2*taskItem.wrapperAlias.mScale*taskItem.metrics.margin.length : taskItem.wrapperAlias.height;
     }
 
     readonly property bool locked: inAttentionAnimation || inNewWindowAnimation || inBouncingAnimation
 
-    property real visualLockedWidth: root.vertical ? root.screenEdgeMargin + root.iconSize + root.internalWidthMargins : root.iconSize + root.internalWidthMargins
-    property real visualLockedHeight: !root.vertical ? root.screenEdgeMargin + root.iconSize + root.internalHeightMargins : root.iconSize + root.internalHeightMargins
+    property real visualLockedWidth: root.vertical ? taskItem.metrics.margin.screenEdge + taskItem.metrics.iconSize + root.internalWidthMargins :
+                                                     taskItem.metrics.iconSize + root.internalWidthMargins
+    property real visualLockedHeight: !root.vertical ? taskItem.metrics.margin.screenEdge + taskItem.metrics.iconSize + root.internalHeightMargins :
+                                                       taskItem.metrics.iconSize + root.internalHeightMargins
 
     //! Connections !//
 

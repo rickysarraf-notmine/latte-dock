@@ -31,26 +31,11 @@ SequentialAnimation{
             target: wrapper
             property: "mScale"
             to: 1
-            duration: 4 * taskItem.animationTime
-            easing.type: Easing.InCubic
-        }
-
-        PropertyAnimation {
-            target: hiddenSpacerLeft
-            property: "nScale"
-            to: 0
-            duration: 4 * taskItem.animationTime
-            easing.type: Easing.InCubic
-        }
-
-        PropertyAnimation {
-            target: hiddenSpacerRight
-            property: "nScale"
-            to: 0
-            duration: 4 * taskItem.animationTime
+            duration: 3 * taskItem.animationTime
             easing.type: Easing.InCubic
         }
     }
+
     //! debug code based on third task
     /*ScriptAction{
         script: {
@@ -64,15 +49,4 @@ SequentialAnimation{
         if (index === 2)
             console.log("restore animation started...");
     } */
-
-    onStopped: {
-        //! VERY IMPORTANT CODE, fixes a bug when cycling the mouse very fast inside
-        //! and outside the dock, in some rare cases the restoreAnimation didn't end!!
-
-        //if (latteView && (!latteView.dockContainsMouse || icList.hoveredIndex === -1)) {
-        //    wrapper.mScale = 1;
-        //}
-        // if (index === 2)
-        //    console.log("restore animation stopped... ind:"+index+" zoom:"+wrapper.mScale);
-    }
 }

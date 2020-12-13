@@ -22,8 +22,9 @@
 #define UNIVERSALSETTINGS_H
 
 // local
+#include <coretypes.h>
+#include "../apptypes.h"
 #include "../lattecorona.h"
-#include "../liblatte2/types.h"
 
 // Qt
 #include <QObject>
@@ -55,14 +56,15 @@ class UniversalSettings : public QObject
     Q_OBJECT
     Q_PROPERTY(bool autostart READ autostart WRITE setAutostart NOTIFY autostartChanged)
     Q_PROPERTY(bool badges3DStyle READ badges3DStyle WRITE setBadges3DStyle NOTIFY badges3DStyleChanged)
+    Q_PROPERTY(bool inAdvancedModeForEditSettings READ inAdvancedModeForEditSettings WRITE setInAdvancedModeForEditSettings NOTIFY inAdvancedModeForEditSettingsChanged)
     Q_PROPERTY(bool colorsScriptIsPresent READ colorsScriptIsPresent NOTIFY colorsScriptIsPresentChanged)
     Q_PROPERTY(bool showInfoWindow READ showInfoWindow WRITE setShowInfoWindow NOTIFY showInfoWindowChanged)
 
-    Q_PROPERTY(QString currentLayoutName READ currentLayoutName WRITE setCurrentLayoutName NOTIFY currentLayoutNameChanged)
+    Q_PROPERTY(QString singleModeLayoutName READ singleModeLayoutName WRITE setSingleModeLayoutName NOTIFY singleModeLayoutNameChanged)
 
     Q_PROPERTY(QStringList launchers READ launchers WRITE setLaunchers NOTIFY launchersChanged)
 
-    Q_PROPERTY(Latte::Types::MouseSensitivity mouseSensitivity READ mouseSensitivity WRITE setMouseSensitivity NOTIFY mouseSensitivityChanged)
+    Q_PROPERTY(Latte::Settings::MouseSensitivity sensitivity READ sensitivity WRITE setSensitivity NOTIFY sensitivityChanged)
 
     Q_PROPERTY(QQmlListProperty<QScreen> screens READ screens)
 
@@ -83,6 +85,9 @@ public:
 
     bool colorsScriptIsPresent() const;
 
+    bool inAdvancedModeForEditSettings() const;
+    void setInAdvancedModeForEditSettings(const bool &inAdvanced);
+
     bool kwin_metaForwardedToLatte() const;
     void kwin_forwardMetaToLatte(bool forward);
 
@@ -101,26 +106,14 @@ public:
     int screenTrackerInterval() const;
     void setScreenTrackerInterval(int duration);
 
-    QString currentLayoutName() const;
-    void setCurrentLayoutName(QString layoutName);
-
-    QString lastNonAssignedLayoutName() const;
-    void setLastNonAssignedLayoutName(QString layoutName);
-
-    QSize downloadWindowSize() const;
-    void setDownloadWindowSize(QSize size);
-
-    QSize layoutsWindowSize() const;
-    void setLayoutsWindowSize(QSize size);
-
-    QStringList layoutsColumnWidths() const;
-    void setLayoutsColumnWidths(QStringList widths);
+    QString singleModeLayoutName() const;
+    void setSingleModeLayoutName(QString layoutName);
 
     QStringList launchers() const;
     void setLaunchers(QStringList launcherList);
 
-    Types::MouseSensitivity mouseSensitivity() const;
-    void setMouseSensitivity(Types::MouseSensitivity sensitivity);
+    Settings::MouseSensitivity sensitivity();
+    void setSensitivity(Settings::MouseSensitivity sense);
 
     QQmlListProperty<QScreen> screens();
     static int countScreens(QQmlListProperty<QScreen> *property); //! is needed by screens()
@@ -128,30 +121,33 @@ public:
 
 public slots:
     Q_INVOKABLE QString splitterIconPath();
+    Q_INVOKABLE QString trademarkPath();
     Q_INVOKABLE QString trademarkIconPath();
 
     Q_INVOKABLE float screenWidthScale(QString screenName) const;
     Q_INVOKABLE float screenHeightScale(QString screenName) const;
     Q_INVOKABLE void setScreenScales(QString screenName, float widthScale, float heightScale);
 
+    void syncSettings();
+
 signals:
     void autostartChanged();
     void badges3DStyleChanged();
     void canDisableBordersChanged();
     void colorsScriptIsPresentChanged();
-    void currentLayoutNameChanged();
     void downloadWindowSizeChanged();
-    void lastNonAssignedLayoutNameChanged();
+    void inAdvancedModeForEditSettingsChanged();
     void layoutsColumnWidthsChanged();
     void layoutsWindowSizeChanged();
     void launchersChanged();
     void layoutsMemoryUsageChanged();
     void metaPressAndHoldEnabledChanged();
-    void mouseSensitivityChanged();
+    void sensitivityChanged();
     void screensCountChanged();
     void screenScalesChanged();
     void screenTrackerIntervalChanged();
     void showInfoWindowChanged();
+    void singleModeLayoutNameChanged();
     void versionChanged();
 
 private slots:
@@ -164,18 +160,20 @@ private slots:
     void updateColorsScriptIsPresent();
     void trackedFileChanged(const QString &file);
 
+    void upgrade_v010();
 private:
     void cleanupSettings();
 
     void setColorsScriptIsPresent(bool present);
 
-    Types::LayoutsMemoryUsage layoutsMemoryUsage() const;
-    void setLayoutsMemoryUsage(Types::LayoutsMemoryUsage layoutsMemoryUsage);
+    MemoryUsage::LayoutsMemory layoutsMemoryUsage() const;
+    void setLayoutsMemoryUsage(MemoryUsage::LayoutsMemory layoutsMemoryUsage);
 
 private:
     bool m_badges3DStyle{false};
     bool m_canDisableBorders{false};
     bool m_colorsScriptIsPresent{false};
+    bool m_inAdvancedModeForEditSettings{false};
     bool m_metaPressAndHoldEnabled{true};
     bool m_showInfoWindow{true};
 
@@ -188,16 +186,12 @@ private:
 
     int m_screenTrackerInterval{2500};
 
-    QString m_currentLayoutName;
-    QString m_lastNonAssignedLayoutName;
-    QSize m_downloadWindowSize{800, 550};
-    QSize m_layoutsWindowSize{700, 450};
+    QString m_singleModeLayoutName;
 
-    QStringList m_layoutsColumnWidths;
     QStringList m_launchers;
 
-    Types::LayoutsMemoryUsage m_memoryUsage;
-    Types::MouseSensitivity m_mouseSensitivity{Types::HighSensitivity};
+    MemoryUsage::LayoutsMemory m_memoryUsage;
+    Settings::MouseSensitivity m_sensitivity{Settings::HighMouseSensitivity};
 
     //! ScreenName, <width_scale, height_scale>
     QHash<QString, ScreenScales> m_screenScales;
@@ -207,6 +201,10 @@ private:
     KConfigGroup m_screenScalesGroup;
     KConfigGroup m_universalGroup;
     KSharedConfig::Ptr m_config;
+
+    //! reading kwinrc values is costly; a tracker protects from
+    //! reading too many times with no real reason
+    QTimer m_kwinrcTrackerTimer;
 
     friend class Layouts::Manager;
     friend class Latte::Corona;

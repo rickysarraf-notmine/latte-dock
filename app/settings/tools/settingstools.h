@@ -27,8 +27,17 @@
 
 namespace Latte {
 
+bool isActive(const QStyleOptionViewItem &option);
+bool isEnabled(const QStyleOptionViewItem &option);
+bool isFocused(const QStyleOptionViewItem &option);
 bool isSelected(const QStyleOptionViewItem &option);
+bool isHovered(const QStyleOptionViewItem &option);
+
 QPalette::ColorGroup colorGroup(const QStyleOptionViewItem &option);
+
+//! strings that even though they were initially at original list
+//! now they are not present to current list
+QStringList subtracted(const QStringList &original, const QStringList &current);
 
 }
 

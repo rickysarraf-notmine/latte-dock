@@ -21,6 +21,7 @@
 #define WINDOWSYSTEMWINDOWSTRACKER_H
 
 // local
+#include <coretypes.h>
 #include "../windowinfowrap.h"
 
 // Qt
@@ -29,6 +30,7 @@
 #include <QHash>
 #include <QMap>
 #include <QTimer>
+
 
 namespace Latte {
 class View;
@@ -66,9 +68,11 @@ public:
 
     bool activeWindowMaximized(Latte::View *view) const;
     bool activeWindowTouching(Latte::View *view) const;
+    bool activeWindowTouchingEdge(Latte::View *view) const;
     bool existsWindowActive(Latte::View *view) const;
     bool existsWindowMaximized(Latte::View *view) const;
     bool existsWindowTouching(Latte::View *view) const;
+    bool existsWindowTouchingEdge(Latte::View *view) const;
     bool isTouchingBusyVerticalView(Latte::View *view) const;
     SchemeColors *activeWindowScheme(Latte::View *view) const;
     SchemeColors *touchingWindowScheme(Latte::View *view) const;
@@ -88,8 +92,6 @@ public:
     QString appNameFor(const WindowId &wid);
     WindowInfoWrap infoFor(const WindowId &wid) const;
 
-    void setPlasmaDesktop(WindowId wid);
-
     AbstractWindowInterface *wm();
 
 signals:
@@ -97,9 +99,11 @@ signals:
     void enabledChanged(const Latte::View *view);
     void activeWindowMaximizedChanged(const Latte::View *view);
     void activeWindowTouchingChanged(const Latte::View *view);
+    void activeWindowTouchingEdgeChanged(const Latte::View *view);
     void existsWindowActiveChanged(const Latte::View *view);
     void existsWindowMaximizedChanged(const Latte::View *view);
     void existsWindowTouchingChanged(const Latte::View *view);
+    void existsWindowTouchingEdgeChanged(const Latte::View *view);
     void isTouchingBusyVerticalViewChanged(const Latte::View *view);
     void activeWindowSchemeChanged(const Latte::View *view);
     void touchingWindowSchemeChanged(const Latte::View *view);
@@ -144,9 +148,11 @@ private:
 
     void setActiveWindowMaximized(Latte::View *view, bool activeMaximized);
     void setActiveWindowTouching(Latte::View *view, bool activeTouching);
+    void setActiveWindowTouchingEdge(Latte::View *view, bool activeTouchingEdge);
     void setExistsWindowActive(Latte::View *view, bool windowActive);
     void setExistsWindowMaximized(Latte::View *view, bool windowMaximized);
     void setExistsWindowTouching(Latte::View *view, bool windowTouching);
+    void setExistsWindowTouchingEdge(Latte::View *view, bool windowTouchingEdge);
     void setIsTouchingBusyVerticalView(Latte::View *view, bool viewTouching);
     void setActiveWindowScheme(Latte::View *view, WindowSystem::SchemeColors *scheme);
     void setTouchingWindowScheme(Latte::View *view, WindowSystem::SchemeColors *scheme);
@@ -164,6 +170,7 @@ private:
     bool isMaximizedInViewScreen(Latte::View *view, const WindowInfoWrap &winfo);
     bool isTouchingView(Latte::View *view, const WindowSystem::WindowInfoWrap &winfo);
     bool isTouchingViewEdge(Latte::View *view, const WindowInfoWrap &winfo);
+    bool isTouchingViewEdge(Latte::View *view, const QRect &windowgeometry);
 
 private:
     //! a timer in order to not overload the views extra hints checking because it is not
@@ -173,6 +180,19 @@ private:
     AbstractWindowInterface *m_wm;
     QHash<Latte::View *, TrackedViewInfo *> m_views;
     QHash<Latte::Layout::GenericLayout *, TrackedLayoutInfo *> m_layouts;
+
+    //! Accept only ALWAYSVISIBLE visibility mode
+    QList<Latte::Types::Visibility> m_ignoreModes{
+        Latte::Types::AutoHide,
+        Latte::Types::DodgeActive,
+        Latte::Types::DodgeMaximized,
+        Latte::Types::DodgeAllWindows,
+        Latte::Types::WindowsGoBelow,
+        Latte::Types::WindowsCanCover,
+        Latte::Types::WindowsAlwaysCover,
+        Latte::Types::SidebarOnDemand,
+        Latte::Types::SidebarAutoHide
+    };
 
     QMap<WindowId, WindowInfoWrap> m_windows;
 

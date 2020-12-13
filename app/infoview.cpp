@@ -49,6 +49,10 @@ InfoView::InfoView(Latte::Corona *corona, QString message, QScreen *screen, QWin
       m_message(message),
       m_screen(screen)
 {
+    m_id = QString::number(qrand() % 1000);
+
+    setTitle(validTitle());
+
     setupWaylandIntegration();
 
     setResizeMode(QQuickView::SizeViewToRootObject);
@@ -59,6 +63,13 @@ InfoView::InfoView(Latte::Corona *corona, QString message, QScreen *screen, QWin
 
     setScreen(screen);
     setFlags(wFlags());
+
+    if (KWindowSystem::isPlatformX11()) {
+        m_trackedWindowId = winId();
+        m_corona->wm()->registerIgnoredWindow(m_trackedWindowId);
+    } else {
+        connect(m_corona->wm(), &WindowSystem::AbstractWindowInterface::latteWindowAdded, this, &InfoView::updateWaylandId);
+    }
 
     init();
 }
@@ -97,6 +108,11 @@ void InfoView::init()
     syncGeometry();
 }
 
+QString InfoView::validTitle() const
+{
+    return "#layoutinfowindow#" + m_id;
+}
+
 Plasma::FrameSvg::EnabledBorders InfoView::enabledBorders() const
 {
     return m_borders;
@@ -130,7 +146,7 @@ void InfoView::showEvent(QShowEvent *ev)
 {
     QQuickWindow::showEvent(ev);
 
-    m_corona->wm()->setViewExtraFlags(*this);
+    m_corona->wm()->setViewExtraFlags(this);
     setFlags(wFlags());
 
     m_corona->wm()->enableBlurBehind(*this);
@@ -141,6 +157,20 @@ void InfoView::showEvent(QShowEvent *ev)
 
     PanelShadows::self()->addWindow(this);
     PanelShadows::self()->setEnabledBorders(this, m_borders);
+}
+
+void InfoView::updateWaylandId()
+{
+    Latte::WindowSystem::WindowId newId = m_corona->wm()->winIdFor("latte-dock", validTitle());
+
+    if (m_trackedWindowId != newId) {
+        if (!m_trackedWindowId.isNull()) {
+            m_corona->wm()->unregisterIgnoredWindow(m_trackedWindowId);
+        }
+
+        m_trackedWindowId = newId;
+        m_corona->wm()->registerIgnoredWindow(m_trackedWindowId);
+    }
 }
 
 void InfoView::setupWaylandIntegration()
@@ -167,6 +197,7 @@ void InfoView::setupWaylandIntegration()
         qDebug() << "wayland dock window surface was created...";
 
         m_shellSurface = interface->createSurface(s, this);
+        m_corona->wm()->setViewExtraFlags(m_shellSurface);
     }
 }
 

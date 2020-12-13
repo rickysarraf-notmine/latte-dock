@@ -21,250 +21,407 @@
 
 // local
 #include "persistentmenu.h"
-#include "../settingsdialog.h"
+#include "../models/layoutsmodel.h"
 #include "../tools/settingstools.h"
+#include "../../data/activitydata.h"
+#include "../../data/layoutdata.h"
 
 // Qt
 #include <QApplication>
 #include <QDebug>
-#include <QWidget>
+#include <QDialogButtonBox>
 #include <QMenu>
 #include <QModelIndex>
 #include <QPainter>
 #include <QPushButton>
 #include <QString>
 #include <QTextDocument>
+#include <QWidget>
+#include <QWidgetAction>
 
 // KDE
-#include <KActivities/Info>
+#include <KLocalizedString>
 
-ActivitiesDelegate::ActivitiesDelegate(QObject *parent)
-    : QItemDelegate(parent)
+#define OKPRESSED "OKPRESSED"
+
+namespace Latte {
+namespace Settings {
+namespace Layout {
+namespace Delegate {
+
+Activities::Activities(QObject *parent)
+    : QStyledItemDelegate(parent)
 {
-    auto *settingsDialog = qobject_cast<Latte::SettingsDialog *>(parent);
-
-    if (settingsDialog) {
-        m_settingsDialog = settingsDialog;
-    }
 }
 
-QWidget *ActivitiesDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
+QWidget *Activities::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     QPushButton *button = new QPushButton(parent);
+
     PersistentMenu *menu = new PersistentMenu(button);
     button->setMenu(menu);
     menu->setMinimumWidth(option.rect.width());
 
-    QStringList assignedActivities = index.model()->data(index, Qt::UserRole).toStringList();
-    QStringList availableActivities = m_settingsDialog->availableActivities();
-    QStringList activities = m_settingsDialog->activities();
+    bool isLayoutActive = index.data(Model::Layouts::ISACTIVEROLE).toBool();
 
-    QStringList shownActivities;
+    QStringList allActivities = index.data(Model::Layouts::ALLACTIVITIESSORTEDROLE).toStringList();
+    Latte::Data::ActivitiesTable allActivitiesTable = index.data(Model::Layouts::ALLACTIVITIESDATAROLE).value<Latte::Data::ActivitiesTable>();
 
-    for (const auto &activity : activities) {
-        if (assignedActivities.contains(activity) || availableActivities.contains(activity)) {
-            shownActivities.append(activity);
+    QStringList assignedActivities = index.data(Qt::UserRole).toStringList();
+
+    QList<int> originalChecked;
+
+    QString currentrealactivityid;
+
+    for (int i=0; i<allActivitiesTable.rowCount(); ++i) {
+        if (allActivitiesTable[i].isCurrent) {
+            currentrealactivityid = allActivitiesTable[i].id;
+            break;
         }
     }
 
-    for (unsigned int i = 0; i < shownActivities.count(); ++i) {
-        KActivities::Info info(shownActivities[i]);
+    for (int i=0; i<allActivities.count(); ++i) {
+        Latte::Data::Activity activitydata = allActivitiesTable[allActivities[i]];
 
-        if (info.state() != KActivities::Info::Invalid) {
-            QAction *action = new QAction(info.name());
-            action->setData(shownActivities[i]);
-            action->setIcon(QIcon::fromTheme(info.icon()));
-            action->setCheckable(true);
-            action->setChecked(assignedActivities.contains(shownActivities[i]));
+        if (!activitydata.isValid()) {
+            continue;
+        }
 
-            if ((info.state() == KActivities::Info::Running) || (info.state() == KActivities::Info::Starting)) {
+
+        bool inCurrentActivity = (activitydata.id == Data::Layout::CURRENTACTIVITYID && assignedActivities.contains(currentrealactivityid));
+        bool ischecked = assignedActivities.contains(activitydata.id) || inCurrentActivity;
+
+        if (ischecked) {
+            originalChecked << i;
+        }
+
+        QAction *action = new QAction(activitydata.name);
+        action->setData(activitydata.id);
+        action->setIcon(QIcon::fromTheme(activitydata.icon));
+        action->setCheckable(true);
+        action->setChecked(ischecked);
+
+        if (activitydata.id == Data::Layout::FREEACTIVITIESID
+                || activitydata.id == Data::Layout::ALLACTIVITIESID
+                || activitydata.id == Data::Layout::CURRENTACTIVITYID) {
+            if (isLayoutActive) {
                 QFont font = action->font();
                 font.setBold(true);
                 action->setFont(font);
             }
 
-            menu->addAction(action);
+            if (ischecked) {
+                menu->setMasterIndex(i);
+            }
 
-            connect(action, &QAction::toggled, this, [this, button, action]() {
-                updateButton(button);
-
+            connect(action, &QAction::toggled, this, [this, menu, button, action, i, allActivitiesTable, currentrealactivityid]() {
                 if (action->isChecked()) {
-                    m_settingsDialog->addActivityInCurrent(action->data().toString());
+                    menu->setMasterIndex(i);
+
+                    if (action->data().toString() == Data::Layout::CURRENTACTIVITYID) {
+                        auto actions = menu->actions();
+                        for (int i=0; i<actions.count(); ++i) {
+                            if (actions[i]->data().toString() == currentrealactivityid) {
+                                actions[i]->setChecked(true);
+                            }
+                        }
+                    }
                 } else {
-                    m_settingsDialog->removeActivityFromCurrent(action->data().toString());
+                    if (menu->masterIndex() == i) {
+                        menu->setMasterIndex(-1);
+                    }
+
+                    if (action->data().toString() == Data::Layout::CURRENTACTIVITYID) {
+                        auto actions = menu->actions();
+                        for (int i=0; i<actions.count(); ++i) {
+                            if (actions[i]->data().toString() == currentrealactivityid) {
+                                actions[i]->setChecked(false);
+                            }
+                        }
+
+                        updateCurrentActivityAction(menu);
+                    }
+                }              
+
+                updateButton(button, allActivitiesTable);
+            });            
+        } else {
+            if (activitydata.isRunning()) {
+                QFont font = action->font();
+                font.setBold(true);
+                action->setFont(font);
+            }
+
+            connect(action, &QAction::toggled, this, [this, menu, button, action, i, allActivitiesTable]() {
+                if (action->isChecked()) {
+                    menu->setMasterIndex(-1);
                 }
+
+                updateButton(button, allActivitiesTable);
             });
         }
+
+        menu->addAction(action);
+
+        if (activitydata.id == Data::Layout::CURRENTACTIVITYID) {
+            //! After CurrentActivity record we can add Separator
+            menu->addSeparator();
+        }
     }
+
+    connect(menu, &PersistentMenu::masterIndexChanged, this, [this, menu, button, allActivitiesTable]() {
+        int masterRow = menu->masterIndex();
+        if (masterRow>=0) {
+            auto actions = button->menu()->actions();
+
+            for (int i=0; i<actions.count(); ++i) {
+                if (i != masterRow && actions[i]->isChecked()) {
+                    actions[i]->setChecked(false);
+                }
+            }
+        } else {
+            foreach (QAction *action, button->menu()->actions()) {
+                QString actId = action->data().toString();
+                if (actId == Data::Layout::FREEACTIVITIESID || actId == Data::Layout::ALLACTIVITIESID) {
+                    action->setChecked(false);
+                }
+            }
+        }
+
+        updateCurrentActivityAction(menu);
+        updateButton(button, allActivitiesTable);
+    });
+
+    //! Ok, Apply Buttons behavior
+    menu->addSeparator();
+
+    QDialogButtonBox *menuDialogButtons = new QDialogButtonBox(menu);
+    menuDialogButtons->setStandardButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Reset);
+    menuDialogButtons->setContentsMargins(3, 0, 3, 3);
+
+    QWidgetAction* menuDialogButtonsWidgetAction = new QWidgetAction(menu);
+    menuDialogButtonsWidgetAction->setDefaultWidget(menuDialogButtons);
+
+    menu->addAction(menuDialogButtonsWidgetAction);
+
+    connect(menuDialogButtons->button(QDialogButtonBox::Ok), &QPushButton::clicked,  [this, menu, button]() {
+        button->setProperty(OKPRESSED, true);
+        menu->hide();
+    });
+
+    connect(menuDialogButtons->button(QDialogButtonBox::Cancel), &QPushButton::clicked,  menu, &QMenu::hide);
+
+    connect(menuDialogButtons->button(QDialogButtonBox::Reset), &QPushButton::clicked,  [this, menu, originalChecked]() {
+        for (int i=0; i<menu->actions().count(); ++i) {
+            if (!originalChecked.contains(i)) {
+                menu->actions().at(i)->setChecked(false);
+            } else {
+                menu->actions().at(i)->setChecked(true);
+            }
+        }
+    });
+
+    connect(menu, &QMenu::aboutToHide, button, &QWidget::clearFocus);
 
     return button;
 }
 
-void ActivitiesDelegate::setEditorData(QWidget *editor, const QModelIndex &index) const
+void Activities::updateCurrentActivityAction(QMenu *menu) const
 {
-    updateButton(editor);
+    if (!menu) {
+        return;
+    }
+
+    auto actions = menu->actions();
+    for (int i=0; i<actions.count(); ++i) {
+        if (actions[i]->data().toString() == Data::Layout::CURRENTACTIVITYID) {
+            if (actions[i]->isChecked()) {
+                QFont font = actions[i]->font();
+                font.setBold(true);
+                actions[i]->setFont(font);
+            } else {
+                QFont font = actions[i]->font();
+                font.setBold(false);
+                actions[i]->setFont(font);
+            }
+        }
+    }
+
 }
 
-void ActivitiesDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
+void Activities::setEditorData(QWidget *editor, const QModelIndex &index) const
+{
+    Latte::Data::ActivitiesTable allActivitiesTable = index.data(Model::Layouts::ALLACTIVITIESDATAROLE).value<Latte::Data::ActivitiesTable>();
+
+    updateButton(editor, allActivitiesTable);
+}
+
+void Activities::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
 {
     QPushButton *button = static_cast<QPushButton *>(editor);
 
-    QStringList assignedActivities;
+    if (button->property(OKPRESSED).isNull() || !button->property(OKPRESSED).toBool()) {
+        return;
+    }
+
+    //! keep activities that are present in other computers
+    QStringList assignedActivities = index.data(Qt::UserRole).toStringList();
+
     foreach (QAction *action, button->menu()->actions()) {
-        if (action->isChecked()) {
-            assignedActivities << action->data().toString();
+        QString activityid = action->data().toString();
+
+        if (activityid == Data::Layout::CURRENTACTIVITYID) {
+            continue;
+        }
+
+        if (activityid == Data::Layout::ALLACTIVITIESID && action->isChecked()) {
+            assignedActivities = QStringList(Data::Layout::ALLACTIVITIESID);
+            break;
+        } else if (activityid == Data::Layout::FREEACTIVITIESID && action->isChecked()) {
+            assignedActivities = QStringList(Data::Layout::FREEACTIVITIESID);
+            break;
+        }
+
+        //! try to not remove activityids that belong to different machines that are not
+        //! currently present
+        if (!action->isChecked()) {
+            assignedActivities.removeAll(activityid);
+        } else if (action->isChecked() && !assignedActivities.contains(activityid)) {
+            assignedActivities << activityid;
         }
     }
 
     model->setData(index, assignedActivities, Qt::UserRole);
 }
 
-void ActivitiesDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const
+void Activities::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     editor->setGeometry(option.rect);
 }
 
-void ActivitiesDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+bool Activities::editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option,
+                             const QModelIndex &index)
+{
+    Q_ASSERT(event);
+    Q_ASSERT(model);
+
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
+}
+
+void Activities::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     QStyleOptionViewItem myOptions = option;
     //! Remove the focus dotted lines
     myOptions.state = (myOptions.state & ~QStyle::State_HasFocus);
 
-    if (myOptions.state & QStyle::State_Enabled) {
-        painter->save();
+    bool isLayoutActive = index.data(Model::Layouts::ISACTIVEROLE).toBool();
 
-        QStringList assignedActivities = index.model()->data(index, Qt::UserRole).toStringList();
+    painter->save();
 
-        if (assignedActivities.count() > 0) {
-            myOptions.text = joinedActivities(assignedActivities);
+    QList<Latte::Data::Activity> assignedActivities;
+    QStringList assignedIds = index.model()->data(index, Qt::UserRole).toStringList();
+    QStringList assignedOriginalIds = index.model()->data(index, Model::Layouts::ORIGINALASSIGNEDACTIVITIESROLE).toStringList();
 
-            QTextDocument doc;
-            QString css;
-            QString activitiesText = myOptions.text;
+    Latte::Data::ActivitiesTable allActivitiesTable = index.data(Model::Layouts::ALLACTIVITIESDATAROLE).value<Latte::Data::ActivitiesTable>();
 
-            QPalette::ColorRole applyColor = Latte::isSelected(option) ? QPalette::HighlightedText : QPalette::Text;
-            QBrush nBrush = option.palette.brush(Latte::colorGroup(option), applyColor);
-
-            css = QString("body { color : %1; }").arg(nBrush.color().name());
-
-            doc.setDefaultStyleSheet(css);
-            doc.setHtml("<body>" + myOptions.text + "</body>");
-
-            myOptions.text = "";
-            myOptions.widget->style()->drawControl(QStyle::CE_ItemViewItem, &myOptions, painter);
-
-            //we need an offset to be in the same vertical center of TextEdit
-            int offsetY = ((myOptions.rect.height() - doc.size().height()) / 2);
-
-            if ((qApp->layoutDirection() == Qt::RightToLeft) && !activitiesText.isEmpty()) {
-                int textWidth = doc.size().width();
-
-                painter->translate(qMax(myOptions.rect.left(), myOptions.rect.right() - textWidth), myOptions.rect.top() + offsetY + 1);
-            } else {
-                painter->translate(myOptions.rect.left(), myOptions.rect.top() + offsetY + 1);
-            }
-
-            QRect clip(0, 0, myOptions.rect.width(), myOptions.rect.height());
-            doc.drawContents(painter, clip);
-        } else {
-            QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &myOptions, painter);
-        }
-
-        painter->restore();
-    } else {
-        // Disabled
-        bool isSelected{Latte::isSelected(option)};
-        QPalette::ColorRole backColorRole = isSelected ? QPalette::Highlight : QPalette::Base;
-        QPalette::ColorRole textColorRole = isSelected ? QPalette::HighlightedText : QPalette::Text;
-
-        // background
-        painter->fillRect(option.rect, option.palette.brush(Latte::colorGroup(option), backColorRole));
-
-        // text
-        QPen pen(Qt::DashDotDotLine);
-        QColor textColor = option.palette.brush(Latte::colorGroup(option), textColorRole).color();
-
-        pen.setWidth(2); pen.setColor(textColor);
-        int y = option.rect.y()+option.rect.height()/2;
-
-        int space = option.rect.height() / 2;
-
-        painter->setPen(pen);
-
-        if (qApp->layoutDirection() == Qt::LeftToRight) {
-            painter->drawLine(option.rect.x(), y,
-                              option.rect.x()+option.rect.width() - space, y);
-
-            int xm = option.rect.x() + option.rect.width() - space;
-            int thick = option.rect.height() / 2;
-            int ym = option.rect.y() + ((option.rect.height() - thick) / 2);
-
-            pen.setStyle(Qt::SolidLine);
-            painter->setPen(pen);
-            painter->setBrush(textColor);
-
-            //! draw ending cirlce
-            painter->drawEllipse(QPoint(xm, ym + thick/2), thick/4, thick/4);
-        } else {
-            painter->drawLine(option.rect.x() + space, y,
-                              option.rect.x() + option.rect.width(), y);
-
-            int xm = option.rect.x() + space;
-            int thick = option.rect.height() / 2;
-            int ym = option.rect.y() + ((option.rect.height() - thick) / 2);
-
-            pen.setStyle(Qt::SolidLine);
-            painter->setPen(pen);
-            painter->setBrush(textColor);
-
-            //! draw ending cirlce
-            painter->drawEllipse(QPoint(xm, ym + thick/2), thick/4, thick/4);
-        }
+    for (int i=0; i<assignedIds.count(); ++i) {
+        assignedActivities << allActivitiesTable[assignedIds[i]];
     }
+
+    if (assignedActivities.count() > 0) {
+        myOptions.text = joinedActivities(assignedActivities, assignedOriginalIds, isLayoutActive);
+
+        QTextDocument doc;
+        QString css;
+        QString activitiesText = myOptions.text;
+
+        QPalette::ColorRole applyColor = Latte::isSelected(option) ? QPalette::HighlightedText : QPalette::Text;
+        QBrush nBrush = option.palette.brush(Latte::colorGroup(option), applyColor);
+
+        css = QString("body { color : %1; }").arg(nBrush.color().name());
+
+        doc.setDefaultStyleSheet(css);
+        doc.setHtml("<body>" + myOptions.text + "</body>");
+
+        myOptions.text = "";
+        myOptions.widget->style()->drawControl(QStyle::CE_ItemViewItem, &myOptions, painter);
+
+        //we need an offset to be in the same vertical center of TextEdit
+        int offsetY = ((myOptions.rect.height() - doc.size().height()) / 2);
+
+        if ((qApp->layoutDirection() == Qt::RightToLeft) && !activitiesText.isEmpty()) {
+            int textWidth = doc.size().width();
+
+            painter->translate(qMax(myOptions.rect.left(), myOptions.rect.right() - textWidth), myOptions.rect.top() + offsetY + 1);
+        } else {
+            painter->translate(myOptions.rect.left(), myOptions.rect.top() + offsetY + 1);
+        }
+
+        QRect clip(0, 0, myOptions.rect.width(), myOptions.rect.height());
+        doc.drawContents(painter, clip);
+    } else {
+        QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &myOptions, painter);
+    }
+
+    painter->restore();
 }
 
-QString ActivitiesDelegate::joinedActivities(const QStringList &activities, bool boldForActive) const
+QString Activities::joinedActivities(const QList<Latte::Data::Activity> &activities, const QStringList &originalIds, bool isActive, bool formatText) const
 {
     QString finalText;
 
     int i = 0;
 
-    for (const auto &activityId : activities) {
-        KActivities::Info info(activityId);
+    for (int i=0; i<activities.count(); ++i) {
+        bool bold{false};
+        bool italic = (!originalIds.contains(activities[i].id));
 
-        if (info.state() != KActivities::Info::Invalid) {
-            if (i > 0) {
-                finalText += ", ";
-            }
-            i++;
-
-            bool isActive{false};
-
-            if (boldForActive && (info.state() == KActivities::Info::Running) || (info.state() == KActivities::Info::Starting)) {
-                isActive = true;
-            }
-
-            finalText += isActive ? "<b>" + info.name() + "</b>" : info.name();
+        if (activities[i].id == Data::Layout::FREEACTIVITIESID || activities[i].id == Data::Layout::ALLACTIVITIESID) {
+            bold = isActive;
+        } else {
+            bold = activities[i].isRunning();
         }
+
+        if (i > 0) {
+            finalText += ", ";
+        }
+
+        QString styledText = activities[i].name;
+
+        if (bold && formatText) {
+            styledText = "<b>" + styledText + "</b>";
+        }
+
+        if (italic && formatText) {
+            styledText = "<i>" + styledText + "</i>";
+        }
+
+        finalText += styledText;
     }
 
     return finalText;
 }
 
-void ActivitiesDelegate::updateButton(QWidget *editor) const
+void Activities::updateButton(QWidget *editor, const Latte::Data::ActivitiesTable &allActivitiesTable) const
 {
     if (!editor) {
         return;
     }
+
     QPushButton *button = static_cast<QPushButton *>(editor);
-    QStringList assignedActivities;
+    QList<Latte::Data::Activity> assignedActivities;
 
     foreach (QAction *action, button->menu()->actions()) {
-        if (action->isChecked()) {
-            assignedActivities << action->data().toString();
+        if (action->isChecked() && action->data().toString() != Data::Layout::CURRENTACTIVITYID) {
+            assignedActivities << allActivitiesTable[action->data().toString()];
         }
     }
 
-    button->setText(joinedActivities(assignedActivities,false));
+    button->setText(joinedActivities(assignedActivities, QStringList(), false, false));
+}
+
+}
+}
+}
 }
 

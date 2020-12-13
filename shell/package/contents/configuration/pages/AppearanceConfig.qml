@@ -27,10 +27,10 @@ import QtQuick.Dialogs 1.2
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.components 3.0 as PlasmaComponents3
-import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
+import org.kde.latte.private.containment 0.1 as LatteContainment
 
 PlasmaComponents.Page {
     Layout.maximumWidth: content.width + content.Layout.leftMargin * 2
@@ -53,92 +53,9 @@ PlasmaComponents.Page {
         anchors.horizontalCenter: parent.horizontalCenter
         Layout.leftMargin: units.smallSpacing * 2
 
-        //! BEGIN: Layout
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: units.smallSpacing
-            spacing: units.smallSpacing
-            visible: false //dialog.highLevel
-
-            LatteComponents.Header {
-                text: i18n("Layout")
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: units.smallSpacing * 2
-                Layout.rightMargin: units.smallSpacing * 2
-                spacing: units.smallSpacing
-
-                LatteComponents.ComboBox {
-                    id: layoutCmb
-                    Layout.fillWidth: true
-
-                    property var layoutTexts: [];
-                    property var layouts;
-
-                    Component.onCompleted: loadLayouts();
-
-                    Connections {
-                        target:layoutsManager
-                        onMenuLayoutsChanged: layoutCmb.loadLayouts();
-                    }
-
-                    function loadLayouts(){
-                        layouts = layoutsManager.menuLayouts;
-                        layoutTexts = [];
-
-                        //if current layout isnt at the menu layouts
-                        if (layouts.indexOf(layoutsManager.currentLayoutName) === -1) {
-                            if (Qt.application.layoutDirection === Qt.RightToLeft) {
-                                layoutTexts.push( layoutsManager.currentLayoutName + " ✔ ");
-                            } else {
-                                layoutTexts.push( " ✔ "+layoutsManager.currentLayoutName);
-                            }
-                        }
-
-                        var activeLayout = 0;
-
-                        for(var i=0; i<layouts.length; ++i){
-                            var selText1 = "     ";
-                            var selText2 = "     ";
-
-                            if (layouts[i] === layoutsManager.currentLayoutName) {
-                                selText1 = " ✔ ";
-                                activeLayout = i;
-                            }
-
-                            if (Qt.application.layoutDirection === Qt.RightToLeft) {
-                                layoutTexts.push(selText2+layouts[i]+selText1);
-                            } else {
-                                layoutTexts.push(selText1+layouts[i]+selText2);
-                            }
-                        }
-
-                        model = layoutTexts;
-                        currentIndex = activeLayout;
-                    }
-
-                    onActivated: {
-                        layoutsManager.switchToLayout(layouts[index]);
-                    }
-                }
-
-                PlasmaComponents.Button {
-                    text: i18nc("opens the layout manager window","Configure...")
-                    iconSource: "document-edit"
-                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-
-                    onClicked: layoutsManager.showLatteSettingsDialog()
-                }
-            }
-        }
-        //! END: Layout
-
         //! BEGIN: Items
         ColumnLayout {
             Layout.fillWidth: true
-            //Layout.topMargin: dialog.highLevel ? 0 : units.smallSpacing
             Layout.topMargin: units.smallSpacing
 
             spacing: units.smallSpacing
@@ -173,8 +90,8 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
                         value: plasmoid.configuration.iconSize
                         from: 16
-                        to: 128
-                        stepSize: dialog.highLevel || (plasmoid.configuration.iconSize % 8 !== 0) || dialog.viewIsPanel ? 1 : 8
+                        to: (latteView.visibility.mode === LatteCore.Types.SidebarOnDemand || latteView.visibility.mode === LatteCore.Types.SidebarAutoHide)  ? 512 : 256
+                        stepSize: dialog.advancedLevel || (plasmoid.configuration.iconSize % 8 !== 0) || dialog.viewIsPanel ? 1 : 8
                         wheelEnabled: false
 
                         function updateIconSize() {
@@ -190,12 +107,6 @@ PlasmaComponents.Page {
 
                         Component.onCompleted: {
                             valueChanged.connect(updateIconSize);
-
-                            if (plasmoid.configuration.iconSize>128) {
-                                to = plasmoid.configuration.iconSize + 64
-                            } else {
-                                to = 128
-                            }
                         }
 
                         Component.onDestruction: {
@@ -215,7 +126,7 @@ PlasmaComponents.Page {
                     Layout.minimumWidth: dialog.optionsWidth
                     Layout.maximumWidth: Layout.minimumWidth
                     spacing: units.smallSpacing
-                    visible: dialog.expertLevel || plasmoid.configuration.proportionIconSize>0
+                    visible: dialog.advancedLevel || plasmoid.configuration.proportionIconSize>0
 
                     PlasmaComponents.Label {
                         text: i18nc("relative size", "Relative")
@@ -228,8 +139,8 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
                         value: plasmoid.configuration.proportionIconSize
                         from: 1.0
-                        to: 10
-                        stepSize: 0.5
+                        to: (latteView.visibility.mode === LatteCore.Types.SidebarOnDemand || latteView.visibility.mode === LatteCore.Types.SidebarAutoHide)  ? 25 : 12
+                        stepSize: 0.1
                         wheelEnabled: false
 
                         function updateProportionIconSize() {
@@ -274,7 +185,7 @@ PlasmaComponents.Page {
                     Layout.minimumWidth: dialog.optionsWidth
                     Layout.maximumWidth: Layout.minimumWidth
                     spacing: units.smallSpacing
-                    enabled: plasmoid.configuration.durationTime > 0
+                    enabled: LatteCore.WindowSystem.compositingActive && plasmoid.configuration.animationsEnabled
 
                     PlasmaComponents.Label {
                         text: i18n("Zoom On Hover")
@@ -284,7 +195,6 @@ PlasmaComponents.Page {
                     LatteComponents.Slider {
                         id: zoomSlider
                         Layout.fillWidth: true
-                        enabled: plasmoid.configuration.animationsEnabled
                         value: Number(1 + plasmoid.configuration.zoomLevel / 20).toFixed(2)
                         from: 1
                         to: 2
@@ -333,9 +243,14 @@ PlasmaComponents.Page {
             }
 
             ColumnLayout {
+                id: lengthColumn
                 Layout.leftMargin: units.smallSpacing * 2
                 Layout.rightMargin: units.smallSpacing * 2
                 spacing: 0
+
+                readonly property int labelsMaxWidth: Math.max(maxLengthLbl.implicitWidth,
+                                                               minLengthLbl.implicitWidth,
+                                                               offsetLbl.implicitWidth)
 
                 RowLayout {
                     Layout.minimumWidth: dialog.optionsWidth
@@ -343,33 +258,37 @@ PlasmaComponents.Page {
                     spacing: units.smallSpacing
 
                     PlasmaComponents.Label {
+                        id: maxLengthLbl
+                        Layout.minimumWidth: lengthColumn.labelsMaxWidth
                         text: i18n("Maximum")
                         horizontalAlignment: Text.AlignLeft
                     }
 
                     LatteComponents.Slider {
-                        Layout.fillWidth: true
                         id: maxLengthSlider
+                        Layout.fillWidth: true
 
                         value: plasmoid.configuration.maxLength
-                        from: 30
+                        from: 0
                         to: 100
-                        stepSize: 2
+                        stepSize: 1
                         wheelEnabled: false
 
+                        readonly property int localMinValue: 1
+
                         function updateMaxLength() {
-                            if (!pressed) {
-                                plasmoid.configuration.maxLength = value;
+                            if (!pressed && viewConfig.isReady) {
+                                plasmoid.configuration.maxLength = Math.max(value, plasmoid.configuration.minLength, localMinValue);
                                 var newTotal = Math.abs(plasmoid.configuration.offset) + value;
 
                                 //centered and justify alignments based on offset and get out of the screen in some cases
-                                var centeredCheck = ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                                                     || (plasmoid.configuration.panelPosition === Latte.Types.Justify))
+                                var centeredCheck = ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                                     || (plasmoid.configuration.alignment === LatteCore.Types.Justify))
                                         && ((Math.abs(plasmoid.configuration.offset) + value/2) > 50);
 
                                 if (newTotal > 100 || centeredCheck) {
-                                    if ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                                            || (plasmoid.configuration.panelPosition === Latte.Types.Justify)) {
+                                    if ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                            || (plasmoid.configuration.alignment === LatteCore.Types.Justify)) {
 
                                         var suggestedValue = (plasmoid.configuration.offset<0) ? Math.min(0, -(100-value)): Math.max(0, 100-value);
 
@@ -385,6 +304,14 @@ PlasmaComponents.Page {
                                     } else {
                                         plasmoid.configuration.offset = Math.max(0, 100-value);
                                     }
+                                }
+
+                                if (plasmoid.configuration.maxLength < plasmoid.configuration.minLength) {
+                                    minLengthSlider.updateMinLength();
+                                }
+                            } else {
+                                if ((value < plasmoid.configuration.minLength) || (value < localMinValue)) {
+                                    value = Math.max(plasmoid.configuration.minLength, localMinValue);
                                 }
                             }
                         }
@@ -407,6 +334,31 @@ PlasmaComponents.Page {
                         horizontalAlignment: Text.AlignRight
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        LatteComponents.ScrollArea {
+                            anchors.fill: parent
+                            delayIsEnabled: false
+
+                            readonly property real smallStep: 0.1
+
+                            onScrolledUp:  {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.maxLength = plasmoid.configuration.maxLength + smallStep;
+                                }
+                            }
+
+                            onScrolledDown: {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.maxLength = plasmoid.configuration.maxLength - smallStep;
+                                }
+                            }
+
+                            onClicked: {
+                                plasmoid.configuration.maxLength = Math.round(plasmoid.configuration.maxLength);
+                            }
+                        }
                     }
                 }
 
@@ -414,52 +366,181 @@ PlasmaComponents.Page {
                     Layout.minimumWidth: dialog.optionsWidth
                     Layout.maximumWidth: Layout.minimumWidth
                     spacing: units.smallSpacing
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
+                    enabled: (plasmoid.configuration.alignment !== LatteCore.Types.Justify)
 
                     PlasmaComponents.Label {
+                        id: minLengthLbl
+                        Layout.minimumWidth: lengthColumn.labelsMaxWidth
+                        text: i18n("Minimum")
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    LatteComponents.Slider {
+                        id: minLengthSlider
+                        Layout.fillWidth: true
+
+                        value: plasmoid.configuration.minLength
+                        from: 0
+                        to: 100
+                        stepSize: 1
+                        wheelEnabled: false
+
+                        function updateMinLength() {
+                            if (!pressed  && viewConfig.isReady) {
+                                plasmoid.configuration.minLength = value; //Math.min(value, plasmoid.configuration.maxLength);
+
+                                if (plasmoid.configuration.minLength > maxLengthSlider.value) {
+                                    maxLengthSlider.updateMaxLength();
+                                }
+                            } else {
+                                if (value > plasmoid.configuration.maxLength) {
+                                    value = plasmoid.configuration.maxLength
+                                }
+                            }
+                        }
+
+                        onPressedChanged: {
+                            updateMinLength();
+                        }
+
+                        Component.onCompleted: {
+                            valueChanged.connect(updateMinLength)
+                        }
+
+                        Component.onDestruction: {
+                            valueChanged.disconnect(updateMinLength)
+                        }
+                    }
+
+                    PlasmaComponents.Label {
+                        text: i18nc("number in percentage, e.g. 85 %","%0 %").arg(minLengthSlider.value)
+                        horizontalAlignment: Text.AlignRight
+                        Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+                        Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        LatteComponents.ScrollArea {
+                            anchors.fill: parent
+                            delayIsEnabled: false
+
+                            readonly property real smallStep: 0.1
+
+                            onScrolledUp:  {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.minLength = plasmoid.configuration.minLength + smallStep;
+                                }
+                            }
+
+                            onScrolledDown: {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.minLength = plasmoid.configuration.minLength - smallStep;
+                                }
+                            }
+
+                            onClicked: {
+                                plasmoid.configuration.minLength = Math.round(plasmoid.configuration.minLength);
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.minimumWidth: dialog.optionsWidth
+                    Layout.maximumWidth: Layout.minimumWidth
+                    spacing: units.smallSpacing
+                    visible: dialog.advancedLevel
+                    enabled: offsetSlider.to > offsetSlider.from
+
+                    PlasmaComponents.Label {
+                        id: offsetLbl
+                        Layout.minimumWidth: lengthColumn.labelsMaxWidth
                         text: i18n("Offset")
                         horizontalAlignment: Text.AlignLeft
                     }
 
                     LatteComponents.Slider {
-                        Layout.fillWidth: true
                         id: offsetSlider
-
-                        value: plasmoid.configuration.offset
-                        from: ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                               || (plasmoid.configuration.panelPosition === Latte.Types.Justify)) ? -20 :  0
-                        to: ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                             || (plasmoid.configuration.panelPosition === Latte.Types.Justify)) ? 20 :  40
-                        stepSize: 2
+                        Layout.fillWidth: true
+                        stepSize: 1
                         wheelEnabled: false
 
+                        readonly property int screenLengthMaxFactor: (100 - plasmoid.configuration.maxLength) / 2
+
+                        //! these properties are used in order to not update view_offset incorrectly when the primary config view
+                        //! is changing between different views
+                        property bool userInputIsValid: false
+                        readonly property bool sliderIsReady: viewConfig.isReady && (from===fromValue) && (to===toValue)
+
+                        readonly property int fromValue: ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                                          || (plasmoid.configuration.alignment === LatteCore.Types.Justify)) ? -offsetSlider.screenLengthMaxFactor :  0
+
+                        readonly property int toValue: ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                                        || (plasmoid.configuration.alignment === LatteCore.Types.Justify)) ? offsetSlider.screenLengthMaxFactor :  2*offsetSlider.screenLengthMaxFactor
+
+                        property real offsetValue: plasmoid.configuration.offset
+
+                        Binding {
+                            target: offsetSlider
+                            property: "from"
+                            when: viewConfig.isReady
+                            value: offsetSlider.fromValue
+                        }
+
+                        Binding {
+                            target: offsetSlider
+                            property: "to"
+                            when: viewConfig.isReady
+                            value: offsetSlider.toValue
+                        }
+
                         function updateOffset() {
-                            if (!pressed) {
-                                plasmoid.configuration.offset = value;
+                            if (!pressed && sliderIsReady) {
+                                if (userInputIsValid) {
+                                    plasmoid.configuration.offset = value;
+                                } else {
+                                    value = Math.min(Math.max(from, plasmoid.configuration.offset), to);
+                                    plasmoid.configuration.offset = value;
+                                }                                
+
                                 var newTotal = Math.abs(value) + plasmoid.configuration.maxLength;
 
                                 //centered and justify alignments based on offset and get out of the screen in some cases
-                                var centeredCheck = ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                                                     || (plasmoid.configuration.panelPosition === Latte.Types.Justify))
+                                var centeredCheck = ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                                     || (plasmoid.configuration.alignment === LatteCore.Types.Justify))
                                         && ((Math.abs(value) + plasmoid.configuration.maxLength/2) > 50);
                                 if (newTotal > 100 || centeredCheck) {
-                                    plasmoid.configuration.maxLength = ((plasmoid.configuration.panelPosition === Latte.Types.Center)
-                                                                        || (plasmoid.configuration.panelPosition === Latte.Types.Justify)) ?
+                                    plasmoid.configuration.maxLength = ((plasmoid.configuration.alignment === LatteCore.Types.Center)
+                                                                        || (plasmoid.configuration.alignment === LatteCore.Types.Justify)) ?
                                                 2*(50 - Math.abs(value)) :100 - Math.abs(value);
                                 }
                             }
                         }
 
                         onPressedChanged: {
-                            updateOffset();
+                            if (pressed) {
+                                userInputIsValid = true;
+                            } else {
+                                updateOffset();
+                                userInputIsValid = false;
+                            }
                         }
 
                         Component.onCompleted: {
-                            valueChanged.connect(updateOffset);
+                            offsetValueChanged.connect(updateOffset);
+                            fromChanged.connect(updateOffset);
+                            toChanged.connect(updateOffset);
+                            sliderIsReadyChanged.connect(updateOffset);
+
+                            updateOffset();
                         }
 
                         Component.onDestruction: {
-                            valueChanged.disconnect(updateOffset);
+                            offsetValueChanged.disconnect(updateOffset);
+                            fromChanged.disconnect(updateOffset);
+                            toChanged.disconnect(updateOffset);
+                            sliderIsReadyChanged.disconnect(updateOffset);
                         }
                     }
 
@@ -468,6 +549,31 @@ PlasmaComponents.Page {
                         horizontalAlignment: Text.AlignRight
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        LatteComponents.ScrollArea {
+                            anchors.fill: parent
+                            delayIsEnabled: false
+
+                            readonly property real smallStep: 0.1
+
+                            onScrolledUp:  {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.offset= plasmoid.configuration.offset + smallStep;
+                                }
+                            }
+
+                            onScrolledDown: {
+                                var ctrlModifier = (wheel.modifiers & Qt.ControlModifier);
+                                if (ctrlModifier) {
+                                    plasmoid.configuration.offset = plasmoid.configuration.offset - smallStep;
+                                }
+                            }
+
+                            onClicked: {
+                                plasmoid.configuration.offset = Math.round(plasmoid.configuration.offset);
+                            }
+                        }
                     }
                 }
             }
@@ -480,7 +586,7 @@ PlasmaComponents.Page {
             Layout.fillWidth: true
 
             spacing: units.smallSpacing
-            visible: dialog.expertLevel
+            visible: dialog.advancedLevel
 
             readonly property int maxMargin: 25
 
@@ -585,6 +691,44 @@ PlasmaComponents.Page {
                         readonly property int currentValue: Math.max(thickMarginSlider.minimumInternalValue, thickMarginSlider.value)
                     }
                 }
+
+                RowLayout {
+                    Layout.minimumWidth: dialog.optionsWidth
+                    Layout.maximumWidth: Layout.minimumWidth
+                    spacing: units.smallSpacing
+                    enabled: !plasmoid.configuration.shrinkThickMargins
+
+                    PlasmaComponents.Label {
+                        text: i18n("Screen")
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    LatteComponents.Slider {
+                        id: screenEdgeMarginSlider
+                        Layout.fillWidth: true
+
+                        value: plasmoid.configuration.screenEdgeMargin
+                        from: -1
+                        to: 256
+                        stepSize: 1
+                        wheelEnabled: false
+
+                        onPressedChanged: {
+                            if (!pressed) {
+                                plasmoid.configuration.screenEdgeMargin = value;
+                            }
+                        }
+                    }
+
+                    PlasmaComponents.Label {
+                        text: currentValue < 0 ? "---" : i18nc("number in pixels, e.g. 85 px.","%0 px.").arg(currentValue)
+                        horizontalAlignment: Text.AlignRight
+                        Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+                        Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        readonly property int currentValue: screenEdgeMarginSlider.value
+                    }
+                }
             }
         }
         //! END: Margins
@@ -592,7 +736,7 @@ PlasmaComponents.Page {
         //! BEGIN: Colors
         ColumnLayout {
             spacing: units.smallSpacing
-            visible: dialog.expertLevel
+            visible: dialog.advancedLevel
 
             LatteComponents.Header {
                 Layout.columnSpan: 4
@@ -600,144 +744,67 @@ PlasmaComponents.Page {
             }
 
             GridLayout {
+                id: colorsGridLayout
                 Layout.minimumWidth: dialog.optionsWidth
                 Layout.maximumWidth: Layout.minimumWidth
                 Layout.leftMargin: units.smallSpacing * 2
                 Layout.rightMargin: units.smallSpacing * 2
-                columnSpacing: 2
+                Layout.topMargin: units.smallSpacing
+                columnSpacing: units.smallSpacing
                 rowSpacing: units.smallSpacing
-                columns: 3
+                columns: 2
 
-                property int themeColors: plasmoid.configuration.themeColors
-                property int windowColors: plasmoid.configuration.windowColors
+                readonly property bool colorsScriptIsPresent: universalSettings.colorsScriptIsPresent
 
-                readonly property int buttonSize: (dialog.optionsWidth - (columnSpacing*2)) / 3
-
-                ExclusiveGroup {
-                    id: themeColorsGroup
-                    onCurrentChanged: {
-                        if (current.checked) {
-                            plasmoid.configuration.themeColors = current.colors;
-                        }
-                    }
-                }
-
-                ExclusiveGroup {
-                    id: windowColorsGroup
-                    onCurrentChanged: {
-                        if (current.checked) {
-                            plasmoid.configuration.windowColors = current.colors;
-                        }
-                    }
-                }
-
-                LatteComponents.SubHeader {
-                    Layout.columnSpan: 3
-                    isFirstSubCategory: true
+                PlasmaComponents.Label {
                     text: i18n("Theme")
                 }
 
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("Plasma")
-                    checked: parent.themeColors === colors
-                    checkable: true
-                    exclusiveGroup: themeColorsGroup
-                    tooltip: i18n("Plasma theme color palette is going to be used")
+                LatteComponents.ComboBox {
+                    Layout.fillWidth: true
+                    model: [i18nc("plasma theme colors", "Plasma"),
+                        i18nc("reverse plasma theme colors", "Reverse"),
+                        i18nc("smart theme colors", "Smart")]
 
-                    readonly property int colors: Latte.Types.PlasmaThemeColors
+                    currentIndex: plasmoid.configuration.themeColors
+                    onCurrentIndexChanged: plasmoid.configuration.themeColors = currentIndex
                 }
 
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("Reverse")
-                    checked: parent.themeColors === colors
-                    checkable: true
-                    exclusiveGroup: themeColorsGroup
-                    tooltip: i18n("Reverse color palette from plasma theme is going to be used")
-
-                    readonly property int colors: Latte.Types.ReverseThemeColors
-                }
-
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("Smart")
-                    checked: parent.themeColors === colors
-                    checkable: true
-                    exclusiveGroup: themeColorsGroup
-                    tooltip: i18n("Smart color palette is going to provide best contrast after taking into account the environment such as the underlying background")
-
-                    readonly property int colors: Latte.Types.SmartThemeColors
-                }
-
-                LatteComponents.SubHeader {
-                    Layout.columnSpan: 3
+                PlasmaComponents.Label {
                     text: i18n("From Window")
                 }
 
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("None")
-                    checked: parent.windowColors === colors
-                    checkable: true
-                    exclusiveGroup: windowColorsGroup
-                    tooltip: i18n("Colors are not going to be based on any window")
+                LatteComponents.ComboBox {
+                    Layout.fillWidth: true
+                    model: [
+                        {
+                            name:i18n("Disabled"),
+                            icon: "",
+                            toolTip: "Colors are not going to take into account any windows"
+                        },{
+                            name:i18n("Current Active Window"),
+                            icon: !colorsGridLayout.colorsScriptIsPresent ? "state-warning" : "",
+                            toolTip: colorsGridLayout.colorsScriptIsPresent ?
+                                             i18n("Colors are going to be based on the active window") :
+                                             i18n("Colors are going to be based on the active window.\nWarning: You need to install Colors KWin Script from KDE Store")
+                        },{
+                            name: i18n("Any Touching Window"),
+                            icon: !colorsGridLayout.colorsScriptIsPresent ? "state-warning" : "",
+                            toolTip: colorsGridLayout.colorsScriptIsPresent ?
+                                             i18n("Colors are going to be based on windows that are touching the view") :
+                                             i18n("Colors are going to be based on windows that are touching the view.\nWarning: You need to install Colors KWin Script from KDE Store")
+                        }
+                    ]
 
-                    readonly property int colors: Latte.Types.NoneWindowColors
-                }
 
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("Active")
-                    checked: parent.windowColors === colors
-                    checkable: true
-                    exclusiveGroup: windowColorsGroup
-                    tooltip: universalSettings.colorsScriptIsPresent ?
-                                 i18n("Colors are going to be based on the active window") :
-                                 i18n("Colors are going to be based on the active window.\nNotice: For optimal experience you are advised to install Colors KWin Script from KDE Store")
+                    textRole: "name"
+                    iconRole: "icon"
+                    toolTipRole: "toolTip"
+                    blankSpaceForEmptyIcons: !colorsGridLayout.colorsScriptIsPresent
+                    popUpAlignRight: Qt.application.layoutDirection !== Qt.RightToLeft
 
-                    readonly property int colors: Latte.Types.ActiveWindowColors
-
-                    PlasmaCore.IconItem {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        width: height
-                        height: parent.height
-                        source: "state-warning"
-
-                        visible: !universalSettings.colorsScriptIsPresent
-                    }
-                }
-
-                PlasmaComponents.Button {
-                    Layout.minimumWidth: parent.buttonSize
-                    Layout.maximumWidth: Layout.minimumWidth
-                    text: i18n("Touching")
-                    checked: parent.windowColors === colors
-                    checkable: true
-                    exclusiveGroup: windowColorsGroup
-                    tooltip: universalSettings.colorsScriptIsPresent ?
-                                 i18n("Colors are going to be based on windows that are touching the view") :
-                                    i18n("Colors are going to be based on windows that are touching the view.\nNotice: For optimal experience you are advised to install Colors KWin Script from KDE Store")
-
-                    readonly property int colors: Latte.Types.TouchingWindowColors
-
-                    PlasmaCore.IconItem {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        width: height
-                        height: parent.height
-                        source: "state-warning"
-
-                        visible: !universalSettings.colorsScriptIsPresent
-                    }
+                    currentIndex: plasmoid.configuration.windowColors
+                    onCurrentIndexChanged: plasmoid.configuration.windowColors = currentIndex
                 }
             }
         }
@@ -754,7 +821,7 @@ PlasmaComponents.Page {
                 Layout.maximumWidth: Layout.minimumWidth
                 Layout.minimumHeight: implicitHeight
                 Layout.bottomMargin: units.smallSpacing
-                enabled: Latte.WindowSystem.compositingActive
+                enabled: LatteCore.WindowSystem.compositingActive
 
                 checked: plasmoid.configuration.useThemePanel
                 text: i18n("Background")
@@ -773,7 +840,7 @@ PlasmaComponents.Page {
                 RowLayout {
                     Layout.minimumWidth: dialog.optionsWidth
                     Layout.maximumWidth: Layout.minimumWidth
-                    enabled: Latte.WindowSystem.compositingActive
+                    enabled: LatteCore.WindowSystem.compositingActive
 
                     PlasmaComponents.Label {
                         enabled: showBackground.checked
@@ -822,7 +889,7 @@ PlasmaComponents.Page {
                 RowLayout {
                     Layout.minimumWidth: dialog.optionsWidth
                     Layout.maximumWidth: Layout.minimumWidth
-                    enabled: Latte.WindowSystem.compositingActive
+                    enabled: LatteCore.WindowSystem.compositingActive
 
                     PlasmaComponents.Label {
                         text: plasmoid.configuration.backgroundOnlyOnMaximized && plasmoid.configuration.solidBackgroundForMaximized ?
@@ -874,8 +941,93 @@ PlasmaComponents.Page {
                     }
                 }
 
+                RowLayout {
+                    Layout.minimumWidth: dialog.optionsWidth
+                    Layout.maximumWidth: Layout.minimumWidth
+                    visible: dialog.advancedLevel && dialog.kirigamiLibraryIsFound
+
+                    PlasmaComponents.Label {
+                        text: i18n("Radius")
+                        horizontalAlignment: Text.AlignLeft
+                        enabled: radiusSlider.enabled
+                    }
+
+                    LatteComponents.Slider {
+                        id: radiusSlider
+                        Layout.fillWidth: true
+                        enabled: showBackground.checked
+
+                        value: plasmoid.configuration.backgroundRadius
+                        from: -1
+                        to: 100
+                        stepSize: 1
+                        wheelEnabled: false
+
+                        function updateBackgroundRadius() {
+                            if (!pressed) {
+                                plasmoid.configuration.backgroundRadius = value
+                            }
+                        }
+
+                        onPressedChanged: updateBackgroundRadius();
+                        Component.onCompleted: valueChanged.connect(updateBackgroundRadius);
+                        Component.onDestruction: valueChanged.disconnect(updateBackgroundRadius);
+                    }
+
+                    PlasmaComponents.Label {
+                        enabled: radiusSlider.enabled
+                        text: radiusSlider.value >= 0 ? i18nc("number in percentage, e.g. 85 %","%0 %").arg(radiusSlider.value) : i18nc("Default word abbreviation", "Def.")
+                        horizontalAlignment: Text.AlignRight
+                        Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+                        Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+                    }
+                }
+
+                RowLayout {
+                    Layout.minimumWidth: dialog.optionsWidth
+                    Layout.maximumWidth: Layout.minimumWidth
+                    enabled: LatteCore.WindowSystem.compositingActive
+                    visible: dialog.advancedLevel && dialog.kirigamiLibraryIsFound
+
+                    PlasmaComponents.Label {
+                        text: i18n("Shadow")
+                        horizontalAlignment: Text.AlignLeft
+                        enabled: shadowSlider.enabled
+                    }
+
+                    LatteComponents.Slider {
+                        id: shadowSlider
+                        Layout.fillWidth: true
+                        enabled: showBackground.checked && panelShadows.checked
+
+                        value: plasmoid.configuration.backgroundShadowSize
+                        from: -1
+                        to: 50
+                        stepSize: 1
+                        wheelEnabled: false
+
+                        function updateBackgroundShadowSize() {
+                            if (!pressed) {
+                                plasmoid.configuration.backgroundShadowSize = value
+                            }
+                        }
+
+                        onPressedChanged: updateBackgroundShadowSize();
+                        Component.onCompleted: valueChanged.connect(updateBackgroundShadowSize);
+                        Component.onDestruction: valueChanged.disconnect(updateBackgroundShadowSize);
+                    }
+
+                    PlasmaComponents.Label {
+                        enabled: shadowSlider.enabled
+                        text: shadowSlider.value >= 0 ? i18nc("number in pixels, e.g. 12 px.", "%0 px.").arg(shadowSlider.value ) : i18nc("Default word abbreviation", "Def.")
+                        horizontalAlignment: Text.AlignRight
+                        Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+                        Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+                    }
+                }
+
                 LatteComponents.SubHeader {
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
                     isFirstSubCategory: true
                     text: i18n("Options")
                 }
@@ -883,9 +1035,9 @@ PlasmaComponents.Page {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 2
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
 
-                    readonly property int buttonSize: (dialog.optionsWidth - (spacing*2)) / 3
+                    readonly property int buttonSize: (dialog.optionsWidth - (spacing * (children.length-1))) / children.length
 
                     PlasmaComponents.Button {
                         id: panelBlur
@@ -894,7 +1046,7 @@ PlasmaComponents.Page {
                         text: i18n("Blur")
                         checked: plasmoid.configuration.blurEnabled
                         checkable: true
-                        enabled: showBackground.checked && Latte.WindowSystem.compositingActive
+                        enabled: showBackground.checked && LatteCore.WindowSystem.compositingActive
                         tooltip: i18n("Background is blurred underneath")
 
                         onClicked: {
@@ -909,7 +1061,7 @@ PlasmaComponents.Page {
                         text: i18n("Shadows")
                         checked: plasmoid.configuration.panelShadows
                         checkable: true
-                        enabled: showBackground.checked && Latte.WindowSystem.compositingActive
+                        enabled: showBackground.checked && LatteCore.WindowSystem.compositingActive && themeExtended.hasShadow
                         tooltip: i18n("Background shows its shadows")
 
                         onClicked: {
@@ -931,16 +1083,35 @@ PlasmaComponents.Page {
                             plasmoid.configuration.panelOutline = !plasmoid.configuration.panelOutline;
                         }
                     }
+
+                    PlasmaComponents.Button {
+                        id: allCorners
+                        Layout.minimumWidth: parent.buttonSize
+                        Layout.maximumWidth: Layout.minimumWidth
+                        text: i18n("All Corners")
+                        checked: plasmoid.configuration.backgroundAllCorners
+                        checkable: true
+                        enabled: showBackground.checked
+                                 && ((plasmoid.configuration.screenEdgeMargin===-1) /*no-floating*/
+                                     || (plasmoid.configuration.screenEdgeMargin > -1 /*floating with justify alignment and 100% maxlength*/
+                                         && plasmoid.configuration.alignment ===LatteCore.Types.Justify
+                                         && plasmoid.configuration.maxLength===100))
+                        tooltip: i18n("Background draws all corners at all cases.")
+
+                        onClicked: {
+                            plasmoid.configuration.backgroundAllCorners = !plasmoid.configuration.backgroundAllCorners;
+                        }
+                    }
                 }
 
                 LatteComponents.SubHeader {
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
                     text: i18nc("dynamic visibility for background", "Dynamic Visibility")
-                    enabled: Latte.WindowSystem.compositingActive
+                    enabled: LatteCore.WindowSystem.compositingActive
                 }
 
                 LatteComponents.CheckBoxesColumn {
-                    enabled: Latte.WindowSystem.compositingActive
+                    enabled: LatteCore.WindowSystem.compositingActive
                     LatteComponents.CheckBox {
                         id: solidForMaximizedChk
                         Layout.maximumWidth: dialog.optionsWidth
@@ -948,7 +1119,7 @@ PlasmaComponents.Page {
                         checked: plasmoid.configuration.solidBackgroundForMaximized
                         tooltip: i18n("Background removes its transparency setting when a window is touching")
                         enabled: showBackground.checked
-                        visible: dialog.expertLevel
+                        visible: dialog.advancedLevel
 
                         onClicked: {
                             plasmoid.configuration.solidBackgroundForMaximized = checked;
@@ -962,7 +1133,7 @@ PlasmaComponents.Page {
                         checked: plasmoid.configuration.backgroundOnlyOnMaximized
                         tooltip: i18n("Background becomes hidden except when a window is touching or the desktop background is busy")
                         enabled: showBackground.checked
-                        visible: dialog.expertLevel
+                        visible: dialog.advancedLevel
 
                         onClicked: {
                             plasmoid.configuration.backgroundOnlyOnMaximized = checked;
@@ -976,7 +1147,7 @@ PlasmaComponents.Page {
                         checked: plasmoid.configuration.disablePanelShadowForMaximized
                         tooltip: i18n("Background shadows become hidden when an active maximized window is touching the view")
                         enabled: showBackground.checked
-                        visible: dialog.expertLevel
+                        visible: dialog.advancedLevel
 
                         onClicked: {
                             plasmoid.configuration.disablePanelShadowForMaximized = checked;
@@ -985,9 +1156,9 @@ PlasmaComponents.Page {
                 }
 
                 LatteComponents.SubHeader {
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
                     text: i18n("Exceptions")
-                    enabled: Latte.WindowSystem.compositingActive
+                    enabled: LatteCore.WindowSystem.compositingActive
                 }
 
                 LatteComponents.CheckBox {
@@ -997,7 +1168,7 @@ PlasmaComponents.Page {
                     checked: plasmoid.configuration.plasmaBackgroundForPopups
                     tooltip: i18n("Background becomes opaque in plasma style when applets are expanded")
                     enabled: showBackground.checked
-                    visible: dialog.expertLevel
+                    visible: dialog.advancedLevel
 
                     onClicked: {
                         plasmoid.configuration.plasmaBackgroundForPopups = checked;
