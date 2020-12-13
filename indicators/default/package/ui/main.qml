@@ -25,15 +25,20 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 LatteComponents.IndicatorItem{
     id: root
     extraMaskThickness: reversedEnabled && glowEnabled ? 1.7 * (factor * indicator.maxIconSize) : 0
 
+    enabledForApplets: indicator && indicator.configuration ? indicator.configuration.enabledForApplets : true
+    lengthPadding: indicator && indicator.configuration ? indicator.configuration.lengthPadding : 0.08
+
     readonly property real factor: 0.08
     readonly property int size: factor * indicator.currentIconSize
+
+    readonly property int screenEdgeMargin: plasmoid.location === PlasmaCore.Types.Floating || reversedEnabled ? 0 : indicator.screenEdgeMargin
 
     property real textColorBrightness: colorBrightness(theme.textColor)
 
@@ -45,6 +50,7 @@ LatteComponents.IndicatorItem{
 
         return isActiveColor;
     }
+
     property color notActiveColor: indicator.isMinimized ? minimizedColor : isActiveColor
 
     //! Common Options
@@ -108,7 +114,7 @@ LatteComponents.IndicatorItem{
 
                 size: root.size
                 glow3D: glow3D
-                animation: Math.max(1.65*3*units.longDuration,indicator.durationTime*3*units.longDuration)
+                animation: Math.max(1.65*3*LatteCore.Environment.longDuration,indicator.durationTime*3*LatteCore.Environment.longDuration)
                 location: plasmoid.location
                 glowOpacity: root.glowOpacity
                 contrastColor: indicator.shadowColor
@@ -129,7 +135,7 @@ LatteComponents.IndicatorItem{
                 property int stateWidth: indicator.isGroup ? root.width - secondPoint.width : root.width - spacer.width
                 property int stateHeight: indicator.isGroup ? root.height - secondPoint.height : root.height - spacer.height
 
-                property int animationTime: indicator.durationTime* (0.7*units.longDuration)
+                property int animationTime: indicator.durationTime* (0.7*LatteCore.Environment.longDuration)
 
                 property bool isActive: indicator.hasActive || indicator.isActive
 
@@ -223,7 +229,7 @@ LatteComponents.IndicatorItem{
 
                 size: root.size
                 glow3D: glow3D
-                animation: Math.max(1.65*3*units.longDuration,indicator.durationTime*3*units.longDuration)
+                animation: Math.max(1.65*3*LatteCore.Environment.longDuration,indicator.durationTime*3*LatteCore.Environment.longDuration)
                 location: plasmoid.location
                 glowOpacity: root.glowOpacity
                 contrastColor: indicator.shadowColor
@@ -254,6 +260,11 @@ LatteComponents.IndicatorItem{
                     anchors{ verticalCenter:parent.verticalCenter; horizontalCenter:undefined;
                         top:undefined; bottom:undefined; left:parent.left; right:undefined;}
                 }
+                PropertyChanges{
+                    target: mainIndicatorElement
+                    anchors.leftMargin: root.screenEdgeMargin;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin:0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
             },
             State {
                 name: "bottom"
@@ -266,6 +277,11 @@ LatteComponents.IndicatorItem{
                     anchors{ verticalCenter:undefined; horizontalCenter:parent.horizontalCenter;
                         top:undefined; bottom:parent.bottom; left:undefined; right:undefined;}
                 }
+                PropertyChanges{
+                    target: mainIndicatorElement
+                    anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: root.screenEdgeMargin;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
             },
             State {
                 name: "top"
@@ -277,6 +293,11 @@ LatteComponents.IndicatorItem{
                     anchors{ verticalCenter:undefined; horizontalCenter:parent.horizontalCenter;
                         top:parent.top; bottom:undefined; left:undefined; right:undefined;}
                 }
+                PropertyChanges{
+                    target: mainIndicatorElement
+                    anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: root.screenEdgeMargin;    anchors.bottomMargin:0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                }
             },
             State {
                 name: "right"
@@ -287,6 +308,11 @@ LatteComponents.IndicatorItem{
                     target: mainIndicatorElement
                     anchors{ verticalCenter:parent.verticalCenter; horizontalCenter:undefined;
                         top:undefined; bottom:undefined; left:undefined; right:parent.right;}
+                }
+                PropertyChanges{
+                    target: mainIndicatorElement
+                    anchors.leftMargin: 0;    anchors.rightMargin: root.screenEdgeMargin;     anchors.topMargin:0;    anchors.bottomMargin:0;
+                    anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                 }
             }
         ]

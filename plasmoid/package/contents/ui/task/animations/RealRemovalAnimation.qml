@@ -21,8 +21,9 @@
 import QtQuick 2.0
 
 import org.kde.plasma.plasmoid 2.0
+import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 SequentialAnimation {
     id: taskRealRemovalAnimation
@@ -31,26 +32,31 @@ SequentialAnimation {
     PropertyAction { target: taskItem; property: "inAddRemoveAnimation"; value: true }
     PropertyAction { target: taskItem; property: "inRemoveStage"; value: true }
 
-    //Animation Add/Remove (1) - when is window with no launcher, animations enabled
+    //Animation Add/Remove (1) - when is window with no launcher in current activity, animations enabled
     //Animation Add/Remove (4) - the user removes a launcher, animation enabled
-    property bool animation1: ((((tasksModel.launcherPosition(taskItem.launcherUrl) === -1)
-                                 && (tasksModel.launcherPosition(taskItem.launcherUrlWithIcon) === -1) )
-                                || !tasksModel.launcherInCurrentActivity(taskItem.launcherUrl))
-                               && !taskItem.isStartup && Latte.WindowSystem.compositingActive)
+    property bool animation1: ( (tasksModel.launcherPosition(taskItem.launcherUrl) === -1 /*no-launcher*/
+                                 && tasksModel.launcherPosition(taskItem.launcherUrlWithIcon) === -1)
+                               || ((!tasksModel.launcherInCurrentActivity(taskItem.launcherUrl)/*no-launcher-in-current-activity*/
+                                    && !tasksModel.launcherInCurrentActivity(taskItem.launcherUrlWithIcon)))
+                               && !taskItem.isStartup && LatteCore.WindowSystem.compositingActive)
 
     property bool animation4: ((taskItem.launcherUrl===root.launcherForRemoval
                                 || taskItem.launcherUrlWithIcon===root.launcherForRemoval )
-                               && !taskItem.isStartup && Latte.WindowSystem.compositingActive)
+                               && !taskItem.isStartup && LatteCore.WindowSystem.compositingActive)
 
-    property bool enabledAnimation: (animation1 || animation4) && (root.animationNewWindowSliding)
+    property bool enabledAnimation: (animation1 || animation4) && (taskItem.animations.newWindowSlidingEnabled)
                                     && !taskItem.inBouncingAnimation
                                     && !taskItem.isSeparator
                                     && taskItem.visible;
+
+    readonly property string needLengthEvent: taskRealRemovalAnimation + "_realremoval"
+
     ScriptAction{
         script:{
             //! When a window is removed and afterwards its launcher must be shown immediately!
             if (!enabledAnimation && taskItem.isWindow && !taskItem.isSeparator
-                    && tasksModel.launcherPosition(taskItem.launcherUrl) !== -1
+                    && (tasksModel.launcherInCurrentActivity(taskItem.launcherUrl)
+                        || tasksModel.launcherInCurrentActivity(taskItem.launcherUrlWithIcon))
                     && !tasksExtendedManager.immediateLauncherExists(taskItem.launcherUrl)){
                 tasksExtendedManager.addImmediateLauncher(taskItem.launcherUrl);
             }
@@ -59,23 +65,37 @@ SequentialAnimation {
             //during the removal the anchoring for ListView children changes a lot
             var previousTask = icList.childAtIndex(taskItem.lastValidIndex-1);
 
-            if (previousTask !== undefined && !previousTask.isStartup && !previousTask.inBouncingAnimation){
-                //! When removing a task and there are surrounding separators then the hidden spacers
-                //! are updated immediately for the neighbour tasks. In such case in order to not break
-                //! the removal animation a small margin must applied
-                var nextTaskIsSeparator = (lastValidIndex !== -1) && enabledAnimation &&
-                        ((taskItem.hasNeighbourSeparator(lastValidIndex+1,true) && !taskItem.isSeparator && lastValidIndex<parabolicManager.lastRealTaskIndex)
-                         || (latteView && latteView.parabolicManager.isSeparator(latteView.latteAppletPos+1) && lastValidIndex>parabolicManager.lastRealTaskIndex));
+            //! When removing a task and there are surrounding separators then the hidden spacers
+            //! are updated immediately for the neighbour tasks. In such case in order to not break
+            //! the removal animation a small margin must applied
+            var spacer = taskItem.headItemIsSeparator ? -(2+taskItem.metrics.totals.lengthEdge) : ( taskItem.headItemIsSeparator ? (2+taskItem.metrics.totals.lengthEdge)/2 : 0);
 
-                var previousTaskIsSeparator = (lastValidIndex !== -1) && enabledAnimation &&
-                        ((taskItem.hasNeighbourSeparator(lastValidIndex-1,false) && !taskItem.isSeparator && lastValidIndex>parabolicManager.firstRealTaskIndex)
-                         || (latteView && latteView.parabolicManager.isSeparator(latteView.latteAppletPos-1) && lastValidIndex<=parabolicManager.firstRealTaskIndex));
+            if (!taskItem.inBouncingAnimation && !animation4) {
+                //! real slide-out case
+                var taskInListPos = mapToItem(icList, 0, 0);
+                taskItem.parent = icList;
 
-                var spacer = nextTaskIsSeparator ? -(2+root.lengthMargin) : ( previousTaskIsSeparator ? (2+root.lengthMargin)/2 : 0);
+                if (root.vertical) {
+                    taskItem.anchors.top = icList.top;
+                    taskItem.anchors.topMargin = taskInListPos.y + spacer;
 
-                //console.log("EDGES ::: " + parabolicManager.firstRealTaskIndex + " _ " + parabolicManager.lastRealTaskIndex);
-                //console.log("Removing ::: " + lastValidIndex + " _ " + launcherUrl + " _ " + previousTaskIsSeparator + " _ " + nextTaskIsSeparator);
+                    if (root.location===PlasmaCore.Types.LeftEdge) {
+                        taskItem.anchors.left = icList.left;
+                    } else {
+                        taskItem.anchors.right = icList.right;
+                    }
+                } else {
+                    taskItem.anchors.left = icList.left;
+                    taskItem.anchors.leftMargin = taskInListPos.x + spacer;
 
+                    if (root.location===PlasmaCore.Types.TopEdge) {
+                        taskItem.anchors.top = icList.top;
+                    } else {
+                        taskItem.anchors.bottom = icList.bottom;
+                    }
+                }
+            } else if (previousTask !== undefined && !previousTask.isStartup && !previousTask.inBouncingAnimation ) {
+                // bouncing case
                 if (root.vertical) {
                     taskItem.anchors.top = previousTask.bottom;
                     taskItem.anchors.topMargin = spacer;
@@ -85,13 +105,14 @@ SequentialAnimation {
                 }
             }
 
-            // console.log("1." + taskItem.launcherUrl + " - " + taskRealRemovalAnimation.enabledAnimation);
-            // console.log("2." + root.launcherForRemoval + " - " + taskItem.isLauncher);
+            //console.log("1." + taskItem.launcherUrl + " - " + tasksModel.launcherInCurrentActivity(taskItem.launcherUrl) + "__" +
+            //            animation1 + ":" + animation4 + "=>" + taskRealRemovalAnimation.enabledAnimation);
+            //console.log("2." + root.launcherForRemoval + " - " + taskItem.isLauncher);
 
-            root.signalAnimationsNeedLength(1);
+            taskItem.animations.needLength.addEvent(needLengthEvent);
 
             if (wrapper.mScale > 1 && !taskRealRemovalAnimation.enabledAnimation
-                    && !taskItem.inBouncingAnimation && Latte.WindowSystem.compositingActive) {
+                    && !taskItem.inBouncingAnimation && LatteCore.WindowSystem.compositingActive) {
                 tasksExtendedManager.setFrozenTask(taskItem.launcherUrl, wrapper.mScale);
             }
         }
@@ -109,7 +130,7 @@ SequentialAnimation {
         duration:  taskItem.inBouncingAnimation  && !taskItem.isSeparator? 4*launcherSpeedStep + 50 : 0
         easing.type: Easing.InQuad
 
-        property int launcherSpeedStep: root.durationTime * 0.8 * units.longDuration
+        property int launcherSpeedStep: 0.8 * taskItem.animations.speedFactor.current * taskItem.animations.duration.large
     }
     //end of ghost animation
 
@@ -159,10 +180,10 @@ SequentialAnimation {
             if (showWindowAnimation.animationSent){
                 //console.log("SAFETY REMOVAL 1: animation removing ended");
                 showWindowAnimation.animationSent = false;
-                root.signalAnimationsNeedLength(-1);
+                taskItem.animations.needLength.removeEvent(showWindowAnimation.needLengthEvent);
             }
 
-            root.signalAnimationsNeedLength(-1);
+            taskItem.animations.needLength.removeEvent(needLengthEvent);
 
             if(taskItem.launcherUrl===root.launcherForRemoval && taskItem.isLauncher)
                 root.launcherForRemoval="";
@@ -172,7 +193,7 @@ SequentialAnimation {
                 hidePreview();
             }
 
-            if (root.showWindowsOnlyFromLaunchers) {
+            if (root.showWindowsOnlyFromLaunchers || root.disableAllWindowsFunctionality) {
                 if (root.vertical) {
                     taskItem.anchors.top = undefined;
                     taskItem.anchors.topMargin = 0;
@@ -187,7 +208,7 @@ SequentialAnimation {
             //send signal that the launcher is really removing
             if (taskItem.inBouncingAnimation) {
                 tasksExtendedManager.removeWaitingLauncher(taskItem.launcherUrl);
-                root.setGlobalDirectRender(false);
+                taskItem.parabolic.setDirectRenderingEnabled(false);
             }
         }
     }

@@ -20,7 +20,7 @@
 
 import QtQuick 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 Item{
     id: hiddenSpacer
@@ -28,11 +28,11 @@ Item{
     width: root.vertical ? wrapper.width : nHiddenSize
     height: root.vertical ? nHiddenSize : wrapper.height
 
-    visible: (rightSpacer ? index === parabolicManager.lastRealTaskIndex : index === parabolicManager.firstRealTaskIndex)
+    visible: (rightSpacer ? index === taskItem.indexer.lastVisibleItemIndex : index === taskItem.indexer.firstVisibleItemIndex)
              || (separatorSpace > 0) || taskItem.inAttentionAnimation
              || taskItem.inFastRestoreAnimation || taskItem.inMimicParabolicAnimation
 
-    property bool neighbourSeparator: false
+    property bool neighbourSeparator: rightSpacer ? taskItem.headItemIsSeparator : taskItem.tailItemIsSeparator
     //in case there is a neighbour separator, lastValidIndex is used in order to protect from false
     //when the task is removed
     property int indexUsed: index === -1 ? lastValidIndex : index
@@ -45,9 +45,9 @@ Item{
     //and it is used later on Behaviors in order to not break
     //the activity change animations from removal/additions of tasks
     //! && !root.inActivityChange (deprecated) in order to check if it is fixed
-    property int separatorSpace: neighbourSeparator && !isSeparator && root.parabolicEffectEnabled
-                                 && !(parabolicManager.hasInternalSeparator && root.dragSource) ?
-                                     (2.5+root.lengthExtMargin) : 0
+    property int separatorSpace: neighbourSeparator && !isSeparator && taskItem.parabolic.isEnabled
+                                 && !(taskItem.indexer.separators.length>0 && root.dragSource) ?
+                                     ((LatteCore.Environment.separatorLength/2)+taskItem.metrics.margin.length) : 0
 
     property bool rightSpacer: false
 
@@ -63,93 +63,36 @@ Item{
             } else if (!inAttentionAnimation && !inMimicParabolicAnimation && !inFastRestoreAnimation) {
                 return (nScale > 0) ? (taskItem.spacersMaxSize * nScale) + separatorSpace : separatorSpace;
             } else {
-                return (nScale > 0) ? (root.iconSize * nScale) + separatorSpace : separatorSpace;
+                return (nScale > 0) ? (taskItem.metrics.iconSize * nScale) + separatorSpace : separatorSpace;
             }
         }
-    }
-
-    function updateNeighbour() {
-        //index===-1 indicates that this item is removed
-        if (taskItem.inBouncingAnimation) {
-            return;
-        }
-
-        if (root.editMode && root.inConfigureAppletsMode) {
-            neighbourSeparator = false;
-        } else if (latteView && index!==-1) {
-            if (!rightSpacer) {
-                neighbourSeparator = (taskItem.hasNeighbourSeparator(itemIndex-1, false) && !isSeparator && itemIndex!==parabolicManager.firstRealTaskIndex)
-                        || (latteView.parabolicManager.isSeparator(latteView.latteAppletPos-1) && parabolicManager.firstRealTaskIndex === itemIndex);
-            } else {
-                if (itemIndex >= root.tasksCount) {
-                    return;
-                }
-
-                neighbourSeparator = (taskItem.hasNeighbourSeparator(itemIndex+1,true) && !isSeparator && itemIndex!==parabolicManager.lastRealTaskIndex)
-                        || (latteView.parabolicManager.isSeparator(latteView.latteAppletPos+1) && parabolicManager.lastRealTaskIndex === itemIndex );
-            }
-
-            /* if (launcherUrl.indexOf("kwrite") > -1 || launcherUrl.indexOf("dolphin") > -1 ) {
-                var spacerName = "left";
-                if (rightSpacer)
-                    spacerName = "right";
-
-                console.log(launcherUrl +":" + itemIndex +"," + spacerName + " _-_- " +neighbourSeparator);
-            }*/
-        }
-    }
-
-    Connections{
-        target: root
-        onEditModeChanged: hiddenSpacer.updateNeighbour();
-        onInConfigureAppletsModeChanged: hiddenSpacer.updateNeighbour();
-        onLatteViewChanged: hiddenSpacer.updateNeighbour();
-        // onInternalSeparatorHiddenChanged: hiddenSpacer.updateNeighbour();
-        onSeparatorsUpdated: hiddenSpacer.updateNeighbour();
-    }
-
-    Connections{
-        target: latteView
-        onSeparatorsUpdated: hiddenSpacer.updateNeighbour();
-        onLatteAppletPosChanged: hiddenSpacer.updateNeighbour();
-    }
-
-    Connections{
-        target: parabolicManager
-        onFirstRealTaskIndexChanged: hiddenSpacer.updateNeighbour();
-        onLastRealTaskIndexChanged: hiddenSpacer.updateNeighbour();
     }
 
     Connections{
         target: taskItem
-        onItemIndexChanged: hiddenSpacer.updateNeighbour();
-    }
-
-    Component.onCompleted: {
-        root.hiddenTasksUpdated.connect(updateNeighbour);
-        hiddenSpacer.updateNeighbour();
-    }
-
-    Component.onDestruction: {
-        root.hiddenTasksUpdated.disconnect(updateNeighbour);
+        onContainsMouseChanged: {
+            if (!taskItem.containsMouse && !inAttentionAnimation && !inFastRestoreAnimation && !inMimicParabolicAnimation) {
+                hiddenSpacer.nScale = 0;
+            }
+        }
     }
 
     Behavior on nHiddenSize {
         id: animatedBehavior
         enabled: (taskItem.inFastRestoreAnimation || showWindowAnimation.running || restoreAnimation.running
                   || root.inActivityChange || taskItem.inRemoveStage)
-                 || (taskItem.containsMouse && inAttentionAnimation && wrapper.mScale!==root.zoomFactor)
+                 || (taskItem.containsMouse && inAttentionAnimation && wrapper.mScale!==taskItem.parabolic.factor.zoom)
         NumberAnimation{ duration: 3 * taskItem.animationTime }
     }
 
     Behavior on nHiddenSize {
         id: directBehavior
-        enabled: !animatedBehavior.running
-        NumberAnimation { duration: root.directRenderAnimationTime }
+        enabled: !animatedBehavior.enabled
+        NumberAnimation { duration: 0 }
     }
 
     Loader{
-        active: latteView && latteView.debugModeSpacers
+        active: taskItem.debug.spacersEnabled
 
         sourceComponent: Rectangle{
             width: !root.vertical ? hiddenSpacer.width : 1

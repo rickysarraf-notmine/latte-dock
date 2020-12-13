@@ -20,7 +20,7 @@
 #include "checkboxdelegate.h"
 
 // local
-#include "../settingsdialog.h"
+#include "../models/layoutsmodel.h"
 #include "../tools/settingstools.h"
 
 // Qt
@@ -32,98 +32,62 @@
 #include <QPainter>
 #include <QStandardItemModel>
 
-const int HIDDENTEXTCOLUMN = 1;
+namespace Latte {
+namespace Settings {
+namespace Layout {
+namespace Delegate {
 
-CheckBoxDelegate::CheckBoxDelegate(QObject *parent)
+const QChar HeavyCheckMark{0x2714};
+const QChar CheckMark{0x2713};
+
+CheckBox::CheckBox(QObject *parent)
     : QStyledItemDelegate(parent)
 {
-    auto *settingsDialog = qobject_cast<Latte::SettingsDialog *>(parent);
-
-    if (settingsDialog) {
-        m_settingsDialog = settingsDialog;
-    }
 }
 
-void CheckBoxDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+void CheckBox::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
     QStyleOptionViewItem adjustedOption = option;
     //! Remove the focus dotted lines
     adjustedOption.state = (adjustedOption.state & ~QStyle::State_HasFocus);
+    adjustedOption.displayAlignment = Qt::AlignHCenter | Qt::AlignVCenter;
 
-    if (adjustedOption.state & QStyle::State_Enabled) {
-        QStandardItemModel *model = (QStandardItemModel *) index.model();
-        QStyledItemDelegate::paint(painter, adjustedOption, model->index(index.row(), HIDDENTEXTCOLUMN));
+    bool originalChecked{false};
+    bool currentChecked = index.data(Qt::UserRole).toBool();
 
-        QStyledItemDelegate::paint(painter, adjustedOption, index);
+    if (index.column() == Model::Layouts::MENUCOLUMN) {
+        originalChecked =  index.data(Model::Layouts::ORIGINALISSHOWNINMENUROLE).toBool();
+    } else if (index.column() == Model::Layouts::BORDERSCOLUMN) {
+        originalChecked =  index.data(Model::Layouts::ORIGINALHASBORDERSROLE).toBool();
     } else {
-        // Disabled
-        bool isSelected{Latte::isSelected(option)};
-        QPalette::ColorRole backColorRole = isSelected ? QPalette::Highlight : QPalette::Base;
-        QPalette::ColorRole textColorRole = isSelected ? QPalette::HighlightedText : QPalette::Text;
-
-        // background
-        painter->fillRect(option.rect, option.palette.brush(Latte::colorGroup(option), backColorRole));
-
-        // text
-        QPen pen(Qt::DashDotDotLine);
-        pen.setWidth(2); pen.setColor(option.palette.brush(Latte::colorGroup(option), textColorRole).color());
-        int y = option.rect.y()+option.rect.height()/2;
-
-        bool inMenu = m_settingsDialog->isMenuCell(index.column());
-        int space = inMenu ? option.rect.height() / 2 : 0;
-
-        painter->setPen(pen);
-
-        if (qApp->layoutDirection() == Qt::LeftToRight) {
-            painter->drawLine(option.rect.x() + space, y,
-                              option.rect.x() + option.rect.width(), y);
-
-            if (inMenu) {
-                int xm = option.rect.x() + space;
-                int thick = option.rect.height() / 2;
-                int ym = option.rect.y() + ((option.rect.height() - thick) / 2);
-
-                pen.setStyle(Qt::SolidLine);
-                painter->setPen(pen);
-                painter->drawLine(xm, ym, xm, ym + thick);
-            }
-
-        } else {
-            painter->drawLine(option.rect.x(), y,
-                              option.rect.x()+option.rect.width() - space, y);
-
-            if (inMenu) {
-                int xm = option.rect.x() + option.rect.width() - space;
-                int thick = option.rect.height() / 2;
-                int ym = option.rect.y() + ((option.rect.height() - thick) / 2);
-
-                pen.setStyle(Qt::SolidLine);
-                painter->setPen(pen);
-                painter->drawLine(xm, ym, xm, ym + thick);
-            }
-        }
+        originalChecked = currentChecked;
     }
+
+    bool isChanged = (originalChecked != currentChecked);
+
+    if (isChanged) {
+        adjustedOption.font.setPointSize(adjustedOption.font.pointSize() + 2);
+        adjustedOption.font.setBold(true);
+    } else {
+        // normal appearance
+    }
+
+    if (currentChecked) {
+        adjustedOption.text = isChanged ? HeavyCheckMark : CheckMark;
+    } else {
+        adjustedOption.text = "";
+    }
+
+
+    QStyledItemDelegate::paint(painter, adjustedOption, index);
 }
 
-bool CheckBoxDelegate::editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option,
-                                   const QModelIndex &index)
+bool CheckBox::editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option,
+                           const QModelIndex &index)
 {
     Q_ASSERT(event);
     Q_ASSERT(model);
 
-//     // make sure that the item is checkable
-//     Qt::ItemFlags flags = model->flags(index);
-//
-//     if (!(flags & Qt::ItemIsUserCheckable) || !(flags & Qt::ItemIsEnabled))
-//         return false;
-//
-//     // make sure that we have a check state
-    QString value{index.data().toString()};
-//
-//     if (!value.isValid())
-//         return false;
-
-    // make sure that we have the right event type
     if (event->type() == QEvent::MouseButtonDblClick) {
         if (!option.rect.contains(static_cast<QMouseEvent *>(event)->pos()))
             return false;
@@ -134,6 +98,11 @@ bool CheckBoxDelegate::editorEvent(QEvent *event, QAbstractItemModel *model, con
         return false;
     }
 
-    const QChar CheckMark{0x2714};
-    return model->setData(index, value == CheckMark ? QString("") : CheckMark, Qt::DisplayRole);
+    const bool currentState = index.data(Qt::UserRole).toBool();
+    return model->setData(index, !currentState, Qt::UserRole);
+}
+
+}
+}
+}
 }

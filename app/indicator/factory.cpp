@@ -29,6 +29,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QTemporaryDir>
+#include <QTimer>
 
 // KDE
 #include <KDirWatch>
@@ -49,23 +50,32 @@ Factory::Factory(QObject *parent)
 {
     m_parentWidget = new QWidget();
 
-    m_watchedPaths = Latte::Layouts::Importer::standardPaths();
+    m_mainPaths = Latte::Layouts::Importer::standardPaths();
 
-    for(int i=0; i<m_watchedPaths.count(); ++i) {
-        m_watchedPaths[i] = m_watchedPaths[i] + "/latte/indicators";
+    for(int i=0; i<m_mainPaths.count(); ++i) {
+        m_mainPaths[i] = m_mainPaths[i] + "/latte/indicators";
+        discoverNewIndicators(m_mainPaths[i]);
     }
 
-    reload();
-
     //! track paths for changes
-    for(const auto &dir : m_watchedPaths) {
+    for(const auto &dir : m_mainPaths) {
         KDirWatch::self()->addDir(dir);
     }
 
     connect(KDirWatch::self(), &KDirWatch::dirty, this, [ & ](const QString & path) {
-        if (m_watchedPaths.contains(path)) {
-            reload();
-            emit pluginsUpdated();
+        if (m_indicatorsPaths.contains(path)) {
+            //! indicator updated
+            reload(path);
+        } else if (m_mainPaths.contains(path)){
+            //! consider indicator addition
+            discoverNewIndicators(path);
+        }
+    });
+
+    connect(KDirWatch::self(), &KDirWatch::deleted, this, [ & ](const QString & path) {
+        if (m_indicatorsPaths.contains(path)) {
+            //! indicator removed
+            removeIndicatorRecords(path);
         }
     });
 
@@ -111,62 +121,108 @@ KPluginMetaData Factory::metadata(QString pluginId)
     return KPluginMetaData();
 }
 
-void Factory::reload()
+void Factory::reload(const QString &indicatorPath)
 {
-    m_plugins.clear();
-    m_pluginUiPaths.clear();
-    m_customPluginIds.clear();
-    m_customPluginNames.clear();
-    m_customLocalPluginIds.clear();
+    QString pluginChangedId;
 
-    for(const auto &path : m_watchedPaths) {
-        QDir standard(path);
+    if (!indicatorPath.isEmpty() && indicatorPath != "." && indicatorPath != "..") {
+        QString metadataFile = indicatorPath + "/metadata.desktop";
 
-        if (standard.exists()) {
-            QStringList pluginDirs = standard.entryList(QStringList(),QDir::AllDirs | QDir::NoSymLinks);
+        if(QFileInfo(metadataFile).exists()) {
+            KPluginMetaData metadata = KPluginMetaData::fromDesktopFile(metadataFile);
 
-            for (const auto &pluginDir : pluginDirs) {
-                if (pluginDir != "." && pluginDir != "..") {
-                    QString metadataFile = standard.absolutePath() + "/" + pluginDir + "/metadata.desktop";
+            if (metadataAreValid(metadata)) {
+                pluginChangedId = metadata.pluginId();
+                QString uiFile = indicatorPath + "/package/" + metadata.value("X-Latte-MainScript");
 
-                    if(QFileInfo(metadataFile).exists()) {
-                        KPluginMetaData metadata = KPluginMetaData::fromDesktopFile(metadataFile);
+                if (!m_plugins.contains(metadata.pluginId())) {
+                    m_plugins[metadata.pluginId()] = metadata;
+                }
 
-                        if (metadataAreValid(metadata)) {
-                            QString uiFile = standard.absolutePath() + "/" + pluginDir + "/package/" + metadata.value("X-Latte-MainScript");
+                if (QFileInfo(uiFile).exists()) {
+                    m_pluginUiPaths[metadata.pluginId()] = QFileInfo(uiFile).absolutePath();
+                }
 
-                            if (QFileInfo(uiFile).exists() && !m_plugins.contains(metadata.pluginId())) {
-                                m_plugins[metadata.pluginId()] = metadata;
+                if ((metadata.pluginId() != "org.kde.latte.default")
+                        && (metadata.pluginId() != "org.kde.latte.plasma")
+                        && (metadata.pluginId() != "org.kde.latte.plasmatabstyle")) {
 
-                                if ((metadata.pluginId() != "org.kde.latte.default")
-                                        && (metadata.pluginId() != "org.kde.latte.plasma")) {
-                                    m_customPluginIds << metadata.pluginId();
-                                    m_customPluginNames << metadata.name();
-                                }
+                    if (!m_customPluginIds.contains(metadata.pluginId())) {
+                        m_customPluginIds << metadata.pluginId();
+                    }
 
-                                if (standard.absolutePath().startsWith(QDir::homePath())) {
-                                    m_customLocalPluginIds << metadata.pluginId();
-                                }
+                    if (!m_customPluginNames.contains(metadata.name())) {
+                        m_customPluginNames << metadata.name();
+                    }
+                }
 
-                                m_pluginUiPaths[metadata.pluginId()] = QFileInfo(uiFile).absolutePath();
+                if (indicatorPath.startsWith(QDir::homePath())) {
+                    m_customLocalPluginIds << metadata.pluginId();
+                }
+            }
 
-                                QString pluginPath = metadata.fileName().remove("metadata.desktop");
-                                qDebug() << " Indicator Package Loaded ::: " << metadata.name() << " [" << metadata.pluginId() << "]" << " - [" <<pluginPath<<"]";
+            qDebug() << " Indicator Package Loaded ::: " << metadata.name() << " [" << metadata.pluginId() << "]" << " - [" << indicatorPath <<"]";
 
-                                /*qDebug() << " Indicator value ::: " << metadata.pluginId();
+            /*qDebug() << " Indicator value ::: " << metadata.pluginId();
                             qDebug() << " Indicator value ::: " << metadata.fileName();
                             qDebug() << " Indicator value ::: " << metadata.value("X-Latte-MainScript");
                             qDebug() << " Indicator value ::: " << metadata.value("X-Latte-ConfigUi");
                             qDebug() << " Indicator value ::: " << metadata.value("X-Latte-ConfigXml");*/
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
-    emit customPluginsChanged();
+    if (!pluginChangedId.isEmpty()) {
+        emit indicatorChanged(pluginChangedId);
+    }
+}
+
+void Factory::discoverNewIndicators(const QString &main)
+{
+    if (!m_mainPaths.contains(main)) {
+        return;
+    }
+
+    QDirIterator indicatorsDirs(main, QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot, QDirIterator::NoIteratorFlags);
+
+    while(indicatorsDirs.hasNext()){
+        indicatorsDirs.next();
+        QString iPath = indicatorsDirs.filePath();
+
+        if (!m_indicatorsPaths.contains(iPath)) {
+            m_indicatorsPaths << iPath;
+            KDirWatch::self()->addDir(iPath);
+            reload(iPath);
+        }
+    }
+}
+
+void Factory::removeIndicatorRecords(const QString &path)
+{
+    if (m_indicatorsPaths.contains(path)) {
+        QString pluginId =  path.section('/',-1);
+        m_plugins.remove(pluginId);
+        m_pluginUiPaths.remove(pluginId);
+
+        int pos = m_customPluginIds.indexOf(pluginId);
+
+        m_customPluginIds.removeAt(pos);
+        m_customPluginNames.removeAt(pos);
+        m_customLocalPluginIds.removeAll(pluginId);
+
+        m_indicatorsPaths.removeAll(path);
+
+        KDirWatch::self()->removeDir(path);
+
+        //! delay informing the removal in case it is just an update
+        QTimer::singleShot(1000, [this, pluginId]() {
+           emit indicatorRemoved(pluginId);
+        });
+    }
+}
+
+bool Factory::isCustomType(const QString &id) const
+{
+    return ((id != "org.kde.latte.default") && (id != "org.kde.latte.plasma") && (id != "org.kde.latte.plasmatabstyle"));
 }
 
 bool Factory::metadataAreValid(KPluginMetaData &metadata)
@@ -195,7 +251,7 @@ QString Factory::uiPath(QString pluginName) const
     return m_pluginUiPaths[pluginName];
 }
 
-Latte::Types::ImportExportState Factory::importIndicatorFile(QString compressedFile)
+Latte::ImportExport::State Factory::importIndicatorFile(QString compressedFile)
 {
     auto showNotificationError = []() {
         auto notification = new KNotification("import-fail", KNotification::CloseOnTimeout);
@@ -225,7 +281,7 @@ Latte::Types::ImportExportState Factory::importIndicatorFile(QString compressedF
         if (!tarArchive->isOpen()) {
             delete tarArchive;
             showNotificationError();
-            return Latte::Types::Failed;
+            return Latte::ImportExport::FailedState;
         } else {
             archive = tarArchive;
         }
@@ -273,11 +329,11 @@ Latte::Types::ImportExportState Factory::importIndicatorFile(QString compressedF
         QString output(process.readAllStandardOutput());
 
         showNotificationSucceed(metadata.name(), updated);
-        return Latte::Types::Installed;
+        return Latte::ImportExport::InstalledState;
     }
 
     showNotificationError();
-    return Latte::Types::Failed;
+    return Latte::ImportExport::FailedState;
 }
 
 void Factory::removeIndicator(QString id)

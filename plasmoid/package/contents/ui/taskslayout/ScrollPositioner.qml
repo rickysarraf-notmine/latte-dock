@@ -20,39 +20,36 @@ import QtQuick 2.7
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
 Rectangle {
     id: listViewBase
     x: {
         if (!root.vertical) {
-            if (plasmoid.location===PlasmaCore.Types.Floating) {
-                //! Center position Tasks when are located in the Desktop
-                return root.width < icList.width ? (root.width/2) : icList.width/2;
-            } else if (root.userPanelPosition === Latte.Types.Center) {
+            if (root.alignment === LatteCore.Types.Center) {
                 return icList.width / 2;
-            } else if (root.userPanelPosition === Latte.Types.Left){
+            } else if (root.alignment === LatteCore.Types.Left){
                 return 0;
-            } else if (root.userPanelPosition === Latte.Types.Right){
+            } else if (root.alignment === LatteCore.Types.Right){
                 return icList.width;
             }
-        } else {
-            return 0;
         }
+
+        return 0;
     }
 
     y: {
-        if (!root.vertical) {
-            return 0;
-        } else {
-            if (root.userPanelPosition === Latte.Types.Center) {
+        if (root.vertical) {
+            if (root.alignment === LatteCore.Types.Center) {
                 return icList.height / 2;
-            } else if (root.userPanelPosition === Latte.Types.Top){
+            } else if (root.alignment === LatteCore.Types.Top){
                 return 0;
-            } else if (root.userPanelPosition === Latte.Types.Bottom){
+            } else if (root.alignment === LatteCore.Types.Bottom){
                 return icList.height;
             }
         }
+
+        return 0;
     }
 
     width: !root.vertical ? 1 : scrollableList.width

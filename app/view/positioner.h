@@ -48,7 +48,15 @@ class Positioner: public QObject
 {
     Q_OBJECT
 
+    Q_PROPERTY(bool inLocationAnimation READ inLocationAnimation NOTIFY inLocationAnimationChanged)
+    Q_PROPERTY(bool inSlideAnimation READ inSlideAnimation WRITE setInSlideAnimation NOTIFY inSlideAnimationChanged)
+
+    Q_PROPERTY(bool isStickedOnTopEdge READ isStickedOnTopEdge WRITE setIsStickedOnTopEdge NOTIFY isStickedOnTopEdgeChanged)
+    Q_PROPERTY(bool isStickedOnBottomEdge READ isStickedOnBottomEdge WRITE setIsStickedOnBottomEdge NOTIFY isStickedOnBottomEdgeChanged)
+
     Q_PROPERTY(int currentScreenId READ currentScreenId NOTIFY currentScreenChanged)
+    //! animating window slide
+    Q_PROPERTY(int slideOffset READ slideOffset WRITE setSlideOffset NOTIFY slideOffsetChanged)
     Q_PROPERTY(QString currentScreenName READ currentScreenName NOTIFY currentScreenChanged)
 
 public:
@@ -58,10 +66,28 @@ public:
     int currentScreenId() const;
     QString currentScreenName() const;
 
-    bool inLocationChangeAnimation();
+    int slideOffset() const;
+    void setSlideOffset(int offset);
+
+    bool inLayoutUnloading();
+    bool inLocationAnimation();
+
+    bool inSlideAnimation() const;
+    void setInSlideAnimation(bool active);
+
+    bool isStickedOnTopEdge() const;
+    void setIsStickedOnTopEdge(bool sticked);
+
+    bool isStickedOnBottomEdge() const;
+    void setIsStickedOnBottomEdge(bool sticked);
+
+    QRect canvasGeometry();
+
     void setScreenToFollow(QScreen *scr, bool updateScreenId = true);
 
     void reconsiderScreen();
+
+    Latte::WindowSystem::WindowId trackedWindowId();
 
 public slots:
     Q_INVOKABLE void hideDockDuringLocationChange(int goToLocation);
@@ -71,10 +97,19 @@ public slots:
 
     void syncGeometry();
 
+    //! direct geometry calculations without any protections or checks
+    //! that might prevent them. It must be called with care.
+    void immediateSyncGeometry();
+
+    void initDelayedSignals();
+    void updateWaylandId();
+
 signals:
+    void canvasGeometryChanged();
     void currentScreenChanged();
     void edgeChanged();
     void screenGeometryChanged();
+    void slideOffsetChanged();
     void windowSizeChanged();
 
     //! these two signals are used from config ui and containment ui
@@ -86,30 +121,57 @@ signals:
     void hideDockDuringScreenChangeFinished();
     void hideDockDuringMovingToLayoutStarted();
     void hideDockDuringMovingToLayoutFinished();
-    void onHideWindowsForSlidingOut();
     void showDockAfterLocationChangeFinished();
     void showDockAfterScreenChangeFinished();
     void showDockAfterMovingToLayoutFinished();
 
+    void onHideWindowsForSlidingOut();
+    void inLocationAnimationChanged();
+    void inSlideAnimationChanged();
+    void isStickedOnTopEdgeChanged();
+    void isStickedOnBottomEdgeChanged();
+
 private slots:
     void screenChanged(QScreen *screen);
+    void onCurrentLayoutIsSwitching(const QString &layoutName);
+
     void validateDockGeometry();
+    void updateInLocationAnimation();
+    void syncLatteViews();
+    void updateContainmentScreen();
 
 private:
     void init();
     void initSignalingForLocationChangeSliding();
-    void resizeWindow(QRect availableScreenRect = QRect());
 
     void updateFormFactor();
+    void resizeWindow(QRect availableScreenRect = QRect());
     void updatePosition(QRect availableScreenRect = QRect());
+    void updateCanvasGeometry(QRect availableScreenRect = QRect());
+
+    void validateTopBottomBorders(QRect availableScreenRect, QRegion availableScreenRegion);
+
+    void setCanvasGeometry(const QRect &geometry);
 
     QRect maximumNormalGeometry();
 
 private:
     bool m_inDelete{false};
+    bool m_inLayoutUnloading{false};
+    bool m_inLocationAnimation{false};
+    bool m_inSlideAnimation{false};
 
+    bool m_isStickedOnTopEdge{false};
+    bool m_isStickedOnBottomEdge{false};
+
+    int m_slideOffset{0};
+
+    QRect m_canvasGeometry;
     //! it is used in order to enforce X11 to never miss window geometry
     QRect m_validGeometry;
+    //! it is used to update geometry calculations without requesting no needed Corona calculations
+    QRect m_lastAvailableScreenRect;
+    QRegion m_lastAvailableScreenRegion;
 
     QPointer<Latte::View> m_view;
     QPointer<Latte::Corona> m_corona;
@@ -117,7 +179,7 @@ private:
     QString m_screenToFollowId;
     QPointer<QScreen> m_screenToFollow;
     QTimer m_screenSyncTimer;
-
+    QTimer m_syncGeometryTimer;
     QTimer m_validateGeometryTimer;
 
     //!used at sliding out/in animation

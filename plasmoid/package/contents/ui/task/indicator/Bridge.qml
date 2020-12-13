@@ -21,8 +21,6 @@ import QtQuick 2.7
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 import "../../indicators/options" as TaskIndicator
 
 Item {
@@ -37,43 +35,44 @@ Item {
     readonly property bool isApplet: false
     readonly property bool isEmptySpace: false /*since 0.9.3*/
 
-    readonly property bool isLauncher: taskIsValid ? taskItem.isLauncher : true
-    readonly property bool isStartup: taskIsValid ? taskItem.isStartup : false
-    readonly property bool isWindow: taskIsValid ? taskItem.isWindow : false
+    readonly property bool isLauncher: taskIsValid ? taskItem.isLauncher || root.disableAllWindowsFunctionality : true
+    readonly property bool isStartup: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.isStartup : false
+    readonly property bool isWindow: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.isWindow : false
 
-    readonly property bool isActive: taskIsValid ? (taskItem.hasActive || (root.showPreviews
-                                                                           && (taskItem.isWindow || taskItem.isGroupParent)
-                                                                           && windowsPreviewDlg.activeItem
-                                                                           && (windowsPreviewDlg.activeItem === taskItem)) ) : false
+    readonly property bool isActive: taskIsValid && !root.disableAllWindowsFunctionality ? (taskItem.hasActive
+                                                                                             || (root.showPreviews
+                                                                                                 && (taskItem.isWindow || taskItem.isGroupParent)
+                                                                                                 && windowsPreviewDlg.activeItem
+                                                                                                 && (windowsPreviewDlg.activeItem === taskItem)) ) : false
 
-    readonly property bool isGroup: taskIsValid ? taskItem.isGroupParent : false
+    readonly property bool isGroup: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.isGroupParent : false
     readonly property bool isHovered: taskIsValid ? taskItem.containsMouse : false
-    readonly property bool isMinimized: taskIsValid ? taskItem.isMinimized : false
+    readonly property bool isMinimized: taskIsValid && !root.disableAllWindowsFunctionality? taskItem.isMinimized : false
     readonly property bool isPressed: taskIsValid ? taskItem.pressed : false
-    readonly property bool inAttention: taskIsValid ? taskItem.inAttention : false
+    readonly property bool inAttention: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.inAttention : false
     readonly property bool inRemoving: taskIsValid ? taskItem.inRemoveStage : false
 
     readonly property bool isSquare: true
 
-    readonly property bool hasActive: taskIsValid ? taskItem.hasActive : false
-    readonly property bool hasMinimized: taskIsValid? taskItem.hasMinimized : false
-    readonly property bool hasShown: taskIsValid ? taskItem.hasShown : false
-    readonly property int windowsCount: taskIsValid ? taskItem.windowsCount : 0
-    readonly property int windowsMinimizedCount: taskIsValid ? taskItem.windowsMinimizedCount : 0
+    readonly property bool hasActive: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.hasActive : false
+    readonly property bool hasMinimized: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.hasMinimized : false
+    readonly property bool hasShown: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.hasShown : false
+    readonly property int windowsCount: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.windowsCount : 0
+    readonly property int windowsMinimizedCount: taskIsValid && !root.disableAllWindowsFunctionality ? taskItem.windowsMinimizedCount : 0
 
-    readonly property int currentIconSize: root.iconSize
-    readonly property int maxIconSize: root.maxIconSize
+    readonly property int currentIconSize: taskIsValid ? taskItem.metrics.iconSize : metrics.iconSize
+    readonly property int maxIconSize: taskIsValid ? taskItem.metrics.maxIconSize : metrics.iconSize
     readonly property real scaleFactor: taskIsValid ? taskItem.wrapperAlias.mScale : 1
     readonly property real panelOpacity: root.currentPanelOpacity
     readonly property color shadowColor: root.appShadowColorSolid
 
-    readonly property bool animationsEnabled: root.animationsEnabled
-    readonly property real durationTime: root.durationTime
+    readonly property bool animationsEnabled: taskIsValid ? taskItem.animations.active : animations.active
+    readonly property real durationTime: taskIsValid ? taskItem.animations.speedFactor.current : animations.speedFactor.current
 
     readonly property bool progressVisible: wrapper.progressVisible /*since 0.9.2*/
     readonly property real progress: wrapper.progress /*since 0.9.2*/
 
-    readonly property bool usePlasmaTabsStyle: false
+    readonly property int screenEdgeMargin: taskIsValid ? taskItem.metrics.margin.screenEdge : metrics.margin.screenEdge /*since 0.10*/
 
     readonly property variant svgs: indicators ? indicators.svgs : []
 

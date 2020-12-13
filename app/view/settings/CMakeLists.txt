@@ -1,6 +1,10 @@
 set(lattedock-app_SRCS
-    ${lattedock-app_SRCS}   
+    ${lattedock-app_SRCS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/canvasconfigview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/indicatoruimanager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/primaryconfigview.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/secondaryconfigview.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/subconfigview.cpp    
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewsettingsfactory.cpp
     PARENT_SCOPE
 )

@@ -30,11 +30,9 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.plasma.extras 2.0 as PlasmaExtras
 import QtQuick.Controls.Styles.Plasma 2.0 as Styles
 
-import org.kde.plasma.plasmoid 2.0
-
 import org.kde.kquickcontrolsaddons 2.0 as KQuickControlAddons
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 import "pages" as Pages
@@ -42,22 +40,24 @@ import "../controls" as LatteExtraControls
 
 FocusScope {
     id: dialog
+    width: appliedWidth
+    height: appliedHeight
 
-    readonly property bool basicLevel: viewConfig.complexity === Latte.Types.BasicSettings
-    readonly property bool advancedLevel: viewConfig.complexity === Latte.Types.AdvancedSettings
-    readonly property bool expertLevel: viewConfig.complexity === Latte.Types.ExpertSettings
+    readonly property bool basicLevel: !advancedLevel
+    readonly property bool advancedLevel: universalSettings.inAdvancedModeForEditSettings
 
-    readonly property bool highLevel: advancedLevel || expertLevel
+    readonly property bool inConfigureAppletsMode: plasmoid.configuration.inConfigureAppletsMode || !LatteCore.WindowSystem.compositingActive
 
-    readonly property bool inConfigureAppletsMode: plasmoid.configuration.inConfigureAppletsMode || !Latte.WindowSystem.compositingActive
+    readonly property bool kirigamiLibraryIsFound: LatteCore.Environment.frameworksVersion >= LatteCore.Environment.makeVersion(5,69,0)
 
     //! max size based on screen resolution
     //!    TODO: if we can access availableScreenGeometry.height this can be improved, currently
     //!    we use 100px. or 50px. in order to give space for othe views to be shown and to have also
     //!    some space around the settings window
     property int maxHeight: plasmoid.formFactor === PlasmaCore.Types.Horizontal ?
-                                viewConfig.availableScreenGeometry.height - (latteView.editThickness - latteView.normalThickness) - 16 :
+                                viewConfig.availableScreenGeometry.height - (latteView.editThickness - latteView.normalHighestThickness) - units.largeSpacing :
                                 viewConfig.availableScreenGeometry.height - 2 * units.largeSpacing
+
     property int maxWidth: 0.6 * latteView.screenGeometry.width
 
     //! propose size based on font size
@@ -74,7 +74,7 @@ FocusScope {
     property real userScaleWidth: 1
     property real userScaleHeight: 1
 
-    readonly property real heightLevel: (dialog.expertLevel ? 100 : 1)
+    readonly property real heightLevel: (dialog.advancedLevel ? 100 : 1)
 
     onHeightChanged: viewConfig.syncGeometry();
 
@@ -82,17 +82,14 @@ FocusScope {
     //! width can be between 200px - maxWidth
     //! height can be between 400px - maxHeight
     property int appliedWidth: Math.min(maxWidth, Math.max(200, chosenWidth))
-    property int appliedHeight: Math.min(maxHeight, Math.max(400, chosenHeight))
-
-    width: appliedWidth
-    height: appliedHeight
+    property int appliedHeight: universalSettings.inAdvancedModeForEditSettings ? maxHeight : Math.min(maxHeight, Math.max(400, chosenHeight))
 
     Layout.minimumWidth: width
     Layout.minimumHeight: height
     LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
     LayoutMirroring.childrenInherit: true
 
-    readonly property bool viewIsPanel: latteView.type === Latte.Types.PanelView
+    readonly property bool viewIsPanel: latteView.type === LatteCore.Types.PanelView
 
     property bool panelIsVertical: plasmoid.formFactor === PlasmaCore.Types.Vertical
     property int subGroupSpacing: units.largeSpacing + units.smallSpacing * 1.5
@@ -100,10 +97,10 @@ FocusScope {
     property color bC: theme.backgroundColor
     property color transparentBackgroundColor: Qt.rgba(bC.r, bC.g, bC.b, 0.7)
 
-    onHighLevelChanged: {
+    onAdvancedLevelChanged: {
         //! switch to appearancePage when effectsPage becomes hidden because
         //! advancedLevel was disabled by the user
-        if (!highLevel && tabGroup.currentTab === effectsPage) {
+        if (!advancedLevel && tabGroup.currentTab === effectsPage) {
             tabGroup.currentTab = appearancePage;
             tabBar.currentTab = appearanceTabBtn;
         }
@@ -152,8 +149,8 @@ FocusScope {
                 return;
             }
 
-            updatingWidthScale = metaModifier || (dialog.expertLevel && ctrlModifier);
-            updatingHeightScale = !dialog.expertLevel && ctrlModifier;
+            updatingWidthScale = metaModifier || (dialog.advancedLevel && ctrlModifier);
+            updatingHeightScale = dialog.basicLevel && ctrlModifier;
 
             blockWheel = true;
             wheelTriggeredOnce = true;
@@ -193,7 +190,7 @@ FocusScope {
         id: backgroundMouseAreaTooltip
         anchors.fill: parent
         opacity: 0
-        tooltip: i18n("You can use Ctrl/Meta + Scroll Wheel to alter the window size")
+        //tooltip: i18n("You can use Ctrl/Meta + Scroll Wheel to alter the window size")
 
         onHoveredChanged: {
             if (!hovered) {
@@ -251,83 +248,36 @@ FocusScope {
             spacing: 0
 
             Item {
+                id: trademark
                 Layout.alignment: Qt.AlignLeft | Qt.AlignTop
                 Layout.fillWidth: false
                 Layout.topMargin: units.smallSpacing
                 Layout.preferredWidth: width
                 Layout.preferredHeight: height
 
-                width: Qt.application.layoutDirection !== Qt.RightToLeft ? logo.width + latteTxt.width + units.smallSpacing : logo.width + units.smallSpacing
-                height: logo.height
+                width: latteTrademark.width + units.smallSpacing
+                height: trademarkHeight
 
-                Latte.IconItem {
-                    id: logo
-
-                    width: Math.round(1.4 * latteTxtMetrics.font.pixelSize)
-                    height: width
-
-                    smooth: true
-                    source: "latte-dock"
-                    // animated: true
-                    usesPlasmaTheme: false
-                    active: aboutArea.hovered
-                }
-
-                PlasmaComponents.Label {
-                    id: latteTxtMetrics
-                    text: i18n("Latte")
-                    width: 0
-                    font.pointSize: 2 * theme.defaultFont.pointSize
-                    visible: false
-                }
+                readonly property int trademarkHeight: 48
 
                 PlasmaCore.SvgItem{
-                    id: latteTxt
-
-                    width: 2.2 * height
-                    height: 0.4 * latteTxtMetrics.font.pixelSize
-
-                    visible: Qt.application.layoutDirection !== Qt.RightToLeft
-
-                    anchors.left: logo.right
-                    anchors.verticalCenter: logo.verticalCenter
+                    id: latteTrademark
+                    width: Qt.application.layoutDirection !== Qt.RightToLeft ? Math.ceil(1.70 * height) : height
+                    height: trademark.height
 
                     svg: PlasmaCore.Svg{
-                        imagePath: universalSettings.trademarkIconPath()
+                        imagePath: Qt.application.layoutDirection !== Qt.RightToLeft ? universalSettings.trademarkPath() : universalSettings.trademarkIconPath()
                     }
-                }
-
-                PlasmaComponents.Button{
-                    id: aboutArea
-                    //! Used as tooltip
-                    anchors.fill: parent
-                    opacity: 0
-                    tooltip: i18n("Open Latte settings window")
-                    onPressedChanged: {
-                        if (pressed) {
-                            layoutsManager.showLatteSettingsDialog(Latte.Types.PreferencesPage)
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.top: parent.bottom
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.topMargin: 2
-                    width: parent.width + 4
-                    height: 2
-                    color: theme.highlightColor
-                    visible: aboutArea.hovered
                 }
             }
 
             Item{
                 id: headerSpacer
-                Layout.minimumHeight: complexitySettings.height + 2*units.smallSpacing
+                Layout.minimumHeight: advancedSettings.height + 2*units.smallSpacing
             }
 
             ColumnLayout {
-                PlasmaComponents.ToolButton {
+                PlasmaComponents3.ToolButton {
                     id: pinButton
 
                     Layout.fillWidth: false
@@ -335,15 +285,15 @@ FocusScope {
                     Layout.preferredWidth: width
                     Layout.preferredHeight: height
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                    Layout.bottomMargin: units.smallSpacing
+                    Layout.bottomMargin: units.smallSpacing * 1.5
                     //!avoid editMode box shadow
                     Layout.topMargin: units.smallSpacing * 2
                     Layout.rightMargin: units.smallSpacing
 
-                    iconSource: "window-pin"
+                    icon.name: "window-pin"
                     checkable: true
 
-                    width: Math.round(units.gridUnit * 1.25)
+                    width: 7 * units.smallSpacing
                     height: width
 
                     property bool inStartup: true
@@ -360,7 +310,7 @@ FocusScope {
                 }
 
                 RowLayout {
-                    id: complexitySettings
+                    id: advancedSettings
                     Layout.fillWidth: true
                     Layout.rightMargin: units.smallSpacing * 2
                     Layout.alignment: Qt.AlignRight | Qt.AlignTop
@@ -371,9 +321,9 @@ FocusScope {
                     }
 
                     PlasmaComponents.Label {
-                        id: complexityLbl
+                        id: advancedLbl
                         Layout.alignment: Qt.AlignRight
-                      //  opacity: dialog.basicLevel ? basicOpacity : 1
+                        //  opacity: dialog.basicLevel ? basicOpacity : 1
 
                         //! TODO: the term here is not accurate because the expert settings mode
                         //! is used currently. In the future this term will be rethought if
@@ -402,24 +352,22 @@ FocusScope {
                         }
 
                         MouseArea {
-                            id: complexityMouseArea
+                            id: advancedMouseArea
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
-                                complexitySwitch.checked = !complexitySwitch.checked;
+                                advancedSwitch.checked = !advancedSwitch.checked;
                             }
                         }
                     }
 
                     LatteComponents.Switch {
-                        id: complexitySwitch
-                        checked: (viewConfig.complexity === Latte.Types.ExpertSettings)
+                        id: advancedSwitch
+                        checked: universalSettings.inAdvancedModeForEditSettings && viewConfig.isReady
 
                         onCheckedChanged: {
-                            if (checked) {
-                                viewConfig.complexity = Latte.Types.ExpertSettings;
-                            } else {
-                                viewConfig.complexity = Latte.Types.BasicSettings;
+                            if (viewConfig.isReady) {
+                                universalSettings.inAdvancedModeForEditSettings = checked;
                             }
                         }
                     }
@@ -446,14 +394,17 @@ FocusScope {
                 id: effectsTabBtn
                 text: i18n("Effects")
                 tab: effectsPage
-                visible: dialog.highLevel
+                visible: dialog.advancedLevel
             }
-            PlasmaComponents.TabButton {
-                id: tasksTabBtn
-                text: i18n("Tasks")
-                tab: tasksPage
 
-                visible: latteView.latteTasksArePresent
+            Repeater {
+                id: tasksTabButtonRepeater
+                model: latteView.extendedInterface.latteTasksModel
+
+                PlasmaComponents.TabButton {
+                    text: index >= 1 ? i18nc("tasks header and index","Tasks <%0>").arg(index+1) : i18n("Tasks")
+                    tab: tasksRepeater.itemAt(index)
+                }
             }
         }
 
@@ -501,9 +452,58 @@ FocusScope {
                     Pages.EffectsConfig {
                         id: effectsPage
                     }
+                }
+            }
 
-                    Pages.TasksConfig {
-                        id: tasksPage
+            Repeater {
+                id: tasksRepeater
+                //! needs to be out of TabGroup otherwise the Repeater is consider as TabGroup direct children
+                //! and thus only the first Tasks tab is shown
+                model: latteView.extendedInterface.latteTasksModel
+
+                //! Reparent TasksPages when all of them are loaded
+                //! this way we avoid warnings from ::stackAfter
+                //! After startup any new TasksPages can be added directly
+                property bool isReady: false
+                property int pages: 0
+
+                Pages.TasksConfig {
+                    id: tasksPage
+                    Component.onCompleted: {
+                        if (tasksRepeater.isReady) {
+                            parent = tabGroup;
+                        } else {
+                            tasksRepeater.pages = tasksRepeater.pages + 1;
+                        }
+                    }
+                }
+
+                onModelChanged: {
+                    if (latteView.extendedInterface.latteTasksModel.count === 0) {
+                        isReady = true;
+                        tasksRepeater.pages = 0;
+                    }
+                }
+                onPagesChanged: {
+                    if (pages === latteView.extendedInterface.latteTasksModel.count && pages > 0) {
+                        //! Reparent TasksPages when all of them are loaded
+                        //! this way we avoid warnings from ::stackAfter
+                        for(var i=0; i<pages; ++i) {
+                            itemAt(i).parent = tabGroup;
+                        }
+
+                        isReady = true;
+                    }
+                }
+            }
+
+            //! initialize Tasks Repeater
+            Connections {
+                target: viewConfig
+                onIsReadyChanged:{
+                    if (!viewConfig.isReady) {
+                        tasksRepeater.isReady = false;
+                        tasksRepeater.pages = 0;
                     }
                 }
             }
@@ -515,20 +515,6 @@ FocusScope {
             Layout.alignment: Qt.AlignHCenter | Qt.AlignBottom
 
             spacing: units.largeSpacing
-
-            Connections{
-                target: latteView.layout
-                onViewsCountChanged: actionButtons.updateEnabled();
-            }
-
-            function updateEnabled() {
-                var screenFreeEdges = latteView.layout.qmlFreeEdges(latteView.positioner.currentScreenId);
-                actionsComboBtn.buttonEnabled = screenFreeEdges.length > 0;
-                if (actionsModel.count > 0) {
-                    actionsModel.get(0).enabled = actionsComboBtn.buttonEnabled;
-                }
-                removeView.enabled = latteView.layout.viewsCount>1 /*&& !(latteView.layout.viewsWithTasks()===1 && latteView.tasksPresent())*/
-            }
 
             LatteComponents.ComboBoxButton {
                 id: actionsComboBtn
@@ -550,11 +536,9 @@ FocusScope {
                 comboBoxMinimumPopUpWidth: actionsModel.count > 1 ? dialog.width / 2 : 150
 
                 property var centralLayoutsNames: []
-                property var sharedLayoutsNames: []
 
                 Component.onCompleted: {
                     comboBox.model = actionsModel;
-                    actionButtons.updateEnabled();
                 }
 
                 ListModel {
@@ -564,16 +548,13 @@ FocusScope {
                 Connections{
                     target: actionsComboBtn.comboBox
 
-                    Component.onCompleted:{
-                        actionsComboBtn.addModel();
-                        actionButtons.updateEnabled();
-                    }
+                    Component.onCompleted:actionsComboBtn.updateModel();
 
                     onActivated: {
                         if (index==0) {
                             latteView.copyView();
                         } else if (index>=1) {
-                            var layouts = actionsComboBtn.sharedLayoutsNames.concat(actionsComboBtn.centralLayoutsNames);
+                            var layouts = actionsComboBtn.centralLayoutsNames;
 
                             latteView.positioner.hideDockDuringMovingToLayout(layouts[index-1]);
                         }
@@ -583,7 +564,7 @@ FocusScope {
 
                     onEnabledChanged: {
                         if (enabled) {
-                            actionsComboBtn.addModel();
+                            actionsComboBtn.updateModel();
                         } else {
                             actionsComboBtn.emptyModel();
                         }
@@ -592,16 +573,25 @@ FocusScope {
 
                 Connections{
                     target: actionsComboBtn.button
-
                     onClicked: latteView.layout.addNewView();
                 }
 
                 Connections{
                     target: latteView
                     onTypeChanged: actionsComboBtn.updateCopyText()
+                    onLayoutChanged: actionsComboBtn.updateModel();
                 }
 
-                function addModel() {
+                Connections{
+                    target: viewConfig
+                    onIsReadyChanged: {
+                        if (viewConfig.isReady) {
+                            actionsComboBtn.updateModel();
+                        }
+                    }
+                }
+
+                function updateModel() {
                     actionsModel.clear();
 
                     var copy = {actionId: 'copy:', enabled: true, name: '', icon: 'edit-copy'};
@@ -610,23 +600,6 @@ FocusScope {
                     updateCopyText();
 
                     var tempCentralLayouts = layoutsManager.centralLayoutsNames();
-                    var tempSharedLayouts = layoutsManager.sharedLayoutsNames();
-
-                    if (tempSharedLayouts.length > 0) {
-                        var curIndex = tempSharedLayouts.indexOf(latteView.layout.name);
-                        if (curIndex >=0) {
-                            tempSharedLayouts.splice(curIndex,1);
-                        }
-
-                        sharedLayoutsNames = tempSharedLayouts;
-                        var icon = "document-share";
-
-                        for(var i=0; i<sharedLayoutsNames.length; ++i) {
-                            var layout = {actionId: 'move:', enabled: true, name: i18n("Move to: %0").arg(sharedLayoutsNames[i]), icon: icon};
-                            actionsModel.append(layout);
-                        }
-                    }
-
 
                     if (tempCentralLayouts.length > 0) {
                         var curIndex = tempCentralLayouts.indexOf(latteView.layout.name);
@@ -655,7 +628,7 @@ FocusScope {
                 }
 
                 function updateCopyText() {
-                    var copyText = latteView.type === Latte.Types.DockView ? i18n("Copy Dock") : i18n("Copy Panel")
+                    var copyText = latteView.type === LatteCore.Types.DockView ? i18n("Copy Dock") : i18n("Copy Panel")
                     actionsModel.get(0).name = copyText;
                 }
             }
@@ -663,10 +636,10 @@ FocusScope {
             PlasmaComponents.Button {
                 id: removeView
                 Layout.fillWidth: true
-
+                enabled: dialog.advancedLevel
                 text: i18n("Remove")
                 iconSource: "delete"
-                opacity: latteView.layout.viewsCount > 1 ? 1 : 0
+                opacity: enabled ? 1 : 0
                 tooltip: i18n("Remove current dock")
 
                 onClicked: latteView.removeView()
@@ -683,22 +656,5 @@ FocusScope {
                 onClicked: viewConfig.hideConfigWindow();
             }
         }
-    }
-
-    //! HACK FOR X11 environments
-    //! show an inner shadow similar to Latte::View editShadow in order to
-    //! not break the visual user experience
-    LatteExtraControls.InnerShadow{
-        width: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? dialog.width + 2*shadowSize : shadowSize
-        height: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? shadowSize : dialog.height + 2*shadowSize
-
-        shadowSize: latteView.effects.editShadow
-        shadowOpacity: Math.max(0.35, maxOpacity)
-        shadowDirection: plasmoid.location
-
-        visible: !Latte.WindowSystem.isPlatformWayland && Latte.WindowSystem.compositingActive && latteView.effects.settingsMaskSubtracted
-
-        readonly property real maxOpacity: Latte.WindowSystem.compositingActive && !plasmoid.configuration.inConfigureAppletsMode ?
-                                               plasmoid.configuration.editBackgroundOpacity : 1
     }
 }

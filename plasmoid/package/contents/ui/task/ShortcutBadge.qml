@@ -20,26 +20,33 @@
 import QtQuick 2.7
 import QtGraphicalEffects 1.0
 
-import org.kde.latte 0.2 as Latte
 import org.kde.latte.components 1.0 as LatteComponents
 
 Loader{
     id: shorcutBadge
     anchors.fill: iconImageBuffer
-    active: root.showTaskShortcutBadges && !taskItem.isSeparator && fixedIndex>=0 && fixedIndex<20
+    active: taskItem.shortcuts.showPositionShortcutBadges && !taskItem.isSeparator && !taskItem.isHidden && taskItem.shortcuts.isEnabled
     asynchronous: true
     visible: badgeString !== ""
 
     property int fixedIndex:-1
-    property string badgeString: (shorcutBadge.fixedIndex>=1 && shorcutBadge.fixedIndex<20 && root.badgesForActivate.length===19) ?
-                                     root.badgesForActivate[shorcutBadge.fixedIndex-1] : ""
+    property string badgeString: (shorcutBadge.fixedIndex>=1 && shorcutBadge.fixedIndex<20 && taskItem.shortcuts.badges.length===19) ?
+                                     taskItem.shortcuts.badges[shorcutBadge.fixedIndex-1] : ""
+
+    onActiveChanged: updateShorcutIndex();
 
     Connections {
-        target: root
-        onShowTaskShortcutBadgesChanged: shorcutBadge.fixedIndex = parabolicManager.pseudoTaskIndex(index+1);
+        target: taskItem
+        onItemIndexChanged: shortcutBadge.updateShorcutIndex();
     }
 
-    Component.onCompleted: fixedIndex = parabolicManager.pseudoTaskIndex(index+1);
+    function updateShorcutIndex() {
+        if (shorcutBadge.active && taskItem.shortcuts.showPositionShortcutBadges) {
+            fixedIndex = taskItem.shortcuts.shortcutIndex(taskItem.itemIndex);
+        } else {
+            fixedIndex = -1;
+        }
+    }
 
     sourceComponent: Item{
         Loader{
@@ -60,13 +67,13 @@ Loader{
             id: taskNumber
             // when iconSize < 48, height is always = 24, height / iconSize > 50%
             // we prefer center aligned badges to top-left aligned ones
-            property bool centerInParent: root.iconSize < 48
+            property bool centerInParent: taskItem.metrics.iconSize < 48
 
             anchors.left: centerInParent? undefined : parent.left
             anchors.top: centerInParent? undefined : parent.top
             anchors.centerIn: centerInParent? parent : undefined
-            minimumWidth: 0.4 * (wrapper.mScale * root.iconSize)
-            height: Math.max(24, 0.4 * (wrapper.mScale * root.iconSize))
+            minimumWidth: 0.4 * (wrapper.mScale * taskItem.metrics.iconSize)
+            height: Math.max(24, 0.4 * (wrapper.mScale * taskItem.metrics.iconSize))
 
             style3d: root.badges3DStyle
             textValue: shorcutBadge.badgeString

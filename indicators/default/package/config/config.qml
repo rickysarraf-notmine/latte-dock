@@ -27,7 +27,6 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
 import org.kde.latte.components 1.0 as LatteComponents
 
 ColumnLayout {
@@ -49,11 +48,6 @@ ColumnLayout {
 
         ExclusiveGroup {
             id: activeIndicatorTypeGroup
-            onCurrentChanged: {
-                if (current.checked) {
-                    indicator.configuration.activeStyle = current.indicatorType;
-                }
-            }
         }
 
         PlasmaComponents.Button {
@@ -61,11 +55,17 @@ ColumnLayout {
             Layout.maximumWidth: Layout.minimumWidth
             text: i18nc("line indicator","Line")
             checked: parent.indicatorType === indicatorType
-            checkable: true
+            checkable: false
             exclusiveGroup: activeIndicatorTypeGroup
             tooltip: i18n("Show a line indicator for active items")
 
             readonly property int indicatorType: 0 /*Line*/
+
+            onPressedChanged: {
+                if (pressed) {
+                    indicator.configuration.activeStyle = indicatorType;
+                }
+            }
         }
 
         PlasmaComponents.Button {
@@ -73,11 +73,17 @@ ColumnLayout {
             Layout.maximumWidth: Layout.minimumWidth
             text: i18nc("dot indicator", "Dot")
             checked: parent.indicatorType === indicatorType
-            checkable: true
+            checkable: false
             exclusiveGroup: activeIndicatorTypeGroup
             tooltip: i18n("Show a dot indicator for active items")
 
             readonly property int indicatorType: 1 /*Dot*/
+
+            onPressedChanged: {
+                if (pressed) {
+                    indicator.configuration.activeStyle = indicatorType;
+                }
+            }
         }
     }
 
@@ -109,10 +115,6 @@ ColumnLayout {
 
         ExclusiveGroup {
             id: glowGroup
-            onCurrentChanged: {
-                if (current.checked)
-                    indicator.configuration.glowApplyTo = current.option
-            }
         }
 
         PlasmaComponents.Button {
@@ -120,11 +122,17 @@ ColumnLayout {
             Layout.maximumWidth: Layout.minimumWidth
             text: i18nc("glow only to active task/applet indicators","On Active")
             checked: parent.option === option
-            checkable: true
+            checkable: false
             exclusiveGroup:  glowGroup
             tooltip: i18n("Add glow only to active task/applet indicator")
 
             readonly property int option: 1 /*OnActive*/
+
+            onPressedChanged: {
+                if (pressed) {
+                    indicator.configuration.glowApplyTo = option;
+                }
+            }
         }
 
         PlasmaComponents.Button {
@@ -132,11 +140,17 @@ ColumnLayout {
             Layout.maximumWidth: Layout.minimumWidth
             text: i18nc("glow to all task/applet indicators","All")
             checked: parent.option === option
-            checkable: true
+            checkable: false
             exclusiveGroup: glowGroup
             tooltip: i18n("Add glow to all task/applet indicators")
 
             readonly property int option: 2 /*All*/
+
+            onPressedChanged: {
+                if (pressed) {
+                    indicator.configuration.glowApplyTo = option;
+                }
+            }
         }
     }
 
@@ -190,6 +204,48 @@ ColumnLayout {
         }
     }
 
+    LatteComponents.SubHeader {
+        text: i18n("Padding")
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: units.smallSpacing
+
+        PlasmaComponents.Label {
+            text: i18n("Length")
+            horizontalAlignment: Text.AlignLeft
+        }
+
+        LatteComponents.Slider {
+            id: lengthIntMarginSlider
+            Layout.fillWidth: true
+
+            value: Math.round(indicator.configuration.lengthPadding * 100)
+            from: 0
+            to: maxMargin
+            stepSize: 1
+            wheelEnabled: false
+
+            readonly property int maxMargin: 80
+
+            onPressedChanged: {
+                if (!pressed) {
+                    indicator.configuration.lengthPadding = value / 100;
+                }
+            }
+        }
+
+        PlasmaComponents.Label {
+            text: i18nc("number in percentage, e.g. 85 %","%0 %").arg(currentValue)
+            horizontalAlignment: Text.AlignRight
+            Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+            Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+            readonly property int currentValue: lengthIntMarginSlider.value
+        }
+    }
+
     ColumnLayout {
         spacing: 0
         visible: indicator.latteTasksArePresent
@@ -227,6 +283,17 @@ ColumnLayout {
     LatteComponents.SubHeader {
         enabled: indicator.configuration.glowApplyTo!==0/*None*/
         text: i18n("Options")
+    }
+
+    LatteComponents.CheckBox {
+        Layout.maximumWidth: dialog.optionsWidth
+        text: i18n("Show indicators for applets")
+        checked: indicator.configuration.enabledForApplets
+        tooltip: i18n("Indicators are shown for applets")
+
+        onClicked: {
+            indicator.configuration.enabledForApplets = !indicator.configuration.enabledForApplets;
+        }
     }
 
     LatteComponents.CheckBox {

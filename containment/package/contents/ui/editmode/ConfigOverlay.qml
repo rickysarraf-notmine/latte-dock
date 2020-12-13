@@ -26,6 +26,8 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.kquickcontrolsaddons 2.0
 
+import QtGraphicalEffects 1.0
+
 MouseArea {
     id: configurationArea
 
@@ -52,16 +54,58 @@ MouseArea {
     property Item currentApplet
     property Item previousCurrentApplet
 
+    property Item currentHoveredLayout: {
+        if (placeHolder.parent !== configurationArea) {
+            return placeHolder.parent;
+        }
+
+        return currentApplet ? currentApplet.parent : null
+    }
+
     property int lastX
     property int lastY
     property int appletX
     property int appletY
 
-    readonly property int thickness: visibilityManager.thicknessNormalOriginalValue - visibilityManager.extraThickMask - 1
+    readonly property int thickness: metrics.mask.thickness.maxNormal - metrics.extraThicknessForNormal
     readonly property int spacerHandleSize: units.smallSpacing
 
     onHeightChanged: tooltip.visible = false;
     onWidthChanged: tooltip.visible = false;
+
+
+    function hoveredItem(x, y) {
+        //! main layout
+        var relevantLayout = mapFromItem(layoutsContainer.mainLayout,0,0);
+        var item = layoutsContainer.mainLayout.childAt(x-relevantLayout.x, y-relevantLayout.y);
+
+        if (!item) {
+            // start layout
+            relevantLayout = mapFromItem(layoutsContainer.startLayout,0,0);
+            item = layoutsContainer.startLayout.childAt(x-relevantLayout.x, y-relevantLayout.y);
+        }
+
+        if (!item) {
+            relevantLayout = mapFromItem(layoutsContainer.endLayout,0,0);
+            item = layoutsContainer.endLayout.childAt(x-relevantLayout.x, y-relevantLayout.y);
+        }
+
+        return item;
+    }
+
+    function relevantLayoutForApplet(curapplet) {
+        var relevantLayout;
+
+        if (curapplet.parent === layoutsContainer.mainLayout) {
+            relevantLayout = mapFromItem(layoutsContainer.mainLayout, 0, 0);
+        } else if (curapplet.parent === layoutsContainer.startLayout) {
+            relevantLayout = mapFromItem(layoutsContainer.startLayout, 0, 0);
+        } else if (curapplet.parent === layoutsContainer.endLayout) {
+            relevantLayout = mapFromItem(layoutsContainer.endLayout, 0, 0);
+        }
+
+        return relevantLayout;
+    }
 
 
     onPositionChanged: {
@@ -92,8 +136,7 @@ MouseArea {
             lastX = mouse.x;
             lastY = mouse.y;
 
-            var relevantLayout = mapFromItem(layoutsContainer.mainLayout, 0, 0);
-            var item = layoutsContainer.mainLayout.childAt(mouse.x-relevantLayout.x, mouse.y-relevantLayout.y);
+            var item =  hoveredItem(mouse.x, mouse.y);
 
             if (item && item !== placeHolder) {
                 placeHolder.parent = configurationArea;
@@ -108,9 +151,8 @@ MouseArea {
             }
 
         } else {
-            var relevantLayout = mapFromItem(layoutsContainer.mainLayout,0,0);
+            var item = hoveredItem(mouse.x, mouse.y);
 
-            var item = layoutsContainer.mainLayout.childAt(mouse.x-relevantLayout.x, mouse.y-relevantLayout.y);
             if (root.dragOverlay && item && item !== lastSpacer) {
                 root.dragOverlay.currentApplet = item;
             } else {
@@ -132,14 +174,16 @@ MouseArea {
     onCurrentAppletChanged: {
         previousCurrentApplet = currentApplet;
 
-        if (!currentApplet
-                || !root.dragOverlay.currentApplet
-                || (currentApplet && currentApplet.isInternalViewSplitter)) {
+        if (!currentApplet || !root.dragOverlay.currentApplet) {
             hideTimer.restart();
             return;
         }
 
-        var relevantLayout = mapFromItem(layoutsContainer.mainLayout, 0, 0);
+        var relevantLayout = relevantLayoutForApplet(currentApplet) ;
+
+        if (!relevantLayout) {
+            return;
+        }
 
         handle.x = relevantLayout.x + currentApplet.x;
         handle.y = relevantLayout.y + currentApplet.y;
@@ -156,6 +200,8 @@ MouseArea {
         if (!root.dragOverlay.currentApplet) {
             return;
         }
+
+        root.layouter.appletsInParentChange = true;
 
         var relevantApplet = mapFromItem(currentApplet, 0, 0);
         var rootArea = mapFromItem(root, 0, 0);
@@ -203,6 +249,9 @@ MouseArea {
         //     handle.width = currentApplet.width;
         //    handle.height = currentApplet.height;
         root.layoutManagerSave();
+        root.layoutManagerMoveAppletsBasedOnJustifyAlignment();
+        root.layouter.appletsInParentChange = false;
+        layouter.updateSizeForAppletsInFill();
     }
 
     onWheel: {
@@ -223,6 +272,8 @@ MouseArea {
         visible: configurationArea.containsMouse
         Layout.fillWidth: currentApplet ? currentApplet.Layout.fillWidth : false
         Layout.fillHeight: currentApplet ? currentApplet.Layout.fillHeight : false
+
+        readonly property bool isPlaceHolder: true
     }
 
     //Because of the animations for the applets the handler can not catch up to
@@ -236,7 +287,7 @@ MouseArea {
 
     Timer {
         id: hideTimer
-        interval: units.longDuration * 2
+        interval: animations.duration.large * 2
         onTriggered: {
             if (!tooltipMouseArea.containsMouse) {
                 tooltip.visible = false;
@@ -257,69 +308,138 @@ MouseArea {
         id: handle
         visible: currentApplet && (configurationArea.containsMouse || tooltipMouseArea.containsMouse)
 
+        Loader {
+            anchors.fill: parent
+            active: root.debug.graphicsEnabled
+            sourceComponent: Rectangle {
+                color: "transparent"
+                border.width:1
+                border.color: "yellow"
+            }
+        }
+
         //BEGIN functions
         function updatePlacement(){
             if(currentApplet){
                 var transformChoords = configurationArea.mapFromItem(currentApplet, 0, 0)
 
-                handle.x = transformChoords.x;
-                handle.y = transformChoords.y;
-                handle.width = currentApplet.width;
-                handle.height = currentApplet.height;
+                if (handle.x !== transformChoords.x
+                        || handle.y !== transformChoords.y
+                        || handle.width !== currentApplet.width
+                        || handle.height !== currentApplet.height) {
 
-                repositionHandler.restart();
+                    handle.x = transformChoords.x;
+                    handle.y = transformChoords.y;
+                    handle.width = currentApplet.width;
+                    handle.height = currentApplet.height;
+
+                    repositionHandler.restart();
+                }
             }
         }
 
         //END functions
-        Rectangle{
-            anchors.fill: parent
-            color: theme.backgroundColor
-            radius: 3
-            opacity: 0.5
+
+        Item {
+            id: handleVisualItem
+            width: root.isHorizontal ? parent.width : thickness
+            height: root.isHorizontal ? thickness : parent.height
+
+            readonly property int thickness: root.isHorizontal ? parent.height - metrics.margin.screenEdge : parent.width - metrics.margin.screenEdge
+
+            Rectangle{
+                anchors.fill: parent
+                color: theme.backgroundColor
+                radius: 3
+                opacity: 0.35
+            }
+
+            PlasmaCore.IconItem {
+                source: "transform-move"
+                width: Math.min(144, parent.width, parent.height)
+                height: width
+                anchors.centerIn: parent
+                opacity: 0.9
+                layer.enabled: graphicsSystem.isAccelerated
+                layer.effect: DropShadow {
+                    radius: root.appShadowSize
+                    fast: true
+                    samples: 2 * radius
+                    color: root.appShadowColor
+
+                    verticalOffset: 2
+                }
+            }
+
+
+            states:[
+                State{
+                    name: "bottom"
+                    when: plasmoid.location === PlasmaCore.Types.BottomEdge
+
+                    AnchorChanges{
+                        target: handleVisualItem;
+                        anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                        anchors.right: undefined; anchors.left: undefined; anchors.top: undefined; anchors.bottom: parent.bottom;
+                    }
+                    PropertyChanges{
+                        target: handleVisualItem;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: metrics.margin.screenEdge;
+                        anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                    }
+                },
+                State{
+                    name: "top"
+                    when: plasmoid.location === PlasmaCore.Types.TopEdge
+
+                    AnchorChanges{
+                        target: handleVisualItem;
+                        anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                        anchors.right: undefined; anchors.left: undefined; anchors.top: parent.top; anchors.bottom: undefined;
+                    }
+                    PropertyChanges{
+                        target: handleVisualItem;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: metrics.margin.screenEdge;    anchors.bottomMargin: 0;
+                        anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                    }
+                },
+                State{
+                    name: "left"
+                    when: plasmoid.location === PlasmaCore.Types.LeftEdge
+
+                    AnchorChanges{
+                        target: handleVisualItem;
+                        anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                        anchors.right: undefined; anchors.left: parent.left; anchors.top: undefined; anchors.bottom: undefined;
+                    }
+                    PropertyChanges{
+                        target: handleVisualItem;
+                        anchors.leftMargin: metrics.margin.screenEdge;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                        anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                    }
+                },
+                State{
+                    name: "right"
+                    when: plasmoid.location === PlasmaCore.Types.RightEdge
+
+                    AnchorChanges{
+                        target: handleVisualItem;
+                        anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                        anchors.right: parent.right; anchors.left: undefined; anchors.top: undefined; anchors.bottom: undefined;
+                    }
+                    PropertyChanges{
+                        target: handleVisualItem;
+                        anchors.leftMargin: 0;    anchors.rightMargin: metrics.margin.screenEdge;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                        anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+                    }
+                }
+            ]
+
         }
 
-        PlasmaCore.IconItem {
-            source: "transform-move"
-            width: Math.min(parent.width, parent.height)
-            height: width
-            anchors.centerIn: parent
-            opacity: 0.5
-        }
-
-        Behavior on x {
-            enabled: !configurationArea.pressed
-            NumberAnimation {
-                id: xAnim
-                duration: units.longDuration
-                easing.type: Easing.InOutQuad
-            }
-        }
-        Behavior on y {
-            id: yAnim
-            enabled: !configurationArea.pressed
-            NumberAnimation {
-                duration: units.longDuration
-                easing.type: Easing.InOutQuad
-            }
-        }
-        Behavior on width {
-            enabled: !configurationArea.pressed
-            NumberAnimation {
-                duration: units.longDuration
-                easing.type: Easing.InOutQuad
-            }
-        }
-        Behavior on height {
-            enabled: !configurationArea.pressed
-            NumberAnimation {
-                duration: units.longDuration
-                easing.type: Easing.InOutQuad
-            }
-        }
         Behavior on opacity {
             NumberAnimation {
-                duration: units.longDuration
+                duration: animations.duration.large
                 easing.type: Easing.InOutQuad
             }
         }
@@ -338,11 +458,11 @@ MouseArea {
 
                 configureButton.visible = !currentApplet.isInternalViewSplitter && (currentApplet.applet.pluginName !== root.plasmoidName)
                         && currentApplet.applet.action("configure") && currentApplet.applet.action("configure").enabled;
-                closeButton.visible = !currentApplet.isInternalViewSplitter && currentApplet.applet.action("remove") && currentApplet.applet.action("remove").enabled
-                        && !(currentApplet.applet.pluginName===root.plasmoidName && latteView && latteView.layout.viewsWithTasks()===1 && latteView.tasksPresent());
+                closeButton.visible = !currentApplet.isInternalViewSplitter && currentApplet.applet.action("remove") && currentApplet.applet.action("remove").enabled;
                 lockButton.visible = !currentApplet.isInternalViewSplitter
                         && (currentApplet.applet.pluginName !== root.plasmoidName)
-                        && !currentApplet.isSeparator
+                        && !currentApplet.isSeparator;
+
                 colorizingButton.visible = root.colorizerEnabled && !currentApplet.appletBlocksColorizing && !currentApplet.isInternalViewSplitter;
 
                 label.text = currentApplet.isInternalViewSplitter ? i18n("Justify Splitter") : currentApplet.applet.title;

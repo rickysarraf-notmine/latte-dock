@@ -22,7 +22,6 @@ import QtQuick 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
 import org.kde.latte.components 1.0 as LatteComponents
 
 Item {
@@ -38,7 +37,7 @@ Item {
         states: [
             State {
                 name: "default"
-                when: (root.position !== PlasmaCore.Types.RightPositioned)
+                when: (root.location !== PlasmaCore.Types.RightEdge)
 
                 AnchorChanges {
                     target: subRectangle
@@ -47,7 +46,7 @@ Item {
             },
             State {
                 name: "right"
-                when: (root.position === PlasmaCore.Types.RightPositioned)
+                when: (root.location === PlasmaCore.Types.RightEdge)
 
                 AnchorChanges {
                     target: subRectangle
@@ -63,8 +62,8 @@ Item {
             maximumWidth: {
                 if (showsAudioBadge) {
                     return height;
-                } else if ( index === parabolicManager.firstRealTaskIndex && !taskItem.containsMouse) {
-                    return (wrapper.mScale * (root.iconSize - (root.enableShadows ? shadowSize/2 : 0)));
+                } else if ( index === taskItem.indexer.firstVisibleItemIndex && !taskItem.containsMouse) {
+                    return (wrapper.mScale * (taskItem.metrics.iconSize - (root.enableShadows ? shadowSize/2 : 0)));
                 } else {
                     return 999999;
                 }

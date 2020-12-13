@@ -21,8 +21,6 @@ import QtQuick 2.7
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 Loader {
     id: indicatorLoader
     anchors.bottom: (plasmoid.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
@@ -35,7 +33,7 @@ Loader {
 
     active: level.bridge && level.bridge.active && (level.isBackground || (level.isForeground && indicators.info.providesFrontLayer))
     sourceComponent: {
-        if (!indicators.enabledForApplets && appletItem.communicatorAlias.overlayLatteIconIsActive) {
+        if (!indicators.info.enabledForApplets && appletItem.communicator.overlayLatteIconIsActive) {
             return indicators.plasmaStyleComponent;
         }
 
@@ -44,32 +42,34 @@ Loader {
 
     width: {
         if (root.isHorizontal) {
-            if (canBeHovered) {
-                return appletItem.wrapperAlias.zoomScale * visualLockedWidth;
+            if (appletItem.parabolicEffectIsSupported) {
+                return appletItem.wrapper.zoomScale * visualLockedWidth;
             }
 
             return appletWrapper.width + appletItem.internalWidthMargins;
         } else {
-            return appletItem.wrapperAlias.width;
+            return appletItem.wrapper.width;
         }
     }
 
     height: {
         if (root.isVertical) {
-            if (canBeHovered) {
-               return appletItem.wrapperAlias.zoomScale * visualLockedHeight;
+            if (appletItem.parabolicEffectIsSupported) {
+               return appletItem.wrapper.zoomScale * visualLockedHeight;
             }
 
             return appletWrapper.height + appletItem.internalHeightMargins;
         } else {
-            return appletItem.wrapperAlias.height;
+            return appletItem.wrapper.height;
         }
     }
 
-    readonly property bool locked: appletItem.lockZoom || root.zoomFactor === 1
+    readonly property bool locked: appletItem.lockZoom || appletItem.parabolic.factor.zoom === 1
 
-    property real visualLockedWidth: root.iconSize + appletItem.internalWidthMargins
-    property real visualLockedHeight: root.iconSize + appletItem.internalHeightMargins
+    //! Qt.min() is used to make sure that indicators always take into account the current applet length provided
+    //! and as such always look centered even when applet are aligned to length screen edge
+    property real visualLockedWidth: Math.min(appletItem.metrics.iconSize, appletWrapper.width) + appletItem.internalWidthMargins
+    property real visualLockedHeight: Math.min(appletItem.metrics.iconSize, appletWrapper.height) + appletItem.internalHeightMargins
 
     //! Communications !//
 

@@ -26,8 +26,8 @@ Item {
     id: shadowsContainer
     opacity: 0.4
 
-    readonly property int gradientLength: root.iconSize / 3
-    readonly property int thickness: latteView ? latteView.realPanelSize : root.iconSize + root.thickMargins
+    readonly property int gradientLength: metrics.iconSize / 3
+    readonly property int thickness: metrics.backgroundThickness
     readonly property color appliedColor: root.appShadowColorSolid
 
     property Item flickable
@@ -62,7 +62,7 @@ Item {
     states: [
         State {
             name: "bottom"
-            when: plasmoid.location === PlasmaCore.Types.BottomEdge
+            when: root.location === PlasmaCore.Types.BottomEdge
 
             AnchorChanges {
                 target: firstGradient
@@ -79,10 +79,15 @@ Item {
                 anchors{ top:undefined; bottom:flickable.bottom; left:undefined; right:undefined;
                     horizontalCenter:flickable.horizontalCenter; verticalCenter:undefined}
             }
+            PropertyChanges {
+                target: shadowsContainer
+                anchors.leftMargin: 0;    anchors.rightMargin:0;     anchors.topMargin: 0;    anchors.bottomMargin: metrics.margin.screenEdge;
+                anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+            }
         },
         State {
             name: "top"
-            when: plasmoid.location === PlasmaCore.Types.TopEdge
+            when: root.location === PlasmaCore.Types.TopEdge
 
             AnchorChanges {
                 target: firstGradient
@@ -99,10 +104,15 @@ Item {
                 anchors{ top:flickable.top; bottom:undefined; left:undefined; right:undefined;
                     horizontalCenter:flickable.horizontalCenter; verticalCenter:undefined}
             }
+            PropertyChanges {
+                target: shadowsContainer
+                anchors.leftMargin: 0;    anchors.rightMargin:0;     anchors.topMargin: metrics.margin.screenEdge;    anchors.bottomMargin:0;
+                anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+            }
         },
         State {
             name: "left"
-            when: plasmoid.location === PlasmaCore.Types.LeftEdge
+            when: root.location === PlasmaCore.Types.LeftEdge
 
             AnchorChanges {
                 target: firstGradient
@@ -119,10 +129,15 @@ Item {
                 anchors{ top:undefined; bottom:undefined; left:flickable.left; right:undefined;
                     horizontalCenter:undefined; verticalCenter:flickable.verticalCenter}
             }
+            PropertyChanges {
+                target: shadowsContainer
+                anchors.leftMargin: metrics.margin.screenEdge;    anchors.rightMargin:0;     anchors.topMargin: 0;    anchors.bottomMargin:0;
+                anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
+            }
         },
         State {
             name: "right"
-            when: plasmoid.location === PlasmaCore.Types.RightEdge
+            when: root.location === PlasmaCore.Types.RightEdge
 
             AnchorChanges {
                 target: firstGradient
@@ -138,6 +153,11 @@ Item {
                 target: shadowsContainer
                 anchors{ top:undefined; bottom:undefined; left:undefined; right:flickable.right;
                     horizontalCenter:undefined; verticalCenter:flickable.verticalCenter}
+            }
+            PropertyChanges {
+                target: shadowsContainer
+                anchors.leftMargin: 0;    anchors.rightMargin: metrics.margin.screenEdge;     anchors.topMargin: 0;    anchors.bottomMargin:0;
+                anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
             }
         }
     ]

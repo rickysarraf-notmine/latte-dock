@@ -27,8 +27,8 @@ SequentialAnimation{
     id: clickedAnimation
 
     property bool pressed: taskItem.pressed
-    property int speed: root.durationTime*units.longDuration
-    property real maxMScale: Math.max(1,root.zoomFactor - (root.zoomFactor - 1) / 2)
+    property int speed: taskItem.animations.speedFactor.current * taskItem.animations.duration.large
+    property real maxMScale: Math.max(1,taskItem.parabolic.factor.zoom - (taskItem.parabolic.factor.zoom - 1) / 2)
 
     ParallelAnimation{
         PropertyAnimation {
@@ -41,7 +41,7 @@ SequentialAnimation{
        /* PropertyAnimation {
             target: wrapper
             property: "mScale"
-            to: root.taskInAnimation ? 1 : Math.max(clickedAnimation.maxMScale, wrapper.mScale - (root.zoomFactor - 1) / 2)
+            to: root.taskInAnimation ? 1 : Math.max(clickedAnimation.maxMScale, wrapper.mScale - (taskItem.parabolic.factor.zoom - 1) / 2)
             duration: clickedAnimation.speed
             easing.type: Easing.OutQuad
         }*/
@@ -58,7 +58,7 @@ SequentialAnimation{
       /*  PropertyAnimation {
             target: wrapper
             property: "mScale"
-            to: root.taskInAnimation ? 1 : root.zoomFactor
+            to: root.taskInAnimation ? 1 : taskItem.parabolic.factor.zoom
             duration: clickedAnimation.speed
             easing.type: Easing.OutQuad
         }*/
@@ -77,7 +77,7 @@ SequentialAnimation{
         if( !taskItem.isDragged){
             //taskItem.animationEnded();
             if(!root.latteView)
-                checkListHovered.startDuration(6*units.longDuration);
+                checkListHovered.startDuration(6 * taskItem.animations.duration.large);
         }
     }
 }

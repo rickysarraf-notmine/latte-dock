@@ -22,8 +22,6 @@ import QtQuick 2.7
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 import "../applet/indicator" as AppletIndicator
 
 Item{
@@ -33,8 +31,7 @@ Item{
     readonly property QtObject resources: latteView && latteView.indicator ? latteView.indicator.resources : null
 
     readonly property bool isEnabled: latteView && latteView.indicator ? (latteView.indicator.enabled && latteView.indicator.pluginIsReady) : false
-    readonly property bool enabledForApplets: latteView && latteView.indicator ? latteView.indicator.enabledForApplets : true
-    readonly property real padding: Math.max(info.minLengthPadding, latteView && latteView.indicator ? latteView.indicator.padding : 0.08)
+    readonly property real padding: Math.max(info.minLengthPadding, info.lengthPadding)
     readonly property string type: latteView && latteView.indicator ? latteView.indicator.type : "org.kde.latte.default"  
 
     readonly property bool infoLoaded: metricsLoader.active && metricsLoader.item
@@ -43,6 +40,9 @@ Item{
     readonly property Component indicatorComponent: latteView && latteView.indicator ? latteView.indicator.component : null
 
     readonly property Item info: Item{
+        readonly property bool enabledForApplets: infoLoaded && metricsLoader.item.hasOwnProperty("enabledForApplets")
+                                                  && metricsLoader.item.enabledForApplets
+
         readonly property bool needsIconColors: infoLoaded && metricsLoader.item.hasOwnProperty("needsIconColors")
                                                 && metricsLoader.item.needsIconColors
 
@@ -82,6 +82,14 @@ Item{
             return 0;
         }
 
+        readonly property real lengthPadding: {
+            if (infoLoaded && metricsLoader.item.hasOwnProperty("lengthPadding")) {
+                return metricsLoader.item.lengthPadding;
+            }
+
+            return 0.08;
+        }
+
         readonly property real appletLengthPadding: {
             if (infoLoaded && metricsLoader.item.hasOwnProperty("appletLengthPadding")) {
                 return metricsLoader.item.appletLengthPadding;
@@ -113,7 +121,15 @@ Item{
         sourceComponent: managerIndicator.indicatorComponent
     }
 
-    //! Bindings in order to inform View::Indicator::Info
+    //! Bindings in order to inform View::Indicator
+    Binding{
+        target: latteView && latteView.indicator ? latteView.indicator : null
+        property:"enabledForApplets"
+        when: latteView && latteView.indicator
+        value: managerIndicator.info.enabledForApplets
+    }
+
+    //! Bindings in order to inform View::Indicator::Info    
     Binding{
         target: latteView && latteView.indicator ? latteView.indicator.info : null
         property:"needsIconColors"

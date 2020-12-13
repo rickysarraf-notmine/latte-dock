@@ -27,7 +27,8 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.activities 0.1 as Activities
 import org.kde.taskmanager 0.1 as TaskManager
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
+import org.kde.latte.private.tasks 0.1 as LatteTasks
 
 import "../code/activitiesTools.js" as ActivitiesTools
 
@@ -42,12 +43,14 @@ PlasmaComponents.ContextMenu {
     property var modelIndex
     readonly property var atm: TaskManager.AbstractTasksModel
 
+    readonly property var containmentActions: latteView ? latteView.containmentActions() : []
+
     placement: {
-        if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
+        if (root.location === PlasmaCore.Types.LeftEdge) {
             return PlasmaCore.Types.RightPosedTopAlignedPopup;
-        } else if (plasmoid.location === PlasmaCore.Types.TopEdge) {
+        } else if (root.location === PlasmaCore.Types.TopEdge) {
             return PlasmaCore.Types.BottomPosedLeftAlignedPopup;
-        } else if (plasmoid.location === PlasmaCore.Types.RightEdge) {
+        } else if (root.location === PlasmaCore.Types.RightEdge) {
             return PlasmaCore.Types.LeftPosedTopAlignedPopup;
         } else {
             return PlasmaCore.Types.TopPosedLeftAlignedPopup;
@@ -67,7 +70,6 @@ PlasmaComponents.ContextMenu {
             launcherToggleAction.checked = (tasksModel.launcherPosition(get(atm.LauncherUrlWithoutIcon)) != -1);
             activitiesDesktopsMenu.refresh();
         } else if (status == PlasmaComponents.DialogStatus.Closed) {
-            root.startCheckRestoreZoomTimer(100);
             root.contextMenu = null;
             menu.destroy();
             backend.ungrabMouse(visualParent);
@@ -78,27 +80,20 @@ PlasmaComponents.ContextMenu {
         return tasksModel.data(modelIndex, modelProp)
     }
 
-    function show() {
-        //trying to use the dragging mechanism in order to not hide the dock
-        root.disableRestoreZoom = true;
-        root.signalActionsBlockHiding(1);
-        //root.signalDraggingState(true);
+    function show() {       
         loadDynamicLaunchActions(visualParent.m.LauncherUrlWithoutIcon);
         // backend.ungrabMouse(visualParent);
         openRelative();
 
-        if (Latte.WindowSystem.isPlatformWayland){
+        if (LatteCore.WindowSystem.isPlatformWayland){
             //!Hiding previews under wayland it needs a delay otherwise it creates crashes
             windowsPreviewCheckerToNotShowTimer.start();
         } else {
             windowsPreviewDlg.hide("9.4");
         }
 
-        icList.directRender = false;
-
         if (root.latteView){
-            root.latteView.hideTooltipLabel();
-            root.latteView.globalDirectRender = false;
+            root.latteView.hideTooltipLabel();            
         }
     }
 
@@ -120,7 +115,7 @@ PlasmaComponents.ContextMenu {
         var sections = [];
 
         //From Plasma 5.10 and frameworks 5.34, places are also supported
-        if (Latte.WindowSystem.frameworksVersion >= 336384
+        if (LatteCore.Environment.frameworksVersion >= 336384
                 && (typeof backend.placesActions === "function")) {
             sections = [
                         {
@@ -318,7 +313,7 @@ PlasmaComponents.ContextMenu {
 
         //From Plasma 5.10 and frameworks 5.34 jumpLists and
         //places are supported
-        if (Latte.WindowSystem.frameworksVersion >= 336384) {
+        if (LatteCore.Environment.frameworksVersion >= 336384) {
             // Cannot have "Connections" as child of PlasmaCoponents.ContextMenu.
             backend.showAllPlaces.connect(function() {
                 visualParent.showContextMenu({showAllPlaces: true});
@@ -328,14 +323,10 @@ PlasmaComponents.ContextMenu {
     }
 
 
-    Component.onDestruction: {
+    Component.onDestruction: {        
         if (!changingLayout) {
             root.contextMenu = null;
             backend.ungrabMouse(visualParent);
-            root.signalActionsBlockHiding(-1);
-            //root.signalDraggingState(false);
-            root.disableRestoreZoom = false;
-            root.startCheckRestoreZoomTimer(100);
         }
     }
 
@@ -729,9 +720,9 @@ PlasmaComponents.ContextMenu {
             if (tasksModel.launcherPosition(get(atm.LauncherUrlWithoutIcon)) != -1) {
                 var launcher = get(atm.LauncherUrl);
 
-                if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+                if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                     latteView.layoutsManager.launchersSignals.removeLauncher(root.viewLayoutName,
-                                                                             latteView.launchersGroup, launcher);
+                                                                             root.launchersGroup, launcher);
                 } else {
                     root.launcherForRemoval = launcher;
                     tasksModel.requestRemoveLauncher(launcher);
@@ -740,9 +731,9 @@ PlasmaComponents.ContextMenu {
 
             } else {
                 var launcher = get(atm.LauncherUrl);
-                if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+                if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                     latteView.layoutsManager.launchersSignals.addLauncher(root.viewLayoutName,
-                                                                          latteView.launchersGroup, launcher);
+                                                                          root.launchersGroup, launcher);
                 } else {
                     tasksModel.requestAddLauncher(launcher);
                     root.launchersUpdatedFor(launcher);
@@ -757,7 +748,7 @@ PlasmaComponents.ContextMenu {
         text: i18n("&Pin Launcher")
         icon: "window-pin"
 
-        visible: visualParent && (!visualParent.isSeparator || (visualParent.isSeparator && root.editMode))
+        visible: visualParent && (!visualParent.isSeparator || (visualParent.isSeparator && root.inEditMode))
         // && get(atm.IsLauncher) !== true
                  && get(atm.IsStartup) !== true
                  && plasmoid.immutability !== PlasmaCore.Types.SystemImmutable
@@ -789,9 +780,9 @@ PlasmaComponents.ContextMenu {
                     result.clicked.connect(
                                 function() {
                                     if (result.checked) {
-                                        if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+                                        if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                                             latteView.layoutsManager.launchersSignals.addLauncherToActivity(root.viewLayoutName,
-                                                                                                            latteView.launchersGroup, url, id);
+                                                                                                            root.launchersGroup, url, id);
                                         } else {
                                             if (id !== tasksModel.activity && (activities[0] === "00000000-0000-0000-0000-000000000000")) {
                                                 root.launcherForRemoval = url;
@@ -801,9 +792,9 @@ PlasmaComponents.ContextMenu {
                                             root.launchersUpdatedFor(url);
                                         }
                                     } else {
-                                        if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+                                        if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                                             latteView.layoutsManager.launchersSignals.removeLauncherFromActivity(root.viewLayoutName,
-                                                                                                                 latteView.launchersGroup, url, id);
+                                                                                                                 root.launchersGroup, url, id);
                                         } else {
                                             if (id === tasksModel.activity) {
                                                 root.launcherForRemoval = url;
@@ -860,9 +851,9 @@ PlasmaComponents.ContextMenu {
         onClicked: {
             var launcher = get(atm.LauncherUrlWithoutIcon);
 
-            if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+            if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                 latteView.layoutsManager.launchersSignals.removeLauncher(root.viewLayoutName,
-                                                                         latteView.launchersGroup, launcher);
+                                                                         root.launchersGroup, launcher);
             } else {
                 root.launcherForRemoval = launcher
                 tasksModel.requestRemoveLauncher(launcher);
@@ -875,12 +866,12 @@ PlasmaComponents.ContextMenu {
 
     /*PlasmaComponents.MenuItem {
         separator: true
-        visible: root.editMode
+        visible: root.inEditMode
     }*/
 
     PlasmaComponents.MenuItem {
         id: addInternalSeparatorItem
-        visible: root.editMode
+        visible: root.inEditMode
 
         icon: "add"
         text: i18n("Add Separator")
@@ -894,19 +885,18 @@ PlasmaComponents.ContextMenu {
 
     PlasmaComponents.MenuItem {
         id: removeInternalSeparatorItem
-        visible: root.editMode && visualParent.isSeparator
+        visible: root.inEditMode && visualParent.isSeparator
 
         icon: "remove"
         text: i18n("Remove Separator")
-        enabled: parabolicManager.hasInternalSeparator
+        enabled: (root.indexer.separators.length > 0) && visualParent && visualParent.isSeparator
 
         onClicked: {
-            //root.removeLastSeparator();
             var launcher = get(atm.LauncherUrlWithoutIcon);
 
-            if (latteView && latteView.launchersGroup >= Latte.Types.LayoutLaunchers) {
+            if (latteView && root.launchersGroup >= LatteCore.Types.LayoutLaunchers) {
                 latteView.layoutsManager.launchersSignals.removeLauncher(root.viewLayoutName,
-                                                                         latteView.launchersGroup, launcher);
+                                                                         root.launchersGroup, launcher);
             } else {
                 root.launcherForRemoval = launcher;
                 tasksModel.requestRemoveLauncher(launcher);
@@ -916,26 +906,46 @@ PlasmaComponents.ContextMenu {
     }
 
     PlasmaComponents.MenuItem {
-        text: i18n("Configure")
-        section: true
+        //text: i18n("Configure")
+        //section: true
+        separator: true
+        visible: preferenceMenuItem.visible
     }
 
     /* PlasmaComponents.MenuItem {
         separator: true
-        visible: root.editMode
+        visible: root.inEditMode
     }*/
 
     PlasmaComponents.MenuItem {
         id: layoutsMenuItem
 
-        action: latteView ?  latteView.containmentActions()[1] : plasmoid.action("configure")
+        action: latteView ?  containmentActions[1] : plasmoid.action("configure")
         enabled: visible
-        visible: latteView && latteView.layoutsManager.menuLayouts.length>1
+        visible: latteView && containmentActions[1].visible
+    }
+
+    PlasmaComponents.MenuItem {
+        id: preferenceMenuItem
+
+        action: latteView ?  containmentActions[2] : plasmoid.action("configure")
+        visible: latteView
+    }
+
+    PlasmaComponents.MenuItem {
+        id: quitApplicationItem
+        action: latteView ? containmentActions[3] : plasmoid.action("configure")
+        visible:  latteView
+    }
+
+    PlasmaComponents.MenuItem {
+        separator: true
+        visible: preferenceMenuItem.visible
     }
 
     PlasmaComponents.MenuItem {
         id: alternativesMenuItem
-        visible: root.editMode && !visualParent.isSeparator
+        visible: root.inEditMode && !visualParent.isSeparator
         text: plasmoid.action("alternatives").text
         icon: plasmoid.action("alternatives").icon
 
@@ -945,28 +955,17 @@ PlasmaComponents.ContextMenu {
     PlasmaComponents.MenuItem {
         id: addWidgets
 
-        action: latteView ? latteView.containmentActions()[2] : plasmoid.action("configure");
+        action: latteView ? containmentActions[5] : plasmoid.action("configure");
         visible:  latteView
     }
-
 
     PlasmaComponents.MenuItem {
         id: configureItem
 
-        action: latteView ? latteView.containmentActions()[3] : plasmoid.action("configure")
+        action: latteView ? containmentActions[6] : plasmoid.action("configure")
     }
 
     //! BEGIN: Plasmoid actions when it isnt inside a Latte dock
-    PlasmaComponents.MenuItem {
-        id: removePlasmoid
-        visible: !latteView && !plasmoid.immutable
-
-        text: plasmoid.action("remove").text
-        icon: plasmoid.action("remove").icon
-
-        onClicked: plasmoid.action("remove").trigger();
-    }
-
     PlasmaComponents.MenuItem {
         id: configurePlasmoid
         visible: !latteView && !plasmoid.immutable
@@ -987,7 +986,7 @@ PlasmaComponents.ContextMenu {
     //!comparing with the design decisions of other taskmanagers
     PlasmaComponents.MenuItem {
         id: closeWindowItem
-        visible: (visualParent && visualParent.m.IsLauncher !== true && visualParent.m.IsStartup !== true)
+        visible: (visualParent && visualParent.m.IsLauncher !== true && visualParent.m.IsStartup !== true) && !root.disableAllWindowsFunctionality
 
         enabled: visualParent && visualParent.m.IsClosable === true
 
@@ -995,12 +994,27 @@ PlasmaComponents.ContextMenu {
         icon: "window-close"
 
         onClicked: {
-            if (root.zoomFactor>1) {
+            if (parabolic.factor.zoom>1) {
                 delayWindowRemovalTimer.modelIndex = menu.modelIndex;
                 delayWindowRemovalTimer.start();
             } else {
                 tasksModel.requestClose(menu.modelIndex);
             }
         }
+    }
+
+    PlasmaComponents.MenuItem {
+        separator: true
+        visible: removePlasmoid.visible
+    }
+
+    PlasmaComponents.MenuItem {
+        id: removePlasmoid
+        visible: (root.latteInEditMode) || (!root.latteBridge && !plasmoid.immutable /*normal plasmoid in the desktop*/)
+
+        text: plasmoid.action("remove").text
+        icon: plasmoid.action("remove").icon
+
+        onClicked: plasmoid.action("remove").trigger();
     }
 }

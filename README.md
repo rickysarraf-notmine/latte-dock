@@ -41,10 +41,12 @@ Minimum requirements:
  KF5GuiAddons >= 5.38.0
  KF5DBusAddons >= 5.38.0
  KF5Declarative >= 5.38.0
+ KF5Kirigami2 >= 5.38.0
  KF5Wayland >= 5.38.0
  KF5Package >= 5.38.0
  KF5XmlGui >= 5.38.0
  KF5IconThemes >= 5.38.0
+ KF5KIO >= 5.38.0
  KF5I18n >= 5.38.0
  KF5Notifications >= 5.38.0
  KF5NewStuff >= 5.38.0
@@ -58,6 +60,8 @@ Minimum requirements:
     KF5WindowSystem >= 5.38.0
     Qt5X11Extras >= 5.7.0
     libxcb
+    libxcb-randr
+    libxcb-shape
     libSM
 ```
 
@@ -101,7 +105,8 @@ See the [installation instruction](./INSTALLATION.md) for others Linux distribut
 ## Run Latte-Dock
 
 Latte is now ready to be used by executing 
-```latte-dock
+```
+latte-dock
 ```
 
 or activating **Latte Dock** from applications menu.

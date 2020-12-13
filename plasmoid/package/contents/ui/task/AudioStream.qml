@@ -21,7 +21,7 @@ import QtQuick 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 Item {
@@ -35,7 +35,7 @@ Item {
         states: [
             State {
                 name: "default"
-                when: (root.position !== PlasmaCore.Types.RightPositioned)
+                when: (root.location !== PlasmaCore.Types.RightEdge)
 
                 AnchorChanges {
                     target: subRectangle
@@ -44,7 +44,7 @@ Item {
             },
             State {
                 name: "right"
-                when: (root.position === PlasmaCore.Types.RightPositioned)
+                when: (root.location === PlasmaCore.Types.RightEdge)
 
                 AnchorChanges {
                     target: subRectangle
@@ -71,7 +71,7 @@ Item {
 
             style3d: root.badges3DStyle
 
-            Latte.IconItem{
+            LatteCore.IconItem{
                 id: audioStreamIcon
                 anchors.centerIn: parent
                 width: 0.9*parent.width

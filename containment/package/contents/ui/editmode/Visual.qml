@@ -25,7 +25,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 
 import "../applet" as Applet
@@ -41,31 +41,30 @@ Item{
 
     readonly property int settingsThickness: settingsOverlay.thickness
 
-    property int speed: Latte.WindowSystem.compositingActive ? root.appliedDurationTime*3.6*units.longDuration : 10
+    property int speed: LatteCore.WindowSystem.compositingActive ? animations.speedFactor.normal*3.6*animations.duration.large : 10
     property int thickness: visibilityManager.thicknessEditMode + root.editShadow
-    property int rootThickness: visibilityManager.thicknessZoomOriginal + root.editShadow //- visibilityManager.thicknessEditMode
-    property int editLength: root.isHorizontal ? (root.behaveAsPlasmaPanel ? root.width - root.maxIconSize/4 : root.width)://root.maxLength) :
-                                                 (root.behaveAsPlasmaPanel ? root.height - root.maxIconSize/4 : root.height)
+    property int rootThickness: metrics.mask.thickness.maxZoomed + root.editShadow //- visibilityManager.thicknessEditMode
+    property int editLength: root.isHorizontal ? (root.behaveAsPlasmaPanel ? root.width - metrics.maxIconSize/4 : root.width)://root.maxLength) :
+                                                 (root.behaveAsPlasmaPanel ? root.height - metrics.maxIconSize/4 : root.height)
 
-    property bool animationSent: false
     property bool farEdge: (plasmoid.location===PlasmaCore.Types.BottomEdge) || (plasmoid.location===PlasmaCore.Types.RightEdge)
     property bool editAnimationEnded: false
     property bool editAnimationInFullThickness: false
+    property bool editAnimationRunning: false
     property bool plasmaEditMode: plasmoid.userConfiguring
     property bool inEditMode: false
 
     property rect efGeometry
 
-    property string layoutColor: latteView && latteView.layout ? latteView.layout.color : "blue"
-
     readonly property real appliedOpacity: imageTiler.opacity
-    readonly property real maxOpacity: root.inConfigureAppletsMode ? 1 : plasmoid.configuration.editBackgroundOpacity
+    readonly property real maxOpacity: root.inConfigureAppletsMode || !LatteCore.WindowSystem.compositingActive ?
+                                           1 : plasmoid.configuration.editBackgroundOpacity
 
     LatteComponents.ExternalShadow{
         id: editExternalShadow
         width: root.isHorizontal ? imageTiler.width : root.editShadow
         height: root.isHorizontal ? root.editShadow : imageTiler.height
-        visible: !editTransition.running && root.editMode && Latte.WindowSystem.compositingActive
+        visible: !editTransition.running && root.editMode && LatteCore.WindowSystem.compositingActive
 
         shadowSize: root.editShadow
         shadowOpacity: Math.max(0.35, imageTiler.opacity)
@@ -127,10 +126,15 @@ Item{
         opacity: 0
 
         fillMode: Image.Tile
-        source: hasBackground ? latteView.layout.background : "../../icons/"+editVisual.layoutColor+"print.jpg"
+        source: {
+            if (hasBackground) {
+                return viewLayout.background;
+            }
 
-        readonly property bool hasBackground: (latteView && latteView.layout && latteView.layout.background.startsWith("/")) ?
-                                                  true : false
+            return viewLayout ? "../../icons/"+viewLayout.background+"print.jpg" : "../../icons/blueprint.jpg"
+        }
+
+        readonly property bool hasBackground: (viewLayout && viewLayout.background.startsWith("/")) ? true : false
 
         Connections {
             target: editVisual
@@ -145,7 +149,7 @@ Item{
         Behavior on opacity {
             enabled: editVisual.editAnimationEnded
             NumberAnimation {
-                duration: 0.8 * root.animationTime
+                duration: 0.8 * animations.duration.proposed
                 easing.type: Easing.OutCubic
             }
         }
@@ -220,7 +224,8 @@ Item{
 
     Applet.TitleTooltipParent {
         id: titleTooltipParent
-
+        metrics: root.metrics
+        parabolic: root.parabolic
         minimumThickness: visibilityManager.thicknessEditMode
         maximumThickness: root.inConfigureAppletsMode ? visibilityManager.thicknessEditMode : 9999
     }
@@ -233,6 +238,17 @@ Item{
     Connections{
         target: plasmoid
         onLocationChanged: initializeEditPosition();
+    }
+
+    onInEditModeChanged: {
+        if (inEditMode) {
+            latteView.visibility.addBlockHidingEvent("EditVisual[qml]::inEditMode()");
+        } else {
+            latteView.visibility.removeBlockHidingEvent("EditVisual[qml]::inEditMode()");
+            if (latteView.visibility.isHidden) {
+                latteView.visibility.mustBeShown();
+            }
+        }
     }
 
     onRootThicknessChanged: {
@@ -263,7 +279,7 @@ Item{
     }
 
     function updateEffectsArea(){
-       if (Latte.WindowSystem.compositingActive ||
+       if (LatteCore.WindowSystem.compositingActive ||
                !latteView || state !== "edit" || !editAnimationEnded) {
             return;
        }
@@ -312,136 +328,4 @@ Item{
             }
         }
     }
-
-    //////////// States ////////////////////
-
-    states: [
-        State{
-            name: "*"
-            //! since qt 5.14 default state can not use "when" property
-            //! it breaks restoring transitions otherwise
-        },
-
-        State{
-            name: "edit"
-            when: plasmaEditMode
-        }
-    ]
-
-    transitions: [
-        Transition{
-            id: editTransition
-            from: "*"
-            to: "edit"
-
-            SequentialAnimation{
-                id:normalAnimationTransition
-                ScriptAction{
-                    script:{
-                        editVisual.inEditMode = true;
-                        imageTiler.opacity = 0
-                        editVisual.editAnimationEnded = false;
-
-                        initializeNormalPosition();
-
-                        if(!animationSent) {
-                            animationSent = true;
-                            root.slotAnimationsNeedLength(1);
-                        }
-                    }
-                }
-
-                PauseAnimation{
-                    id: pauseAnimation
-                    //! give the time to CREATE the settings windows and not break
-                    //! the sliding in animation
-                    duration: root.animationsEnabled ? 100 : 0
-                }
-
-                ParallelAnimation{
-                    PropertyAnimation {
-                        target: imageTiler
-                        property: "opacity"
-                        to: plasmoid.configuration.inConfigureAppletsMode ? 1 : editVisual.maxOpacity
-                        duration: Math.max(0, editVisual.speed - pauseAnimation.duration)
-                        easing.type: Easing.InQuad
-                    }
-
-                    PropertyAnimation {
-                        target: editVisual
-                        property: root.isHorizontal ? "y" : "x"
-                        to: editVisual.farEdge ? editVisual.rootThickness - editVisual.thickness : 0
-                        duration: Math.max(0, editVisual.speed - pauseAnimation.duration)
-                        easing.type: Easing.Linear
-                    }
-                }
-
-                ScriptAction{
-                    script:{
-                        editVisual.editAnimationEnded = true;
-                        editVisual.editAnimationInFullThickness = true;
-                        updateEffectsArea();
-                        automaticItemSizer.updateAutomaticIconSize();
-                        visibilityManager.updateMaskArea();
-                    }
-                }
-            }
-        },
-        Transition{
-            from: "edit"
-            to: "*"
-            SequentialAnimation{
-                ScriptAction{
-                    script: {
-                        editVisual.editAnimationInFullThickness = false;
-                        //! remove kwin effects when starting the animation
-                        latteView.effects.rect = Qt.rect(-1, -1, 0, 0);
-                    }
-                }
-
-                PauseAnimation{
-                    id: pauseAnimation2
-                    //! give the time to DELETE the settings windows and not break
-                    //! the sliding out animation
-                    duration: root.animationsEnabled ? 100 : 0
-                }
-
-                ParallelAnimation{
-                    PropertyAnimation {
-                        target: editVisual
-                        property: root.isHorizontal ? "y" : "x"
-                        to: editVisual.farEdge ? editVisual.rootThickness : -editVisual.thickness
-                        duration: Math.max(0,editVisual.speed - pauseAnimation2.duration)
-                        easing.type: Easing.Linear
-                    }
-                    PropertyAnimation {
-                        target: imageTiler
-                        property: "opacity"
-                        to: 0
-                        duration: Math.max(0,editVisual.speed - pauseAnimation2.duration)
-                        easing.type: Easing.InQuad
-                    }
-                }
-
-                ScriptAction{
-                    script:{
-                        editVisual.inEditMode = false;
-                        editVisual.editAnimationEnded = false;
-                        if (editVisual.animationSent) {
-                            root.slotAnimationsNeedLength(-1);
-                            editVisual.animationSent = false;
-                        }
-
-                        //! That part was at the end of the Containers sliding-out animation
-                        //! but it looks much better here
-
-                        if (visibilityManager.inTempHiding) {
-                            visibilityManager.sendSlidingOutAnimationEnded();
-                        }
-                    }
-                }
-            }
-
-        }
-    ]
 }

@@ -122,7 +122,7 @@ function insertIndexAt(above, x, y) {
     } else {
         var distance = root.vertical ? y : x;
         //var step = root.vertical ? LayoutManager.taskWidth() : LayoutManager.taskHeight();
-        var step = root.iconSize + root.lengthMargins;
+        var step = metrics.totals.length;
         var stripe = Math.ceil(distance / step);
 
         /* if (stripe === LayoutManager.calculateStripes()) {
@@ -133,27 +133,4 @@ function insertIndexAt(above, x, y) {
 
         return stripe-1;
     }
-}
-
-function taskPrefix(prefix) {
-    var effectivePrefix;
-
-    switch (plasmoid.location) {
-    case PlasmaCore.Types.LeftEdge:
-        effectivePrefix = "west-" + prefix;
-        break;
-    case PlasmaCore.Types.TopEdge:
-        effectivePrefix = "north-" + prefix;
-        break;
-    case PlasmaCore.Types.RightEdge:
-        effectivePrefix = "east-" + prefix;
-        break;
-    default:
-        effectivePrefix = "south-" + prefix;
-    }
-    if (!frame.hasElementPrefix(effectivePrefix)) {
-        return prefix;
-    }
-    return effectivePrefix;
-
 }

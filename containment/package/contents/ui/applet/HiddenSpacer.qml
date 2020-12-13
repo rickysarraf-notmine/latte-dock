@@ -20,6 +20,8 @@
 
 import QtQuick 2.1
 
+import org.kde.latte.core 0.2 as LatteCore
+
 Item{
     id: hiddenSpacer
 
@@ -30,13 +32,13 @@ Item{
     ///check also if this is the first/last plasmoid in anylayout
     visible: (rightSpacer ? appletItem.lastAppletInContainer : appletItem.firstAppletInContainer) || separatorSpace>0
 
-    property bool neighbourSeparator: false;
+    property bool neighbourSeparator: rightSpacer ? appletItem.headAppletIsSeparator : appletItem.tailAppletIsSeparator
 
-    property int separatorSpace: neighbourSeparator && !appletItem.isSeparator && root.parabolicEffectEnabled
-                                 && !appletItem.latteApplet ? (2.5+root.lengthExtMargin) : subtrackedMargins
+    property int separatorSpace: neighbourSeparator && !appletItem.isSeparator && appletItem.parabolic.isEnabled
+                                 && !appletItem.latteApplet ? ((LatteCore.Environment.separatorLength/2)+appletItem.metrics.margin.length) : subtrackedMargins
 
     property real nHiddenSize: {
-        if (isSeparator || !communicator.lengthMarginsEnabled) {
+        if (isSeparator || !communicator.requires.lengthMarginsEnabled) {
             return 0;
         }
 
@@ -47,8 +49,17 @@ Item{
 
     readonly property bool atEdgeForcingFittsLaw: !isSeparator && !parabolicEffectMarginsEnabled && atScreenEdge
     readonly property int subtrackedMargins: {
-        if (atEdgeForcingFittsLaw && ((firstAppletInContainer && rightSpacer) || (lastAppletInContainer && !rightSpacer ))) {
-            return (wrapperAlias.edgeLengthMarginsDisabled ? root.lengthExtMargin + appletItem.lengthAppletIntMargin : root.lengthExtMargin);
+        if (atEdgeForcingFittsLaw && !appletItem.isAutoFillApplet) {
+            var inJustifyStart = (root.inFullJustify && firstChildOfStartLayout && rightSpacer);
+            var inJustifyEnd = (root.inFullJustify && lastChildOfEndLayout && !rightSpacer);
+
+            var singleApplet = firstChildOfMainLayout && lastChildOfMainLayout;
+            var inSideStart = ((root.panelAlignment === LatteCore.Types.Left || root.panelAlignment === LatteCore.Types.Top) && firstChildOfMainLayout && rightSpacer);
+            var inSideEnd = ((root.panelAlignment === LatteCore.Types.Right || root.panelAlignment === LatteCore.Types.Bottom) && lastChildOfMainLayout && !rightSpacer);
+
+            if (inJustifyStart || inJustifyEnd || inSideStart || inSideEnd) {
+                return (wrapper.edgeLengthMarginsDisabled ? appletItem.metrics.margin.length + appletItem.lengthAppletPadding : appletItem.metrics.margin.length);
+            }
         }
 
         return 0;
@@ -58,28 +69,27 @@ Item{
 
     Behavior on nHiddenSize {
         id: animatedBehavior
-        enabled: !root.globalDirectRender || restoreAnimation.running
+        enabled: !appletItem.parabolic.directRenderingEnabled || restoreAnimation.running
         NumberAnimation { duration: 3 * appletItem.animationTime }
     }
 
     Behavior on nHiddenSize {
         id: directBehavior
-        enabled: !animatedBehavior.running
-        NumberAnimation { duration: root.directRenderAnimationTime }
+        enabled: !animatedBehavior.enabled
+        NumberAnimation { duration: 0 }
     }
 
     Connections{
-        target: root
-        onSeparatorsUpdated: updateNeighbour();
-    }
-
-    function updateNeighbour() {
-        hiddenSpacer.neighbourSeparator = hiddenSpacer.rightSpacer ?
-                    parabolicManager.isSeparator(index+1) : parabolicManager.isSeparator(index-1)
+        target: appletItem
+        onContainsMouseChanged: {
+            if (!appletItem.containsMouse) {
+                hiddenSpacer.nScale = 0;
+            }
+        }
     }
 
     Loader{
-        active: root.debugModeSpacers
+        active: appletItem.debug.spacersEnabled
 
         sourceComponent: Rectangle{
             width: !root.isVertical ? hiddenSpacer.width : 1

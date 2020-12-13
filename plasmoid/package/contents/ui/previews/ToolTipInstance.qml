@@ -30,11 +30,11 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.extras 2.0 as PlasmaExtras
 import org.kde.kquickcontrolsaddons 2.0 as KQuickControlsAddons
 
+import org.kde.latte.core 0.2 as LatteCore
+
 import org.kde.draganddrop 2.0
 
 import org.kde.taskmanager 0.1 as TaskManager
-
-import org.kde.latte 0.2 as Latte
 
 Column {
     id: instance
@@ -51,15 +51,19 @@ Column {
 
     spacing: units.smallSpacing
 
-    property string mprisSourceName: mpris2Source.sourceNameForLauncherUrl(toolTipDelegate.launcherUrl, isGroup ? appPid : pidParent)
-    property var playerData: mprisSourceName != "" ? mpris2Source.data[mprisSourceName] : 0
-    property bool hasPlayer: !!mprisSourceName && !!playerData
-    property bool playing: hasPlayer && playerData.PlaybackStatus === "Playing"
-    property bool canControl: hasPlayer && playerData.CanControl
-    property bool canGoBack: hasPlayer && playerData.CanGoPrevious
-    property bool canGoNext: hasPlayer && playerData.CanGoNext
-    property bool canRaise: hasPlayer && playerData.CanRaise
-    property var currentMetadata: hasPlayer ? playerData.Metadata : ({})
+    readonly property bool descriptionIsVisible: winDescription.text !== ""
+
+    readonly property string mprisSourceName: mpris2Source.sourceNameForLauncherUrl(toolTipDelegate.launcherUrl, isGroup ? appPid : pidParent)
+    readonly property var playerData: mprisSourceName != "" ? mpris2Source.data[mprisSourceName] : 0
+    readonly property bool hasPlayer: !!mprisSourceName && !!playerData
+    readonly property bool playing: hasPlayer && playerData.PlaybackStatus === "Playing"
+    readonly property bool canControl: hasPlayer && playerData.CanControl
+    readonly property bool canPlay: hasPlayer && playerData.CanPlay
+    readonly property bool canPause: hasPlayer && playerData.CanPause
+    readonly property bool canGoBack: hasPlayer && playerData.CanGoPrevious
+    readonly property bool canGoNext: hasPlayer && playerData.CanGoNext
+    readonly property bool canRaise: hasPlayer && playerData.CanRaise
+    readonly property var currentMetadata: hasPlayer ? playerData.Metadata : ({})
 
     readonly property string track: {
         var xesamTitle = currentMetadata["xesam:title"]
@@ -82,11 +86,6 @@ Column {
     readonly property string albumArt: currentMetadata["mpris:artUrl"] || ""
 
     //
-    function containsMouse() {
-        return area1.containsMouse || area2.containsMouse
-               || (playbackLoader.active && playbackLoader.item.containsMouse());
-    }
-
     function isTaskActive() {
         return (isGroup ? isActive : (parentTask ? parentTask.isActive : false));
     }
@@ -139,6 +138,7 @@ Column {
             }
             // subtext
             PlasmaExtras.Heading {
+                id: winDescription
                 level: 6
                 width: isWin ? textWidth : undefined
                 height: undefined
@@ -147,36 +147,23 @@ Column {
                 text: isWin ? generateSubText() : ""
                 textFormat: Text.PlainText
                 opacity: 0.6
-                visible: text !== ""
+                visible: text !== "" || instance.parent.hasVisibleDescription
             }
         }
         // close button
-        MouseArea {
-            id: area1
+        PlasmaComponents.ToolButton {
+            id: closeButton
             Layout.alignment: Qt.AlignRight | Qt.AlignTop
-
-            height: units.iconSizes.smallMedium
-            width: height
-
             visible: isWin && !hideCloseButtons
-
-            acceptedButtons: Qt.LeftButton
-            hoverEnabled: true
+            iconSource: "window-close"
             onClicked: {
-                //NOTE: compatibility with plasma 5.8
-                if (backend.cancelHighlightWindows)
-                    backend.cancelHighlightWindows()
+                if (!isGroup) {
+                    //! force windowsPreviewDlg hiding when the last instance is closed
+                    windowsPreviewDlg.visible = false;
+                }
 
-                tasksModel.requestClose(submodelIndex)
-            }
-            onContainsMouseChanged: mainToolTip.mouseIsInside();
-
-            PlasmaCore.IconItem {
-                anchors.fill: parent
-                active: parent.containsMouse
-
-                source: "window-close"
-                animated: false
+                backend.cancelHighlightWindows();
+                tasksModel.requestClose(submodelIndex);
             }
         }
     }
@@ -184,11 +171,12 @@ Column {
     // thumbnail container
     Item {
         id: thumbnail
+        anchors.horizontalCenter: parent.horizontalCenter
+
         width: header.width
         // similar to 0.5625 = 1 / (16:9) as most screens are
         // round necessary, otherwise shadow mask for players has gap!
-        height: Math.round(0.5 * width) + (!winTitle.visible? winTitle.height : 0)
-        anchors.horizontalCenter: parent.horizontalCenter
+        height: Math.round(root.screenGeometryHeightRatio * width) + (!winTitle.visible? Math.round(winTitle.height) : 0) + activeTaskLine.height
 
         visible: isWin
 
@@ -199,24 +187,28 @@ Column {
 
             readonly property bool isMinimized: isGroup ? instance.isMinimized : mainToolTip.isMinimizedParent
             // TODO: this causes XCB error message when being visible the first time
-            property int winId: isWin && windows[flatIndex] !== undefined ? windows[flatIndex] : 0
+            readonly property var winId: isWin && windows[flatIndex] !== undefined ? windows[flatIndex] : 0
 
+            // There's no PlasmaComponents3 version
+            PlasmaComponents.Highlight {
+                anchors.fill: hoverHandler
+                visible: hoverHandler.containsMouse
+                pressed: hoverHandler.containsPress
+            }
 
             Loader{
-                id:previewThumbX11Loader
+                id:previewThumbLoader
                 anchors.fill: parent
-                active: !Latte.WindowSystem.isPlatformWayland
+                anchors.margins: 2
+                active: LatteCore.WindowSystem.isPlatformX11 || (root.plasma520 && LatteCore.WindowSystem.isPlatformWayland)
                 visible: !albumArtImage.visible && !thumbnailSourceItem.isMinimized
-
-                sourceComponent: PlasmaCore.WindowThumbnail {
-                    winId: thumbnailSourceItem.winId
-                }
+                source: root.plasma520 && LatteCore.WindowSystem.isPlatformWayland ? "PipeWireThumbnail.qml" : "PlasmaCoreThumbnail.qml"
             }
 
             ToolTipWindowMouseArea {
-                id: area2
+                id: hoverHandler
 
-                anchors.fill: Latte.WindowSystem.isPlatformWayland ? parent : previewThumbX11Loader
+                anchors.fill: parent
                 rootTask: parentTask
                 modelIndex: submodelIndex
                 winId: thumbnailSourceItem.winId
@@ -260,7 +252,7 @@ Column {
                 animated: false
                 usesPlasmaTheme: false
                 visible: (thumbnailSourceItem.isMinimized && !albumArtImage.visible) //X11 case
-                         || (!previewThumbX11Loader.active && !albumArtImage.visible) //Wayland case
+                         || (!previewThumbLoader.active && !albumArtImage.visible) //Wayland case
             }
         }
 
@@ -293,10 +285,6 @@ Column {
                 //                    onClicked: mpris2Source.raise(mprisSourceName)
                 //                }
 
-                function containsMouse() {
-                    return area3.containsMouse || area4.containsMouse || area5.containsMouse || area6.containsMouse;
-                }
-
                 Item {
                     id: playerControlsFrostedGlass
                     anchors.fill: parent
@@ -328,9 +316,6 @@ Column {
                 MouseArea {
                     id: area3
                     anchors.fill: playerControlsRow
-
-                    hoverEnabled: true
-                    onContainsMouseChanged: mainToolTip.mouseIsInside();
                 }
 
                 RowLayout {
@@ -348,102 +333,65 @@ Column {
                         Layout.fillWidth: true
                         spacing: 0
 
-                        PlasmaExtras.Heading {
+                        PlasmaComponents.Label {
                             Layout.fillWidth: true
-                            level: 5
                             lineHeight: 1
                             maximumLineCount: artistText.visible? 1 : 2
                             wrapMode: artistText.visible? Text.NoWrap : Text.Wrap
                             elide: Text.ElideRight
                             text: track || ""
-                            font.weight: Font.Bold
                         }
 
-                        PlasmaExtras.Heading {
+                         PlasmaExtras.DescriptiveLabel {
                             id: artistText
                             Layout.fillWidth: true
-                            level: 5
                             wrapMode: Text.NoWrap
                             lineHeight: 1
                             elide: Text.ElideRight
                             text: artist || ""
                             visible: text != ""
-                            opacity: 0.75
+                            font.pointSize: theme.smallestFont.pointSize
                         }
                     }
 
-                    MouseArea {
-                        id: area4
+                   PlasmaComponents.ToolButton {
+                       id: canGoBackButton
+                       enabled: canGoBack
+                       iconSource: LayoutMirroring.enabled ? "media-skip-forward" : "media-skip-backward"
+                       onClicked: mpris2Source.goPrevious(mprisSourceName)
+                   }
 
-                        height: units.iconSizes.smallMedium
-                        width: height
+                   PlasmaComponents.ToolButton {
+                       id: playingButton
+                       enabled: playing ? canPause : canPlay
+                       iconSource: playing ? "media-playback-pause" : "media-playback-start"
+                       onClicked: {
+                           if (!playing) {
+                               mpris2Source.play(mprisSourceName);
+                           } else {
+                               mpris2Source.pause(mprisSourceName);
+                           }
+                       }
+                   }
 
-                        acceptedButtons: Qt.LeftButton
-                        hoverEnabled: true
-                        onClicked: mpris2Source.goPrevious(mprisSourceName)
-                        onContainsMouseChanged: mainToolTip.mouseIsInside();
+                   PlasmaComponents.ToolButton {
+                       id: canGoNextButton
+                       enabled: canGoNext
+                       iconSource: LayoutMirroring.enabled ? "media-skip-backward" : "media-skip-forward"
+                       onClicked: mpris2Source.goNext(mprisSourceName)
+                   }
 
-                        PlasmaCore.IconItem {
-                            anchors.fill: parent
-                            enabled: canGoBack
-                            active: parent.containsMouse
-
-                            source: LayoutMirroring.enabled ? "media-skip-forward" : "media-skip-backward"
-                            animated: false
-                        }
-                    }
-
-                    MouseArea {
-                        id: area5
-
-                        height: units.iconSizes.medium
-                        width: height
-
-                        acceptedButtons: Qt.LeftButton
-                        hoverEnabled: true
-                        onClicked: mpris2Source.playPause(mprisSourceName)
-                        onContainsMouseChanged: mainToolTip.mouseIsInside();
-
-                        PlasmaCore.IconItem {
-                            anchors.fill: parent
-                            active: parent.containsMouse
-
-                            source: playing ? "media-playback-pause" : "media-playback-start"
-                            animated: false
-                        }
-                    }
-
-                    MouseArea {
-                        id: area6
-
-                        height: units.iconSizes.smallMedium
-                        width: height
-
-                        acceptedButtons: Qt.LeftButton
-                        hoverEnabled: true
-                        onClicked: mpris2Source.goNext(mprisSourceName)
-                        onContainsMouseChanged: mainToolTip.mouseIsInside();
-
-                        PlasmaCore.IconItem {
-                            anchors.fill: parent
-                            enabled: canGoNext
-                            active: parent.containsMouse
-
-                            source: LayoutMirroring.enabled ? "media-skip-backward" : "media-skip-forward"
-                            animated: false
-                        }
-                    }
                 }
             }
         }
 
-        //active window line
         Rectangle{
-            width: parent.width
-            height: 2
-            color: isTaskActive() ? theme.buttonFocusColor : theme.buttonHoverColor
+            id: activeTaskLine
             anchors.bottom: parent.bottom
-            visible: isTaskActive() || area2.containsMouse
+            width: header.width
+            height: 3
+            opacity: isTaskActive() ? 1 : 0
+            color: theme.buttonFocusColor
         }
     }
 

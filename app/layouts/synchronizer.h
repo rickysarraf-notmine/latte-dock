@@ -20,6 +20,11 @@
 #ifndef LAYOUTSSYNCHRONIZER_H
 #define LAYOUTSSYNCHRONIZER_H
 
+// local
+#include "../apptypes.h"
+#include "../data/layoutdata.h"
+#include "../data/layoutstable.h"
+
 // Qt
 #include <QObject>
 #include <QHash>
@@ -28,7 +33,6 @@
 
 namespace Latte {
 class CentralLayout;
-class SharedLayout;
 class View;
 namespace Layout{
 class GenericLayout;
@@ -49,10 +53,9 @@ class Controller;
 namespace Latte {
 namespace Layouts {
 
-//! This is a Shares map in the following structure:
-//! SHARED LAYOUT NAME -> CENTRAL LAYOUT NAMES acting as SHARES
-typedef QHash<const QString, QStringList> SharesMap;
-
+//! This is a Layouts map in the following structure:
+//! ACTIVITY ID -> Layout Names for that activity
+typedef QHash<QString, QStringList> AssignedLayoutsHash;
 
 //! Layouts::Synchronizer is a very IMPORTANT class which is responsible
 //! for all ACTIVE layouts, meaning layouts that have been loaded
@@ -70,92 +73,98 @@ public:
     Synchronizer(QObject *parent);
     ~Synchronizer() override;
 
-    void loadLayouts();
     void unloadLayouts();
 
     void hideAllViews();
     void pauseLayout(QString layoutName);
     void syncActiveLayoutsToOriginalFiles();
     void syncLatteViewsToScreens();
-    void syncMultipleLayoutsToActivities(QString layoutForOrphans = QString());
-    void syncActiveShares(SharesMap &sharesMap, QStringList &deprecatedShares);
+    void syncMultipleLayoutsToActivities();
 
     bool latteViewExists(Latte::View *view) const;
     bool layoutExists(QString layoutName) const;
-    bool mapHasRecord(const QString &record, SharesMap &map);
-    bool registerAtSharedLayout(CentralLayout *central, QString id);
     //! switch to specified layout, default previousMemoryUsage means that it didn't change
-    bool switchToLayout(QString layoutName, int previousMemoryUsage = -1);
+    bool switchToLayout(QString layoutName,  MemoryUsage::LayoutsMemory newMemoryUsage = MemoryUsage::Current);
 
     int centralLayoutPos(QString id) const;
 
-    QString currentLayoutName() const;
-    QString currentLayoutNameInMultiEnvironment() const;
-    QString shouldSwitchToLayout(QString activityId);
-
     QStringList centralLayoutsNames();
+    QStringList currentLayoutsNames() const;
     QStringList layouts() const;
     QStringList menuLayouts() const;
-    void setMenuLayouts(QStringList layouts);
-    QStringList sharedLayoutsNames();
-    QStringList storedSharedLayouts() const;
 
     QStringList activities();
+    QStringList freeActivities();
     QStringList runningActivities();
-    QStringList orphanedActivities(); //! These are activities that haven't been assigned to specific layout
+    QStringList freeRunningActivities(); //! These are activities that haven't been assigned to specific layout
+    QStringList validActivities(const QStringList &layoutActivities);
 
     Latte::View *viewForContainment(Plasma::Containment *containment);
+    Latte::View *viewForContainment(uint id);
 
-    CentralLayout *currentLayout() const;
-    CentralLayout *centralLayout(QString id) const;
-    SharedLayout *sharedLayout(QString id) const;
-    Layout::GenericLayout *layout(QString id) const;
+    QList<CentralLayout *> currentLayouts() const;
+    QList<Latte::View *> currentViews() const;
+    QList<Latte::View *> currentViewsWithPlasmaShortcuts() const;
+    QList<Latte::View *> sortedCurrentViews() const;
+    QList<Latte::View *> viewsBasedOnActivityId(const QString &id) const;
+
+    CentralLayout *centralLayout(QString layoutname) const;
+    Layout::GenericLayout *layout(QString layoutname) const;
+
+    QList<CentralLayout *> centralLayoutsForActivity(const QString activityid) const;
+
+    KActivities::Controller *activitiesController() const;
+
+    Data::LayoutsTable layoutsTable() const;
+    void setLayoutsTable(const Data::LayoutsTable &table);
+
+public slots:
+    void initLayouts();
+    void updateKWinDisabledBorders();
+
+    void updateLayoutsTable();
 
 signals:
     void centralLayoutsChanged();
-    void currentLayoutNameChanged();
     void layoutsChanged();
-    void menuLayoutsChanged();
     void runningActicitiesChanged();
 
     void currentLayoutIsSwitching(QString layoutName);
 
-private slots:
-    void confirmDynamicSwitch();
-    void updateDynamicSwitchInterval();
-    void updateCurrentLayoutNameInMultiEnvironment();
+    void newLayoutAdded(const Data::Layout &layout);
+    void layoutActivitiesChanged(const Data::Layout &layout);
 
-    void currentActivityChanged(const QString &id);
+private slots:
+    void onActivityRemoved(const QString &activityid);
+    void onCurrentActivityChanged(const QString &activityid);
+    void onLayoutAdded(const QString &layoutpath);
+
+    void reloadAssignedLayouts();
 
 private:
-    void clearSharedLayoutsFromCentralLists();
-
     void addLayout(CentralLayout *layout);
     void unloadCentralLayout(CentralLayout *layout);
-    void unloadSharedLayout(SharedLayout *layout);
+    void unloadLayouts(const QStringList &layoutNames);
 
-    bool layoutIsAssigned(QString layoutName);
+    bool initSingleMode(QString layoutName);
+    bool initMultipleMode(QString layoutName);
+
+    bool switchToLayoutInMultipleMode(QString layoutName);
+    bool switchToLayoutInSingleMode(QString layoutName);
+    bool switchToLayoutInMultipleModeBasedOnActivities(const QString &layoutName);
+
+    bool isAssigned(QString layoutName) const;
+    bool memoryInitialized() const;
 
     QString layoutPath(QString layoutName);
 
-    QStringList validActivities(QStringList currentList);
-
 private:
     bool m_multipleModeInitialized{false};
+    bool m_isLoaded{false};
 
-    QString m_currentLayoutNameInMultiEnvironment;
-    QString m_shouldSwitchToLayout;
-
-    QStringList m_layouts;
-    QStringList m_menuLayouts;
-    QStringList m_sharedLayoutIds;
-
-    QHash<const QString, QString> m_assignedLayouts;
-
-    QTimer m_dynamicSwitchTimer;
-
+    Data::LayoutsTable m_layouts;
     QList<CentralLayout *> m_centralLayouts;
-    QList<SharedLayout *> m_sharedLayouts;
+    AssignedLayoutsHash m_assignedLayouts;
 
     Layouts::Manager *m_manager;
     KActivities::Controller *m_activitiesController;

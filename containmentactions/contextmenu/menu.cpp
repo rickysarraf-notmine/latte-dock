@@ -19,9 +19,6 @@
 
 #include "menu.h"
 
-// local
-#include "../../liblatte2/types.h"
-
 // Qt
 #include <QAction>
 #include <QDebug>
@@ -41,6 +38,24 @@
 
 const int LAYOUTSPOS = 3;
 
+enum ViewType
+{
+    DockView = 0,
+    PanelView
+};
+
+enum LayoutsMemoryUsage
+{
+    SingleLayout = 0,
+    MultipleLayouts
+};
+
+enum LatteConfigPage
+{
+    LayoutPage = 0,
+    PreferencesPage
+};
+
 Menu::Menu(QObject *parent, const QVariantList &args)
     : Plasma::ContainmentActions(parent, args)
 {
@@ -50,24 +65,29 @@ Menu::Menu(QObject *parent, const QVariantList &args)
 Menu::~Menu()
 {
     m_separator1->deleteLater();
+    m_separator2->deleteLater();
     m_addWidgetsAction->deleteLater();
     m_configureAction->deleteLater();
     m_printAction->deleteLater();
     m_switchLayoutsMenu->deleteLater();
     m_layoutsAction->deleteLater();
+    m_preferenceAction->deleteLater();
+    m_quitApplication->deleteLater();
 }
 
 void Menu::makeActions()
 {
     m_separator1 = new QAction(this);
     m_separator1->setSeparator(true);
+    m_separator2 = new QAction(this);
+    m_separator2->setSeparator(true);
 
     m_printAction = new QAction(QIcon::fromTheme("edit"), "Print Message...", this);
     connect(m_printAction, &QAction::triggered, [ = ]() {
         qDebug() << "Action Trigerred !!!";
     });
 
-    m_addWidgetsAction = new QAction(QIcon::fromTheme("add"), i18n("&Add Widgets..."), this);
+    m_addWidgetsAction = new QAction(QIcon::fromTheme("list-add"), i18n("&Add Widgets..."), this);
     m_addWidgetsAction->setStatusTip(i18n("Show Plasma Widget Explorer"));
     connect(m_addWidgetsAction, &QAction::triggered, [ = ]() {
         QDBusInterface iface("org.kde.plasmashell", "/PlasmaShell", "", QDBusConnection::sessionBus());
@@ -77,7 +97,7 @@ void Menu::makeActions()
         }
     });
 
-    m_configureAction = new QAction(QIcon::fromTheme("configure"), i18nc("view settings window", "View &Settings..."), this);
+    m_configureAction = new QAction(QIcon::fromTheme("document-edit"), i18nc("view settings window", "View &Settings..."), this);
     connect(m_configureAction, &QAction::triggered, this, &Menu::requestConfiguration);
 
     connect(this->containment(), &Plasma::Containment::userConfiguringChanged, this, [&](bool configuring){
@@ -87,6 +107,9 @@ void Menu::makeActions()
         m_configureAction->setEnabled(true);
     });
 
+    m_quitApplication = new QAction(QIcon::fromTheme("application-exit"), i18nc("quit application", "Quit &Latte"));
+    connect(m_quitApplication, &QAction::triggered, this, &Menu::quitApplication);
+
     m_switchLayoutsMenu = new QMenu;
     m_layoutsAction = m_switchLayoutsMenu->menuAction();
     m_layoutsAction->setText(i18n("&Layouts"));
@@ -95,6 +118,15 @@ void Menu::makeActions()
 
     connect(m_switchLayoutsMenu, &QMenu::aboutToShow, this, &Menu::populateLayouts);
     connect(m_switchLayoutsMenu, &QMenu::triggered, this, &Menu::switchToLayout);
+
+    m_preferenceAction = new QAction(QIcon::fromTheme("configure"), i18nc("global settings window", "&Configure Latte..."), this);
+    connect(m_preferenceAction, &QAction::triggered, [=](){
+        QDBusInterface iface("org.kde.lattedock", "/Latte", "", QDBusConnection::sessionBus());
+
+        if (iface.isValid()) {
+            iface.call("showSettingsWindow", (int)PreferencesPage);
+        }
+    });
 }
 
 
@@ -109,11 +141,16 @@ void Menu::requestConfiguration()
 QList<QAction *> Menu::contextualActions()
 {
     QList<QAction *> actions;
+
     actions << m_separator1;
     //actions << m_printAction;
     actions << m_layoutsAction;
+    actions << m_preferenceAction;
+    actions << m_quitApplication;
+
+    actions << m_separator2;
     actions << m_addWidgetsAction;
-    actions << m_configureAction;
+    actions << m_configureAction;    
 
     m_data.clear();
     QDBusInterface iface("org.kde.lattedock", "/Latte", "", QDBusConnection::sessionBus());
@@ -132,13 +169,13 @@ QList<QAction *> Menu::contextualActions()
         m_layoutsAction->setVisible(false);
     }
 
-    Latte::Types::ViewType viewType{Latte::Types::DockView};
+    ViewType viewType{DockView};
 
     if (m_data.size() >= LAYOUTSPOS + 1) {
-        viewType = static_cast<Latte::Types::ViewType>((m_data[2]).toInt());
+        viewType = static_cast<ViewType>((m_data[2]).toInt());
     }
 
-    const QString configureActionText = (viewType == Latte::Types::DockView) ? i18nc("dock settings window", "Dock &Settings...") : i18nc("panel settings window", "Panel &Settings...");
+    const QString configureActionText = (viewType == DockView) ? i18nc("dock settings window", "&Edit Dock...") : i18nc("panel settings window", "&Edit Panel...");
     m_configureAction->setText(configureActionText);
 
     return actions;
@@ -152,6 +189,8 @@ QAction *Menu::action(const QString &name)
         return m_configureAction;
     } else if (name == "layouts") {
         return m_layoutsAction;
+    } else if (name == "quit application") {
+        return m_quitApplication;
     }
 
     return nullptr;
@@ -163,15 +202,15 @@ void Menu::populateLayouts()
 
     if (m_data.size() > LAYOUTSPOS + 1) {
         //when there are more than 1 layouts present
-        Latte::Types::LayoutsMemoryUsage memoryUsage = static_cast<Latte::Types::LayoutsMemoryUsage>((m_data[0]).toInt());
-        QString currentName = m_data[1];
+        LayoutsMemoryUsage memoryUsage = static_cast<LayoutsMemoryUsage>((m_data[0]).toInt());
+        QStringList currentNames = m_data[1].split(";;");
 
         for (int i = LAYOUTSPOS; i < m_data.size(); ++i) {
             bool isActive = m_data[i].startsWith("0") ? false : true;
 
             QString layout = m_data[i].right(m_data[i].length() - 2);
 
-            QString currentText = (memoryUsage == Latte::Types::MultipleLayouts && layout == currentName) ?
+            QString currentText = (memoryUsage == MultipleLayouts && currentNames.contains(layout)) ?
                                   (" " + i18nc("current layout", "(Current)")) : "";
             QString layoutName = layout + currentText;
 
@@ -198,7 +237,7 @@ void Menu::populateLayouts()
 
         m_switchLayoutsMenu->addSeparator();
 
-        QAction *editLayoutsAction = new QAction(i18n("Configure..."), m_switchLayoutsMenu);
+        QAction *editLayoutsAction = new QAction(i18n("Manage &Layouts..."), m_switchLayoutsMenu);
         editLayoutsAction->setData(QStringLiteral(" _show_latte_settings_dialog_"));
         m_switchLayoutsMenu->addAction(editLayoutsAction);
     }
@@ -213,7 +252,7 @@ void Menu::switchToLayout(QAction *action)
             QDBusInterface iface("org.kde.lattedock", "/Latte", "", QDBusConnection::sessionBus());
 
             if (iface.isValid()) {
-                iface.call("showSettingsWindow", (int)Latte::Types::LayoutPage);
+                iface.call("showSettingsWindow", (int)LayoutPage);
             }
         });
     } else {
@@ -224,6 +263,15 @@ void Menu::switchToLayout(QAction *action)
                 iface.call("switchToLayout", layout);
             }
         });
+    }
+}
+
+void Menu::quitApplication()
+{
+    QDBusInterface iface("org.kde.lattedock", "/Latte", "", QDBusConnection::sessionBus());
+
+    if (iface.isValid()) {
+        iface.call("quitApplication");
     }
 }
 

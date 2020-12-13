@@ -21,9 +21,11 @@ import QtQuick 2.7
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
 
-Grid {
+import "./abilities" as Abilities
+
+Abilities.AbilityGrid {
     id: appletsContainer
 
     columns: root.isVertical ? 1 : 0
@@ -32,128 +34,23 @@ Grid {
     rows: root.isHorizontal ? 1 : 0
     rowSpacing: 0
 
-    //Layout.preferredWidth: width
-    //Layout.preferredHeight: height
+    opacity: {
+        if (root.inConfigureAppletsMode && root.panelAlignment===LatteCore.Types.Justify && layoutsContainer.mainLayout.isCoveredFromSideLayouts){
+            if (dragOverlay && (!dragOverlay.currentHoveredLayout || dragOverlay.currentHoveredLayout === appletsContainer)) {
+                return 1;
+            } else {
+                return 0.3;
+            }
+        }
 
-    property int alignment: Latte.Types.BottomEdgeCenterAlign
+        return 1;
+    }
+
+    readonly property int length : root.isHorizontal ? childrenRect.width : childrenRect.height;
+
+    property int alignment: LatteCore.Types.BottomEdgeCenterAlign
     property int beginIndex: 0
     property int offset: 0
-
-    readonly property int count: children.length
-
-    //it is used in calculations for fillWidth,fillHeight applets
-    property int sizeWithNoFillApplets: 0
-
-    Binding{
-        target: appletsContainer
-        property:"sizeWithNoFillApplets"
-        when: appletsContainer
-        value: {
-            if (!visibilityManager || !visibilityManager.normalState && !(root.editMode && !root.inConfigureAppletsMode))
-                return;
-
-            var space = 0;
-            for (var i=0; i<appletsContainer.children.length; ++i){
-                if (appletsContainer.children[i] && !appletsContainer.children[i].needsFillSpace && !appletsContainer.children[i].isHidden) {
-                    space = root.isHorizontal ? space + appletsContainer.children[i].width : space + appletsContainer.children[i].height;
-                }
-            }
-
-            return space;
-        }
-    }
-
-    property int shownApplets: {
-        var res = 0;
-
-        for (var i=0; i<children.length; ++i){
-            if (children[i] && children[i].applet
-                    && (children[i].applet.status === PlasmaCore.Types.HiddenStatus || children[i].isInternalViewSplitter)) {
-                //do nothing
-            } else if (children[i] && children[i].applet){
-                res = res + 1;
-            }
-        }
-
-        return res;
-    }
-
-    //it is used in calculations for fillWidth,fillHeight applets
-    property int fillApplets:{
-        var no = 0;
-        for (var i=0; i<children.length; ++i){
-            if (children[i] && children[i].needsFillSpace) {
-                //console.log("fill :::: " + children[i].applet.pluginName);
-                no++;
-            }
-        }
-
-        return no;
-    }
-
-    property int firstVisibleIndex: -1
-    property int lastVisibleIndex: -1
-
-    Binding{
-        target: appletsContainer
-        property:"firstVisibleIndex"
-        when: appletsContainer
-        value: {
-            if (root.inConfigureAppletsMode) {
-                return;
-            }
-
-            var ind = -1;
-            for (var i=0; i<=children.length-1; ++i){
-                if (children[i]
-                        && (children[i].index<ind || ind === -1)
-                        && children[i].applet
-                        && !children[i].isHidden
-                        && !children[i].isInternalViewSplitter) {
-                    ind = children[i].index;
-                }
-            }
-
-            return ind;
-        }
-    }
-
-    Binding{
-        target: appletsContainer
-        property:"lastVisibleIndex"
-        when: appletsContainer
-        value: {
-            if (root.inConfigureAppletsMode) {
-                return;
-            }
-
-            var ind = -1;
-            for (var i=children.length-1; i>=0; --i){
-                if (children[i]
-                        && children[i].index>ind
-                        && children[i].applet
-                        && !children[i].isHidden
-                        && !children[i].isInternalViewSplitter) {
-                    ind = children[i].index;
-                }
-            }
-
-            return ind;
-        }
-    }
-
-    onCountChanged: {
-        if (root.editMode) {
-            //! this is mainly used when removing/adding internal view splitters
-            //! in order to not break the parabolic effect from wrong indexes
-            root.updateIndexes();
-        }
-    }
-
-    onFillAppletsChanged: layoutsContainer.updateSizeForAppletsInFill();
-    onShownAppletsChanged: layoutsContainer.updateSizeForAppletsInFill();
-    onSizeWithNoFillAppletsChanged: layoutsContainer.updateSizeForAppletsInFill();
-
 
     //////////////////////////BEGIN states
     //user set Panel Positions
@@ -162,7 +59,7 @@ Grid {
         ///Left Edge
         State {
             name: "leftCenter"
-            when: appletsContainer.alignment === Latte.Types.LeftEdgeCenterAlign
+            when: appletsContainer.alignment === LatteCore.Types.LeftEdgeCenterAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -176,7 +73,7 @@ Grid {
         },
         State {
             name: "leftTop"
-            when: appletsContainer.alignment === Latte.Types.LeftEdgeTopAlign
+            when: appletsContainer.alignment === LatteCore.Types.LeftEdgeTopAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -190,7 +87,7 @@ Grid {
         },
         State {
             name: "leftBottom"
-            when: appletsContainer.alignment === Latte.Types.LeftEdgeBottomAlign
+            when: appletsContainer.alignment === LatteCore.Types.LeftEdgeBottomAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -205,7 +102,7 @@ Grid {
         ///Right Edge
         State {
             name: "rightCenter"
-            when: appletsContainer.alignment === Latte.Types.RightEdgeCenterAlign
+            when: appletsContainer.alignment === LatteCore.Types.RightEdgeCenterAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -219,7 +116,7 @@ Grid {
         },
         State {
             name: "rightTop"
-            when: appletsContainer.alignment === Latte.Types.RightEdgeTopAlign
+            when: appletsContainer.alignment === LatteCore.Types.RightEdgeTopAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -233,7 +130,7 @@ Grid {
         },
         State {
             name: "rightBottom"
-            when: appletsContainer.alignment === Latte.Types.RightEdgeBottomAlign
+            when: appletsContainer.alignment === LatteCore.Types.RightEdgeBottomAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -248,7 +145,7 @@ Grid {
         ///Bottom Edge
         State {
             name: "bottomCenter"
-            when: appletsContainer.alignment === Latte.Types.BottomEdgeCenterAlign
+            when: appletsContainer.alignment === LatteCore.Types.BottomEdgeCenterAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -262,7 +159,7 @@ Grid {
         },
         State {
             name: "bottomLeft"
-            when: appletsContainer.alignment === Latte.Types.BottomEdgeLeftAlign
+            when: appletsContainer.alignment === LatteCore.Types.BottomEdgeLeftAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -276,7 +173,7 @@ Grid {
         },
         State {
             name: "bottomRight"
-            when: appletsContainer.alignment === Latte.Types.BottomEdgeRightAlign
+            when: appletsContainer.alignment === LatteCore.Types.BottomEdgeRightAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -291,7 +188,7 @@ Grid {
         ///Top Edge
         State {
             name: "topCenter"
-            when: appletsContainer.alignment === Latte.Types.TopEdgeCenterAlign
+            when: appletsContainer.alignment === LatteCore.Types.TopEdgeCenterAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -305,7 +202,7 @@ Grid {
         },
         State {
             name: "topLeft"
-            when: appletsContainer.alignment === Latte.Types.TopEdgeLeftAlign
+            when: appletsContainer.alignment === LatteCore.Types.TopEdgeLeftAlign
 
             AnchorChanges {
                 target: appletsContainer
@@ -319,7 +216,7 @@ Grid {
         },
         State {
             name: "topRight"
-            when: appletsContainer.alignment === Latte.Types.TopEdgeRightAlign
+            when: appletsContainer.alignment === LatteCore.Types.TopEdgeRightAlign
 
             AnchorChanges {
                 target: appletsContainer

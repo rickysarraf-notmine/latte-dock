@@ -19,6 +19,8 @@
 
 import QtQuick 2.7
 
+import org.kde.latte.abilities.definitions 0.1 as AbilityDefinition
+
 import "../../../code/AppletIdentifier.js" as AppletIdentifier
 
 Item{
@@ -39,7 +41,9 @@ Item{
     //! BEGIN OF PROPERTIES
     //this is used for folderView and icon widgets to fake their visual icons
     readonly property bool canShowOverlaiedLatteIcon: appletIconItem && appletIconItem.visible
-    readonly property bool overlayLatteIconIsActive: canShowOverlaiedLatteIcon && latteIconOverlayEnabled
+    readonly property bool overlayLatteIconIsActive: canShowOverlaiedLatteIcon && requires.latteIconOverlayEnabled
+
+    property bool inStartup: true
 
     property Item appletRootItem: appletDiscoveredRootItem ? appletDiscoveredRootItem : appletDefaultRootItem
     property Item appletDiscoveredRootItem: null
@@ -49,19 +53,18 @@ Item{
     property Item appletImageItem; //first applet's ImageItem to be used by Latte
     //! END OF PROPERTIES
 
-    //! BEGIN OF PUBLIC PROPERTIES SET THROUGH LATTEBRIDGE.ACTIONS
-    property bool latteSideColoringEnabled: true
-    property bool latteIconOverlayEnabled: true
-    property bool activeIndicatorEnabled: true
-    property bool lengthMarginsEnabled: true
-    property bool windowsTrackingEnabled: false
-    property bool parabolicEffectLocked: false
+    //! BEGIN OF PUBLIC PROPERTIES SET THROUGH LATTEBRIDGE.ACTIONS   
+    readonly property Item requires: AbilityDefinition.AppletRequirements{}
     //! END OF PUBLIC PROPERTIES SET THROUGH LATTEBRIDGE.ACTIONS
 
-    //! BEGIN OF PROPERTY CHANGES
-    //! END OF PROPERTY CHANGES
+    //! BEGIN OF ABILITIES SUPPORT
+    readonly property bool animationsAreSupported: bridge && bridge.animations.client
+    readonly property bool indexerIsSupported: bridge && bridge.indexer.client
+    readonly property bool parabolicEffectIsSupported: bridge && bridge.parabolic.client
+    readonly property bool positionShortcutsAreSupported: bridge && bridge.shortcuts.client
 
-    property bool windowsTrackingEnabledSent: false
+    readonly property Item bridge: bridgeLoader.active ? bridgeLoader.item : null
+    //! END OF ABILITIES SUPPORT
 
     //! BEGIN OF FUNCTIONS
     function appletIconItemIsShown() {
@@ -83,16 +86,6 @@ Item{
     }
     //! END OF FUNCTIONS
 
-    onWindowsTrackingEnabledChanged: {
-        if (windowsTrackingEnabled && !windowsTrackingEnabledSent) {
-            windowsTrackingEnabledSent = true;
-            root.slotAppletsNeedWindowsTracking(1);
-        } else if (!windowsTrackingEnabled && windowsTrackingEnabledSent) {
-            windowsTrackingEnabledSent = false;
-            root.slotAppletsNeedWindowsTracking(-1);
-        }
-    }
-
     //! BEGIN OF CONNECTIONS
     Connections{
         target: appletItem
@@ -102,13 +95,6 @@ Item{
                 AppletIdentifier.reconsiderAppletIconItem();
                 overlayInitTimer.start();
             }
-        }
-    }
-
-    Component.onDestruction: {
-        if (windowsTrackingEnabled && windowsTrackingEnabledSent) {
-            windowsTrackingEnabledSent = false;
-            root.slotAppletsNeedWindowsTracking(-1);
         }
     }
 
@@ -126,12 +112,13 @@ Item{
     //a timer that is used in  order to init some Communicator values
     Timer {
         id: overlayInitTimer
-        interval: 4000
+        interval: 1000
         onTriggered: {
             AppletIdentifier.checkAndUpdateAppletRootItem();
             AppletIdentifier.reconsiderAppletIconItem();
+            mainCommunicator.inStartup = false;
 
-            if (root.debugModeTimers) {
+            if (appletItem.debug.timersEnabled) {
                 console.log("containment timer: appletItem fakeInitTimer called...");
             }
         }

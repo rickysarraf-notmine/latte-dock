@@ -47,36 +47,10 @@
 namespace Latte {
 namespace ViewPart {
 
-SecondaryConfigView::SecondaryConfigView(Latte::View *view, QWindow *parent)
-    : QQuickView(nullptr),
-      m_latteView(view)
+SecondaryConfigView::SecondaryConfigView(Latte::View *view, PrimaryConfigView *parent)
+    : SubConfigView(view, QString("#secondaryconfigview#")),
+      m_parent(parent)
 {
-    m_parent = qobject_cast<PrimaryConfigView *>(parent);
-    m_corona = qobject_cast<Latte::Corona *>(m_latteView->containment()->corona());
-
-    setupWaylandIntegration();
-
-    if (KWindowSystem::isPlatformX11()) {
-        m_corona->wm()->registerIgnoredWindow(winId());
-    } else {
-        connect(m_corona->wm(), &WindowSystem::AbstractWindowInterface::latteWindowAdded, this, [&]() {
-            if (m_waylandWindowId.isNull()) {
-                m_waylandWindowId = m_corona->wm()->winIdFor("latte-dock", geometry());
-                m_corona->wm()->registerIgnoredWindow(m_waylandWindowId);
-            }
-        });
-    }
-
-    setResizeMode(QQuickView::SizeViewToRootObject);
-    setScreen(m_latteView->screen());
-
-    if (m_latteView && m_latteView->containment()) {
-        setIcon(qGuiApp->windowIcon());
-    }
-
-    m_screenSyncTimer.setSingleShot(true);
-    m_screenSyncTimer.setInterval(100);
-
     connect(this, &QQuickView::widthChanged, this, &SecondaryConfigView::updateEffects);
     connect(this, &QQuickView::heightChanged, this, &SecondaryConfigView::updateEffects);
 
@@ -88,69 +62,13 @@ SecondaryConfigView::SecondaryConfigView(Latte::View *view, QWindow *parent)
 
     connections << connect(m_parent, &PrimaryConfigView::availableScreenGeometryChanged, this, &SecondaryConfigView::syncGeometry);
 
-    connections << connect(&m_screenSyncTimer, &QTimer::timeout, this, [this]() {
-        setScreen(m_latteView->screen());
-        setFlags(wFlags());
-
-        if (KWindowSystem::isPlatformX11()) {
-#if KF5_VERSION_MINOR >= 45
-            KWindowSystem::setState(winId(), NET::SkipTaskbar | NET::SkipPager | NET::SkipSwitcher);
-#else
-            KWindowSystem::setState(winId(), NET::SkipTaskbar | NET::SkipPager);
-#endif
-
-            KWindowSystem::setOnAllDesktops(winId(), true);
-        }
-
-        syncGeometry();
-        syncSlideEffect();
-    });
-    connections << connect(m_latteView->visibility(), &VisibilityManager::modeChanged, this, &SecondaryConfigView::syncGeometry);
-
-    m_thicknessSyncTimer.setSingleShot(true);
-    m_thicknessSyncTimer.setInterval(200);
-    connections << connect(&m_thicknessSyncTimer, &QTimer::timeout, this, [this]() {
-        syncGeometry();
-    });
-
-    connections << connect(m_latteView, &Latte::View::normalThicknessChanged, [&]() {
-        m_thicknessSyncTimer.start();
-    });
-}
-
-SecondaryConfigView::~SecondaryConfigView()
-{
-    qDebug() << "SecDockConfigView deleting ...";
-
-    m_corona->dialogShadows()->removeWindow(this);
-
-    m_corona->wm()->unregisterIgnoredWindow(KWindowSystem::isPlatformX11() ? winId() : m_waylandWindowId);
-
-    for (const auto &var : connections) {
-        QObject::disconnect(var);
-    }
+    setParentView(view);
+    init();
 }
 
 void SecondaryConfigView::init()
 {
-    qDebug() << "dock secondary config view : initialization started...";
-
-    setDefaultAlphaBuffer(true);
-    setColor(Qt::transparent);
-    m_corona->dialogShadows()->addWindow(this);
-    rootContext()->setContextProperty(QStringLiteral("latteView"), m_latteView);
-    rootContext()->setContextProperty(QStringLiteral("viewConfig"), this);
-    rootContext()->setContextProperty(QStringLiteral("plasmoid"), m_latteView->containment()->property("_plasma_graphicObject").value<QObject *>());
-
-    KDeclarative::KDeclarative kdeclarative;
-    kdeclarative.setDeclarativeEngine(engine());
-    kdeclarative.setTranslationDomain(QStringLiteral("latte-dock"));
-#if KF5_VERSION_MINOR >= 45
-    kdeclarative.setupContext();
-    kdeclarative.setupEngine(engine());
-#else
-    kdeclarative.setupBindings();
-#endif
+    SubConfigView::init();
 
     QByteArray tempFilePath = "lattedocksecondaryconfigurationui";
 
@@ -159,18 +77,10 @@ void SecondaryConfigView::init()
     auto source = QUrl::fromLocalFile(m_latteView->containment()->corona()->kPackage().filePath(tempFilePath));
     setSource(source);
     syncGeometry();
-    syncSlideEffect();
 
     if (m_parent && KWindowSystem::isPlatformX11()) {
         m_parent->requestActivate();
     }
-
-    qDebug() << "dock secondary config view : initialization ended...";
-}
-
-inline Qt::WindowFlags SecondaryConfigView::wFlags() const
-{
-    return (flags() | Qt::FramelessWindowHint /*| Qt::WindowStaysOnTopHint*/) & ~Qt::WindowDoesNotAcceptFocus;
 }
 
 QRect SecondaryConfigView::geometryWhenVisible() const
@@ -178,17 +88,14 @@ QRect SecondaryConfigView::geometryWhenVisible() const
     return m_geometryWhenVisible;
 }
 
-void SecondaryConfigView::requestActivate()
-{
-    if (KWindowSystem::isPlatformWayland() && m_shellSurface) {
-        if (m_waylandWindowId.isNull()) {
-            m_waylandWindowId = m_corona->wm()->winIdFor("latte-dock", geometry());
-        }
+void SecondaryConfigView::initParentView(Latte::View *view)
+{   
+    SubConfigView::initParentView(view);
 
-        m_corona->wm()->requestActivate(m_waylandWindowId);
-    } else {
-        QQuickView::requestActivate();
-    }
+    rootContext()->setContextProperty(QStringLiteral("primaryConfigView"), m_parent);
+
+    updateEnabledBorders();
+    syncGeometry();
 }
 
 void SecondaryConfigView::syncGeometry()
@@ -198,15 +105,12 @@ void SecondaryConfigView::syncGeometry()
     }
 
     const QSize size(rootObject()->width(), rootObject()->height());
-    setMaximumSize(size);
-    setMinimumSize(size);
-    resize(size);
-
     const auto location = m_latteView->containment()->location();
     const auto scrGeometry = m_latteView->screenGeometry();
     const auto availGeometry = m_parent->availableScreenGeometry();
+    const auto canvasGeometry = m_latteView->positioner()->canvasGeometry();
 
-    int clearThickness = m_latteView->editThickness();
+    int canvasThickness = m_latteView->formFactor() == Plasma::Types::Vertical ? canvasGeometry.width() : canvasGeometry.height();
 
     int secondaryConfigSpacing = 2 * m_latteView->fontPixelSize();
 
@@ -224,9 +128,9 @@ void SecondaryConfigView::syncGeometry()
         }
 
         if (location == Plasma::Types::TopEdge) {
-            yPos = scrGeometry.y() + clearThickness;
+            yPos = scrGeometry.y() + canvasThickness;
         } else if (location == Plasma::Types::BottomEdge) {
-            yPos = scrGeometry.y() + scrGeometry.height() - clearThickness - size.height();
+            yPos = scrGeometry.y() + scrGeometry.height() - canvasThickness - size.height();
         }
     }
         break;
@@ -235,9 +139,9 @@ void SecondaryConfigView::syncGeometry()
         yPos = availGeometry.y() + secondaryConfigSpacing;
 
         if (location == Plasma::Types::LeftEdge) {
-            xPos = scrGeometry.x() + clearThickness;
+            xPos = scrGeometry.x() + canvasThickness;
         } else if (location == Plasma::Types::RightEdge) {
-            xPos = scrGeometry.x() + scrGeometry.width() - clearThickness - size.width();
+            xPos = scrGeometry.x() + scrGeometry.width() - canvasThickness - size.width();
         }
     }
         break;
@@ -251,13 +155,23 @@ void SecondaryConfigView::syncGeometry()
 
     updateEnabledBorders();
 
-    m_geometryWhenVisible = QRect(position.x(), position.y(), size.width(), size.height());
+    auto geometry = QRect(position.x(), position.y(), size.width(), size.height());
+
+    if (m_geometryWhenVisible == geometry) {
+        return;
+    }
+
+    m_geometryWhenVisible = geometry;
 
     setPosition(position);
 
     if (m_shellSurface) {
         m_shellSurface->setPosition(position);
     }
+
+    setMaximumSize(size);
+    setMinimumSize(size);
+    resize(size);
 
     //! after placement request to activate the main config window in order to avoid
     //! rare cases of closing settings window from secondaryConfigView->focusOutEvent
@@ -266,52 +180,23 @@ void SecondaryConfigView::syncGeometry()
     }
 }
 
-void SecondaryConfigView::syncSlideEffect()
-{
-    if (!m_latteView || !m_latteView->containment()) {
-        return;
-    }
-
-    auto slideLocation = WindowSystem::AbstractWindowInterface::Slide::None;
-
-    switch (m_latteView->containment()->location()) {
-    case Plasma::Types::TopEdge:
-        slideLocation = WindowSystem::AbstractWindowInterface::Slide::Top;
-        break;
-
-    case Plasma::Types::RightEdge:
-        slideLocation = WindowSystem::AbstractWindowInterface::Slide::Right;
-        break;
-
-    case Plasma::Types::BottomEdge:
-        slideLocation = WindowSystem::AbstractWindowInterface::Slide::Bottom;
-        break;
-
-    case Plasma::Types::LeftEdge:
-        slideLocation = WindowSystem::AbstractWindowInterface::Slide::Left;
-        break;
-
-    default:
-        qDebug() << staticMetaObject.className() << "wrong location";
-        break;
-    }
-
-    m_corona->wm()->slideWindow(*this, slideLocation);
-}
-
 void SecondaryConfigView::showEvent(QShowEvent *ev)
 {
-    QQuickWindow::showEvent(ev);
+    if (m_shellSurface) {
+        //! under wayland it needs to be set again after its hiding
+        m_shellSurface->setPosition(m_geometryWhenVisible.topLeft());
+    }
+
+    SubConfigView::showEvent(ev);
 
     if (!m_latteView) {
         return;
     }
 
-    m_corona->wm()->setViewExtraFlags(*this);
     setFlags(wFlags());
+    m_corona->wm()->setViewExtraFlags(this, false, Latte::Types::NormalWindow);
 
     syncGeometry();
-    syncSlideEffect();
 
     m_screenSyncTimer.start();
     QTimer::singleShot(400, this, &SecondaryConfigView::syncGeometry);
@@ -323,81 +208,22 @@ void SecondaryConfigView::focusOutEvent(QFocusEvent *ev)
 {
     Q_UNUSED(ev);
 
+    if (!m_latteView) {
+        return;
+    }
+
     const auto *focusWindow = qGuiApp->focusWindow();
 
-    if ((focusWindow && (focusWindow->flags().testFlag(Qt::Popup)
-                         || focusWindow->flags().testFlag(Qt::ToolTip)))
-            || m_latteView->alternativesIsShown()) {
+    if (focusWindow && (focusWindow->flags().testFlag(Qt::Popup)
+                         || focusWindow->flags().testFlag(Qt::ToolTip))) {
         return;
     }
 
     const auto parent = qobject_cast<PrimaryConfigView *>(m_parent);
 
-    if (!m_latteView->containsMouse() && parent && !parent->sticker() && !parent->isActive()) {
+    if (!parent->hasFocus()) {
         parent->hideConfigWindow();
     }
-}
-
-void SecondaryConfigView::setupWaylandIntegration()
-{
-    if (m_shellSurface || !KWindowSystem::isPlatformWayland() || !m_latteView || !m_latteView->containment()) {
-        // already setup
-        return;
-    }
-
-    if (m_corona) {
-        using namespace KWayland::Client;
-        PlasmaShell *interface = m_corona->waylandCoronaInterface();
-
-        if (!interface) {
-            return;
-        }
-
-        Surface *s = Surface::fromWindow(this);
-
-        if (!s) {
-            return;
-        }
-
-        qDebug() << "wayland secondary settings surface was created...";
-
-        m_shellSurface = interface->createSurface(s, this);
-        m_shellSurface->setSkipTaskbar(true);
-#if KF5_VERSION_MINOR >= 47
-        m_shellSurface->setSkipSwitcher(true);
-#endif
-
-        syncGeometry();
-    }
-}
-
-bool SecondaryConfigView::event(QEvent *e)
-{
-    if (e->type() == QEvent::PlatformSurface) {
-        if (auto pe = dynamic_cast<QPlatformSurfaceEvent *>(e)) {
-            switch (pe->surfaceEventType()) {
-            case QPlatformSurfaceEvent::SurfaceCreated:
-
-                if (m_shellSurface) {
-                    break;
-                }
-
-                setupWaylandIntegration();
-                break;
-
-            case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
-                if (m_shellSurface) {
-                    delete m_shellSurface;
-                    m_shellSurface = nullptr;
-                    qDebug() << "WAYLAND secondary config window surface was deleted...";
-                }
-
-                break;
-            }
-        }
-    }
-
-    return QQuickView::event(e);
 }
 
 void SecondaryConfigView::hideConfigWindow()
@@ -418,12 +244,18 @@ void SecondaryConfigView::updateEffects()
         return;
     }
 
+    //! Don't apply any effect before the wayland surface is created under wayland
+    //! https://bugs.kde.org/show_bug.cgi?id=392890
+    if (KWindowSystem::isPlatformWayland() && !m_shellSurface) {
+        return;
+    }
+
     if (!m_background) {
         m_background = new Plasma::FrameSvg(this);
     }
 
-    if (m_background->imagePath() != "widgets/panel-background") {
-        m_background->setImagePath(QStringLiteral("widgets/panel-background"));
+    if (m_background->imagePath() != "dialogs/background") {
+        m_background->setImagePath(QStringLiteral("dialogs/background"));
     }
 
     m_background->setEnabledBorders(m_enabledBorders);
@@ -447,11 +279,6 @@ void SecondaryConfigView::updateEffects()
 }
 
 //!BEGIN borders
-Plasma::FrameSvg::EnabledBorders SecondaryConfigView::enabledBorders() const
-{
-    return m_enabledBorders;
-}
-
 void SecondaryConfigView::updateEnabledBorders()
 {
     if (!this->screen()) {

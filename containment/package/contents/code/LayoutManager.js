@@ -22,6 +22,7 @@ var layout;
 var layoutS;
 var layoutE;
 var root;
+var metrics;
 var plasmoid;
 var lastSpacer;
 
@@ -60,7 +61,7 @@ function restore() {
         root.addApplet(appletsOrder[i], -1, -1)
     }
 
-    if (plasmoid.configuration.panelPosition === 10 /*Justify*/) {
+    if (plasmoid.configuration.alignment === 10 /*Justify*/) {
         // console.log("splitters restored:"+plasmoid.configuration.splitterPosition+ " - " + plasmoid.configuration.splitterPosition2);
         //add the splitters in the correct position if they exist
 
@@ -110,7 +111,7 @@ function restore() {
 
     inRestore = false;
 
-    if (plasmoid.configuration.panelPosition === 10/*Justify*/) {
+    if (plasmoid.configuration.alignment === 10/*Justify*/) {
         root.splitMainLayoutToLayouts();
         root.updateIndexes();
     }
@@ -158,10 +159,10 @@ function save() {
 
         if (child.applet && !child.isInternalViewSplitter) {
             ids.push(child.applet.id);
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && !splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && !splitterExists){
             splitterExists = true;
             plasmoid.configuration.splitterPosition = i;
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && splitterExists){
             splitterExists2 = true;
             plasmoid.configuration.splitterPosition2 = i;
         }
@@ -172,10 +173,10 @@ function save() {
 
         if (child.applet && !child.isInternalViewSplitter) {
             ids.push(child.applet.id);
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && !splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && !splitterExists){
             splitterExists = true;
             plasmoid.configuration.splitterPosition = i + layoutS.children.length;
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && splitterExists){
             splitterExists2 = true;
             plasmoid.configuration.splitterPosition2 = i + layoutS.children.length;
         }
@@ -186,10 +187,10 @@ function save() {
 
         if (child.applet && !child.isInternalViewSplitter) {
             ids.push(child.applet.id);
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && !splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && !splitterExists){
             splitterExists = true;
             plasmoid.configuration.splitterPosition = i + layoutS.children.length + layout.children.length;
-        } else if(child.isInternalViewSplitter && plasmoid.configuration.panelPosition === 10 && splitterExists){
+        } else if(child.isInternalViewSplitter && plasmoid.configuration.alignment === 10 && splitterExists){
             splitterExists2 = true;
             plasmoid.configuration.splitterPosition2 = i + layoutS.children.length + layout.children.length;
         }
@@ -209,8 +210,28 @@ function saveOptions() {
 
 function saveOption(option) {
     var ids = new Array();
+    for (var i = 0; i < layoutS.children.length; ++i) {
+        var child = layoutS.children[i];
+
+        if (child.applet
+                && (option === "lockedZoomApplets" && child.lockZoom)
+                || (option === "userBlocksColorizingApplets" && child.userBlocksColorizing)) {
+            ids.push(child.applet.id);
+        }
+    }
+
     for (var i = 0; i < layout.children.length; ++i) {
         var child = layout.children[i];
+
+        if (child.applet
+                && (option === "lockedZoomApplets" && child.lockZoom)
+                || (option === "userBlocksColorizingApplets" && child.userBlocksColorizing)) {
+            ids.push(child.applet.id);
+        }
+    }
+
+    for (var i = 0; i < layoutE.children.length; ++i) {
+        var child = layoutE.children[i];
 
         if (child.applet
                 && (option === "lockedZoomApplets" && child.lockZoom)
@@ -237,7 +258,7 @@ function removeApplet (applet) {
 
 //insert item2 before item1
 function insertBefore(item1, item2) {
-    return insertBeforeForLayout(layout, item1, item2);
+    return insertBeforeForLayout(item1.parent, item1, item2);;
 }
 
 //insert item2 before item1
@@ -272,7 +293,7 @@ function insertBeforeForLayout(tLayout, item1, item2) {
 
 //insert item2 after item1
 function insertAfter(item1, item2) {
-    return insertAfterForLayout(layout, item1, item2);
+    return insertAfterForLayout(item1.parent, item1, item2);
 }
 
 //insert item2 after item1
@@ -314,16 +335,16 @@ function insertAfterForLayout(tLayout, item1, item2) {
 }
 
 
-function insertAtIndex(item, position) {
+function insertAtIndex(relevantLayout, item, position) {
     var addToEnd = false;
-    if (position < 0 || (position > layout.children.length && !item.isInternalViewSplitter)) {
+    if (position < 0 || (position > relevantLayout.children.length && !item.isInternalViewSplitter)) {
         return;
-    } else if (position >= layout.children.length) {
+    } else if (position >= relevantLayout.children.length) {
         addToEnd = true;
     }
 
     //never ever insert after lastSpacer
-    var firstItem = (layout.children.length === 1) && (layout.children[0] === lastSpacer);
+    var firstItem = (relevantLayout.children.length === 1) && (relevantLayout.children[0] === lastSpacer);
 
     //Important !!! , this is used to add the first item
     if(firstItem){
@@ -332,28 +353,28 @@ function insertAtIndex(item, position) {
     }
 
     if (addToEnd){
-        item.parent=layout;
+        item.parent=relevantLayout;
         return;
     }
 
-    if(layout.children.length > 0){
-        if (layout.children[position] === lastSpacer) {
+    if(relevantLayout.children.length > 0){
+        if (relevantLayout.children[position] === lastSpacer) {
             --position;
         }
     }
 
     var removedItems = new Array();
 
-    var totalChildren = layout.children.length;
+    var totalChildren = relevantLayout.children.length;
     for (var i = position; i < totalChildren; ++i) {
-        var child = layout.children[position];
+        var child = relevantLayout.children[position];
         child.parent = root;
         removedItems.push(child);
     }
 
-    item.parent = layout;
+    item.parent = relevantLayout;
     for (var i in removedItems) {
-        removedItems[i].parent = layout;
+        removedItems[i].parent = relevantLayout;
     }
 }
 
@@ -449,7 +470,7 @@ function insertAtLayoutCoordinates(tLayout, item, x, y) {
 
     if (!child) {
         // check if dragging takes place after the end of the layout
-        var neededSpace = 1.5 * (root.iconSize + root.lengthMargin);
+        var neededSpace = 1.5 * (metrics.iconSize + metrics.totals.lengthEdge);
         if ( (((root.isVertical && (y - neededSpace) <= tLayout.height) && y>=0)
               ||(root.isHorizontal && (x - neededSpace) <= tLayout.width) && x>=0)
                 && tLayout.children.length>0  ){
@@ -478,14 +499,12 @@ function insertAtLayoutCoordinates(tLayout, item, x, y) {
 function insertAtCoordinates2(item, x, y) {
     var pos = -1;
 
-    if (!root.inConfigureAppletsMode) {
-        var layoutPosS = layoutS.mapFromItem(root, x, y);
-        pos = insertAtLayoutCoordinates(layoutS, item, layoutPosS.x, layoutPosS.y);
+    var layoutPosS = layoutS.mapFromItem(root, x, y);
+    pos = insertAtLayoutCoordinates(layoutS, item, layoutPosS.x, layoutPosS.y);
 
-        if (pos === -1){
-            var layoutPosE = layoutE.mapFromItem(root, x, y);
-            pos = insertAtLayoutCoordinates(layoutE, item, layoutPosE.x, layoutPosE.y);
-        }
+    if (pos === -1){
+        var layoutPosE = layoutE.mapFromItem(root, x, y);
+        pos = insertAtLayoutCoordinates(layoutE, item, layoutPosE.x, layoutPosE.y);
     }
 
     if (pos!==childFoundId && pos === -1) {

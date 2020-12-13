@@ -21,11 +21,12 @@
 
 // local
 #include "abstractlayout.h"
-#include "storage.h"
+#include "../apptypes.h"
 #include "../lattecorona.h"
 #include "../screenpool.h"
 #include "../layouts/importer.h"
 #include "../layouts/manager.h"
+#include "../layouts/storage.h"
 #include "../layouts/synchronizer.h"
 #include "../shortcuts/shortcutstracker.h"
 #include "../view/view.h"
@@ -47,8 +48,7 @@ namespace Latte {
 namespace Layout {
 
 GenericLayout::GenericLayout(QObject *parent, QString layoutFile, QString assignedName)
-    : AbstractLayout (parent, layoutFile, assignedName),
-      m_storage(new Storage(this))
+    : AbstractLayout (parent, layoutFile, assignedName)
 {
 }
 
@@ -82,21 +82,21 @@ void GenericLayout::unloadContainments()
 
     m_unloadedContainmentsIds.clear();
 
-    QList<Plasma::Containment *> systrays;
+    QList<Plasma::Containment *> subcontainments;
 
-    //!identify systrays and unload them first
+    //!identify subcontainments and unload them first
     for (const auto containment : m_containments) {
         if (Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent())) {
-            systrays.append(containment);
+            subcontainments.append(containment);
         }
     }
 
-    while (!systrays.isEmpty()) {
-        Plasma::Containment *systray = systrays.at(0);
-        m_unloadedContainmentsIds << QString::number(systray->id());
-        systrays.removeFirst();
-        m_containments.removeAll(systray);
-        delete systray;
+    while (!subcontainments.isEmpty()) {
+        Plasma::Containment *sub = subcontainments.at(0);
+        m_unloadedContainmentsIds << QString::number(sub->id());
+        subcontainments.removeFirst();
+        m_containments.removeAll(sub);
+        delete sub;
     }
 
     while (!m_containments.isEmpty()) {
@@ -121,7 +121,8 @@ void GenericLayout::unloadLatteViews()
     //!disconnect signals in order to avoid crashes when the layout is unloading
     disconnect(this, &GenericLayout::viewsCountChanged, m_corona, &Plasma::Corona::availableScreenRectChanged);
     disconnect(this, &GenericLayout::viewsCountChanged, m_corona, &Plasma::Corona::availableScreenRegionChanged);
-    disconnect(m_corona->activityConsumer(), &KActivities::Consumer::currentActivityChanged, this, &GenericLayout::updateLastUsedActivity);
+    disconnect(this, &GenericLayout::activitiesChanged, this, &GenericLayout::updateLastUsedActivity);
+    disconnect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, &GenericLayout::updateLastUsedActivity);
 
     for (const auto view : m_latteViews) {
         view->disconnectSensitiveSignals();
@@ -151,17 +152,6 @@ void GenericLayout::setBlockAutomaticLatteViewCreation(bool block)
     m_blockAutomaticLatteViewCreation = block;
 }
 
-bool GenericLayout::configViewIsShown() const
-{
-    for (const auto view : m_latteViews) {
-        if (view && view->settingsWindowIsShown()) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool GenericLayout::isActive() const
 {
     if (!m_corona) {
@@ -177,47 +167,38 @@ bool GenericLayout::isActive() const
     }
 }
 
-bool GenericLayout::isCurrent() const
+bool GenericLayout::isCurrent()
 {
     if (!m_corona) {
         return false;
     }
 
-    return name() == m_corona->layoutsManager()->currentLayoutName();
+    return m_corona->layoutsManager()->currentLayoutsNames().contains(name());
 }
 
-bool GenericLayout::isInternalContainment(Plasma::Applet *applet) const
+QString GenericLayout::background() const
 {
-    if (!applet) {
-        return false;
-    }
+    QString colorsPath = m_corona->kPackage().path() + "../../shells/org.kde.latte.shell/contents/images/canvas/";
 
-    for (const auto containment : m_containments) {
-        Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent());
-        if (parentApplet && parentApplet == applet) {
-            return true;
+    if (backgroundStyle() == Layout::PatternBackgroundStyle) {
+        if (customBackground().isEmpty()) {
+
+            return colorsPath + "defaultcustomprint.jpg";
+        } else {
+            return AbstractLayout::customBackground();
         }
     }
 
-    return false;
+    return colorsPath + AbstractLayout::color() + "print.jpg";
 }
 
-Plasma::Containment *GenericLayout::internalContainmentOf(Plasma::Applet *applet) const
+QString GenericLayout::textColor() const
 {
-    if (!applet) {
-        return nullptr;
+    if (backgroundStyle() == Layout::PatternBackgroundStyle && customBackground().isEmpty()) {
+        return AbstractLayout::defaultCustomTextColor();
     }
 
-    if (isInternalContainment(applet)) {
-        for (const auto containment : m_containments) {
-            Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent());
-            if (parentApplet && parentApplet == applet) {
-                return containment;
-            }
-        }
-    }
-
-    return nullptr;
+    return AbstractLayout::textColor();
 }
 
 int GenericLayout::viewsCount(int screen) const
@@ -339,7 +320,7 @@ int GenericLayout::viewsWithTasks() const
     int result = 0;
 
     for (const auto view : m_latteViews) {
-        if (view->tasksPresent()) {
+        if (view->extendedInterface()->hasLatteTasks() || view->extendedInterface()->hasPlasmaTasks()) {
             result++;
         }
     }
@@ -352,12 +333,12 @@ QStringList GenericLayout::unloadedContainmentsIds()
     return m_unloadedContainmentsIds;
 }
 
-Latte::Corona *GenericLayout::corona()
+Latte::Corona *GenericLayout::corona() const
 {
     return m_corona;
 }
 
-Types::ViewType GenericLayout::latteViewType(int containmentId) const
+Types::ViewType GenericLayout::latteViewType(uint containmentId) const
 {
     for (const auto view : m_latteViews) {
         if (view->containment() && view->containment()->id() == containmentId) {
@@ -377,11 +358,6 @@ Latte::View *GenericLayout::highestPriorityView()
 
 Latte::View *GenericLayout::lastConfigViewFor()
 {
-    if (!latteViews().contains(m_lastConfigViewFor)) {
-        m_lastConfigViewFor = nullptr;
-        return nullptr;
-    }
-
     return m_lastConfigViewFor;
 }
 
@@ -392,10 +368,31 @@ void GenericLayout::setLastConfigViewFor(Latte::View *view)
     }
 
     m_lastConfigViewFor = view;
-    emit lastConfigViewForChanged(view);
+
+    if (view) {
+        emit lastConfigViewForChanged(view);
+    }
 }
 
-Latte::View *GenericLayout::viewForContainment(Plasma::Containment *containment)
+void GenericLayout::onLastConfigViewChangedFrom(Latte::View *view)
+{
+    if (!m_latteViews.values().contains(view)) {
+        setLastConfigViewFor(nullptr);
+    }
+}
+
+Latte::View *GenericLayout::viewForContainment(uint id) const
+{
+    for(auto view : m_latteViews) {
+        if (view && view->containment()->id() == id) {
+            return view;
+        }
+    }
+
+    return nullptr;
+}
+
+Latte::View *GenericLayout::viewForContainment(Plasma::Containment *containment) const
 {
     if (m_containments.contains(containment) && m_latteViews.contains(containment)) {
         return m_latteViews[containment];
@@ -409,9 +406,14 @@ QList<Latte::View *> GenericLayout::latteViews()
     return m_latteViews.values();
 }
 
+QList<Latte::View *> GenericLayout::sortedLatteViews()
+{
+    return sortedLatteViews(latteViews());
+}
+
 QList<Latte::View *> GenericLayout::sortedLatteViews(QList<Latte::View *> views)
 {
-    QList<Latte::View *> sortedViews = views.isEmpty() ? latteViews() : views;
+    QList<Latte::View *> sortedViews = views;
 
     qDebug() << " -------- ";
 
@@ -601,7 +603,7 @@ QList<ViewData> GenericLayout::sortedViewsData(const QList<ViewData> &viewsData)
 }
 
 
-const QList<Plasma::Containment *> *GenericLayout::containments()
+const QList<Plasma::Containment *> *GenericLayout::containments() const
 {
     return &m_containments;
 }
@@ -614,7 +616,7 @@ QList<Latte::View *> GenericLayout::viewsWithPlasmaShortcuts()
         return views;
     }
 
-    QList<int> appletsWithShortcuts = m_corona->globalShortcuts()->shortcutsTracker()->appletsWithPlasmaShortcuts();
+    QList<uint> appletsWithShortcuts = m_corona->globalShortcuts()->shortcutsTracker()->appletsWithPlasmaShortcuts();
 
     for (const auto &appletId : appletsWithShortcuts) {
         for (const auto view : m_latteViews) {
@@ -648,10 +650,10 @@ void GenericLayout::addContainment(Plasma::Containment *containment)
 
     bool containmentInLayout{false};
 
-    if (m_corona->layoutsManager()->memoryUsage() == Types::SingleLayout) {
+    if (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout) {
         m_containments.append(containment);
         containmentInLayout = true;
-    } else if (m_corona->layoutsManager()->memoryUsage() == Types::MultipleLayouts) {
+    } else if (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
         QString layoutId = containment->config().readEntry("layoutId", QString());
 
         if (!layoutId.isEmpty() && (layoutId == m_layoutName)) {
@@ -673,14 +675,14 @@ void GenericLayout::addContainment(Plasma::Containment *containment)
 
 void GenericLayout::appletCreated(Plasma::Applet *applet)
 {
-    //! In Multiple Layout the orphaned systrays must be assigned to layouts
+    //! In Multiple Layout the orphaned subcontainments must be assigned to layouts
     //! when the user adds them
-    KConfigGroup appletSettings = applet->containment()->config().group("Applets").group(QString::number(applet->id())).group("Configuration");
+    KConfigGroup appletSettings = applet->containment()->config().group("Applets").group(QString::number(applet->id()));
 
-    int systrayId = appletSettings.readEntry("SystrayContainmentId", -1);
+    int subId = Layouts::Storage::self()->subContainmentId(appletSettings);
 
-    if (systrayId != -1) {
-        uint sId = (uint)systrayId;
+    if (Layouts::Storage::isValid(subId)) {
+        uint sId = (uint)subId;
 
         for (const auto containment : m_corona->containments()) {
             if (containment->id() == sId) {
@@ -750,12 +752,12 @@ void GenericLayout::destroyedChanged(bool destroyed)
 
 void GenericLayout::renameLayout(QString newName)
 {
-    if (!m_corona || m_corona->layoutsManager()->memoryUsage() != Types::MultipleLayouts) {
+    if (!m_corona || m_corona->layoutsManager()->memoryUsage() != MemoryUsage::MultipleLayouts) {
         return;
     }
 
-    if (m_layoutFile != Layouts::Importer::layoutFilePath(newName)) {
-        setFile(Layouts::Importer::layoutFilePath(newName));
+    if (m_layoutFile != Layouts::Importer::layoutUserFilePath(newName)) {
+        setFile(Layouts::Importer::layoutUserFilePath(newName));
     }
 
     setName(newName);
@@ -787,8 +789,9 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
 
     qDebug() << "step 1...";
 
-    if (!m_storage->isLatteContainment(containment))
+    if (!Layouts::Storage::self()->isLatteContainment(containment)) {
         return;
+    }
 
     qDebug() << "step 2...";
 
@@ -804,13 +807,13 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
     bool onPrimary = containment->config().readEntry("onPrimary", true);
     int id = containment->screen();
 
-    if (id == -1 && explicitScreen == -1) {
+    if (!Layouts::Storage::isValid(id) && !Layouts::Storage::isValid(explicitScreen)) {
         id = containment->lastScreen();
     }
 
     if (onPrimary) {
         id = m_corona->screenPool()->primaryScreenId();
-    } else if (explicitScreen > -1) {
+    } else if (Layouts::Storage::isValid(explicitScreen)) {
         id = explicitScreen;
     }
 
@@ -826,7 +829,7 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
         return;
     }
 
-    if (id >= 0 && !onPrimary && !forceOnPrimary) {
+    if (Layouts::Storage::isValid(id) && !onPrimary && !forceOnPrimary) {
         qDebug() << "Add view - connector : " << connector;
         bool found{false};
 
@@ -853,15 +856,13 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
         }
     }
 
-    if (id >= 0 && onPrimary) {
+    if (Layouts::Storage::isValid(id) && onPrimary) {
         qDebug() << "add dock - connector : " << connector;
 
-        for (const auto view : m_latteViews) {
-            auto testContainment = view->containment();
-
+        for (const Plasma::Containment *testContainment : m_latteViews.keys()) {
             int testScreenId = testContainment->screen();
 
-            if (testScreenId == -1) {
+            if (!Layouts::Storage::isValid(testScreenId)) {
                 testScreenId = testContainment->lastScreen();
             }
 
@@ -885,7 +886,10 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
     auto mode = static_cast<Types::Visibility>(containment->config().readEntry("visibility", static_cast<int>(Types::DodgeActive)));
     bool byPassWM{false};
 
-    if (mode == Types::AlwaysVisible || mode == Types::WindowsGoBelow) {
+    if (mode == Types::AlwaysVisible
+            || mode == Types::WindowsGoBelow
+            || mode == Types::WindowsCanCover
+            || mode == Types::WindowsAlwaysCover) {
         byPassWM = false;
     } else {
         byPassWM = containment->config().readEntry("byPassWM", false);
@@ -893,7 +897,7 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
 
     auto latteView = new Latte::View(m_corona, nextScreen, byPassWM);
 
-    latteView->init();
+    latteView->init(containment);
     latteView->setContainment(containment);
 
     //! force this special dock case to become primary
@@ -904,6 +908,7 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
     }
 
     latteView->setLayout(this);
+
 
     //! Qt 5.9 creates a crash for this in wayland, that is why the check is used
     //! but on the other hand we need this for copy to work correctly and show
@@ -917,6 +922,36 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
     emit viewsCountChanged();
 }
 
+void GenericLayout::toggleHiddenState(QString screenName, Plasma::Types::Location edge)
+{
+    if (!m_corona) {
+        return;
+    }
+
+    QString validScreenName = qGuiApp->primaryScreen()->name();
+    if (!screenName.isEmpty()) {
+        validScreenName = screenName;
+    }
+
+    int viewsOnEdge{0};
+
+    for(const auto view : latteViews()) {
+        if (view->positioner()->currentScreenName() == validScreenName && view->location() == edge) {
+            viewsOnEdge++;
+        }
+    }
+
+    if (viewsOnEdge >= 1) {
+        for(const auto view : latteViews()) {
+            if (view->positioner()->currentScreenName() == validScreenName && view->location() == edge) {
+                if (viewsOnEdge == 1 || (viewsOnEdge >1 && view->visibility() && view->visibility()->isSidebar())) {
+                    view->visibility()->toggleHiddenState();
+                    return;
+                }
+            }
+        }
+    }
+}
 
 bool GenericLayout::initToCorona(Latte::Corona *corona)
 {
@@ -927,9 +962,9 @@ bool GenericLayout::initToCorona(Latte::Corona *corona)
     m_corona = corona;
 
     for (const auto containment : m_corona->containments()) {
-        if (m_corona->layoutsManager()->memoryUsage() == Types::SingleLayout) {
+        if (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout) {
             addContainment(containment);
-        } else if (m_corona->layoutsManager()->memoryUsage() == Types::MultipleLayouts) {
+        } else if (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
             QString layoutId = containment->config().readEntry("layoutId", QString());
 
             if (!layoutId.isEmpty() && (layoutId == m_layoutName)) {
@@ -943,10 +978,13 @@ bool GenericLayout::initToCorona(Latte::Corona *corona)
     updateLastUsedActivity();
 
     //! signals
-    connect(m_corona->activityConsumer(), &KActivities::Consumer::currentActivityChanged,
-            this, &GenericLayout::updateLastUsedActivity);
+    connect(this, &GenericLayout::activitiesChanged, this, &GenericLayout::updateLastUsedActivity);
+    connect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, &GenericLayout::updateLastUsedActivity);
 
     connect(m_corona, &Plasma::Corona::containmentAdded, this, &GenericLayout::addContainment);
+
+    connect(this, &GenericLayout::lastConfigViewForChanged, m_corona->layoutsManager(), &Layouts::Manager::lastConfigViewChangedFrom);
+    connect(m_corona->layoutsManager(), &Layouts::Manager::lastConfigViewChangedFrom, this, &GenericLayout::onLastConfigViewChangedFrom);
 
     //!connect signals after adding the containment
     connect(this, &GenericLayout::viewsCountChanged, m_corona, &Plasma::Corona::availableScreenRectChanged);
@@ -963,19 +1001,12 @@ void GenericLayout::updateLastUsedActivity()
         return;
     }
 
-    if (!m_lastUsedActivity.isEmpty() && !m_corona->layoutsManager()->synchronizer()->activities().contains(m_lastUsedActivity)) {
-        clearLastUsedActivity();
-    }
-
     QString currentId = m_corona->activitiesConsumer()->currentActivity();
-
     QStringList appliedActivitiesIds = appliedActivities();
 
-    if (m_lastUsedActivity != currentId
-            && (appliedActivitiesIds.contains(currentId)
-                || m_corona->layoutsManager()->memoryUsage() == Types::SingleLayout)) {
+    if (appliedActivitiesIds.contains(Data::Layout::ALLACTIVITIESID)
+            || (m_lastUsedActivity != currentId && appliedActivitiesIds.contains(currentId))) {
         m_lastUsedActivity = currentId;
-
         emit lastUsedActivityChanged();
     }
 }
@@ -994,7 +1025,7 @@ void GenericLayout::assignToLayout(Latte::View *latteView, QList<Plasma::Contain
             containment->config().writeEntry("layoutId", name());
 
             if (latteView->containment() != containment) {
-                //! assign signals only to systrays
+                //! assign signals only to subcontainments
                 //! the View::setLayout() is responsible for the View::Containment signals
                 connect(containment, &QObject::destroyed, this, &GenericLayout::containmentDestroyed);
                 connect(containment, &Plasma::Applet::destroyedChanged, this, &GenericLayout::destroyedChanged);
@@ -1008,8 +1039,8 @@ void GenericLayout::assignToLayout(Latte::View *latteView, QList<Plasma::Contain
     }
 
     //! sync the original layout file for integrity
-    if (m_corona && m_corona->layoutsManager()->memoryUsage() == Types::MultipleLayouts) {
-        m_storage->syncToLayoutFile(false);
+    if (m_corona && m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
+        Layouts::Storage::self()->syncToLayoutFile(this, false);
     }
 }
 
@@ -1026,10 +1057,10 @@ QList<Plasma::Containment *> GenericLayout::unassignFromLayout(Latte::View *latt
     for (const auto containment : m_containments) {
         Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent());
 
-        //! add systrays from that latteView
+        //! add subcontainments from that latteView
         if (parentApplet && parentApplet->containment() && parentApplet->containment() == latteView->containment()) {
             containments << containment;
-            //! unassign signals only to systrays
+            //! unassign signals only to subcontainments
             //! the View::setLayout() is responsible for the View::Containment signals
             disconnect(containment, &QObject::destroyed, this, &GenericLayout::containmentDestroyed);
             disconnect(containment, &Plasma::Applet::destroyedChanged, this, &GenericLayout::destroyedChanged);
@@ -1046,8 +1077,8 @@ QList<Plasma::Containment *> GenericLayout::unassignFromLayout(Latte::View *latt
     }
 
     //! sync the original layout file for integrity
-    if (m_corona && m_corona->layoutsManager()->memoryUsage() == Types::MultipleLayouts) {
-        m_storage->syncToLayoutFile(false);
+    if (m_corona && m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
+        Layouts::Storage::self()->syncToLayoutFile(this, false);
     }
 
     return containments;
@@ -1122,7 +1153,7 @@ bool GenericLayout::explicitDockOccupyEdge(int screen, Plasma::Types::Location l
     }
 
     for (const auto containment : m_containments) {
-        if (m_storage->isLatteContainment(containment)) {
+        if (Layouts::Storage::self()->isLatteContainment(containment)) {
             bool onPrimary = containment->config().readEntry("onPrimary", true);
             int id = containment->lastScreen();
             Plasma::Types::Location contLocation = containment->location();
@@ -1143,8 +1174,15 @@ bool GenericLayout::primaryDockOccupyEdge(Plasma::Types::Location location) cons
     }
 
     for (const auto containment : m_containments) {
-        if (m_storage->isLatteContainment(containment)) {
-            bool onPrimary = containment->config().readEntry("onPrimary", true);
+        if (Layouts::Storage::self()->isLatteContainment(containment)) {
+            bool onPrimary{false};
+
+            if (m_latteViews.contains(containment)) {
+                onPrimary = m_latteViews[containment]->onPrimary();
+            } else {
+                onPrimary = containment->config().readEntry("onPrimary", true);
+            }
+
             Plasma::Types::Location contLocation = containment->location();
 
             if (onPrimary && contLocation == location) {
@@ -1160,7 +1198,7 @@ bool GenericLayout::mapContainsId(const Layout::ViewsMap *map, uint viewId) cons
 {
     for(const auto &scr : map->keys()) {
         for(const auto &edge : (*map)[scr].keys()) {
-            if ((*map)[scr][edge] == viewId) {
+            if ((*map)[scr][edge].contains(viewId)) {
                 return true;
             }
         }
@@ -1172,6 +1210,9 @@ bool GenericLayout::mapContainsId(const Layout::ViewsMap *map, uint viewId) cons
 //! screen name, location, containmentId
 Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
 {
+    //! Shared Views occupy the screen edge first
+    //! Primary Views occupy the screen edge if Shared Views do not exist already on that screen edge
+    //! Explicity Views occypy the screen edge if Shared Views and Primary Views do not exist already on that screen edge
     Layout::ViewsMap map;
 
     if (!m_corona) {
@@ -1186,8 +1227,8 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
 
     //! first step: primary docks must be placed in primary screen free edges
     for (const auto containment : m_containments) {
-        if (m_storage->isLatteContainment(containment)) {
-            int screenId = 0;
+        if (Layouts::Storage::self()->isLatteContainment(containment)) {
+            int screenId{Layouts::Storage::IDNULL};
 
             //! valid screen id
             if (latteViewExists(containment)) {
@@ -1195,7 +1236,7 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
             } else {
                 screenId = containment->screen();
 
-                if (screenId == -1) {
+                if (!Layouts::Storage::isValid(screenId)) {
                     screenId = containment->lastScreen();
                 }
             }
@@ -1212,16 +1253,18 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
             //! valid location
             Plasma::Types::Location location = containment->location();
 
-            if (onPrimary && !map[prmScreenName].contains(location)) {
-                map[prmScreenName][location] = containment->id();
+            if (onPrimary && (!occupiedMap || !(*occupiedMap)[prmScreenName].contains(location))) {
+                map[prmScreenName][location] << containment->id();
             }
         }
     }
 
+    Layout::ViewsMap explicitMap;
+
     //! second step: explicit docks must be placed in their screens if the screen edge is free
     for (const auto containment : m_containments) {
-        if (m_storage->isLatteContainment(containment)) {
-            int screenId = 0;
+        if (Layouts::Storage::self()->isLatteContainment(containment)) {
+            int screenId{Layouts::Storage::IDNULL};
 
             //! valid screen id
             if (latteViewExists(containment)) {
@@ -1229,7 +1272,7 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
             } else {
                 screenId = containment->screen();
 
-                if (screenId == -1) {
+                if (!Layouts::Storage::isValid(screenId)) {
                     screenId = containment->lastScreen();
                 }
             }
@@ -1250,9 +1293,15 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
                 QString expScreenName = m_corona->screenPool()->connector(screenId);
 
                 if (m_corona->screenPool()->screenExists(screenId) && !map[expScreenName].contains(location)) {
-                    map[expScreenName][location] = containment->id();
+                    explicitMap[expScreenName][location] << containment->id();
                 }
             }
+        }
+    }
+
+    for(const QString &expScreenName : explicitMap.keys()) {
+        for(const Plasma::Types::Location &expLocation : explicitMap[expScreenName].keys()) {
+            map[expScreenName][expLocation] << explicitMap[expScreenName][expLocation];
         }
     }
 
@@ -1287,7 +1336,7 @@ void GenericLayout::syncLatteViewsToScreens(Layout::ViewsMap *occupiedMap)
     for (const auto containment : m_containments) {
         int screenId = containment->screen();
 
-        if (screenId == -1) {
+        if (!Layouts::Storage::isValid(screenId)) {
             screenId = containment->lastScreen();
         }
 
@@ -1328,24 +1377,23 @@ void GenericLayout::syncLatteViewsToScreens(Layout::ViewsMap *occupiedMap)
     qDebug() << "end of, syncLatteViewsToScreens ....";
 }
 
-QList<int> GenericLayout::containmentSystrays(Plasma::Containment *containment) const
+QList<int> GenericLayout::subContainmentsOf(Plasma::Containment *containment) const
 {
-    QList<int> trays;
+    QList<int> subs;
 
-    if (m_storage->isLatteContainment(containment)) {
+    if (Layouts::Storage::self()->isLatteContainment(containment)) {
         auto applets = containment->config().group("Applets");
 
         for (const auto &applet : applets.groupList()) {
-            KConfigGroup appletSettings = applets.group(applet).group("Configuration");
-            int tSysId = appletSettings.readEntry("SystrayContainmentId", -1);
+            int tSubId = Layouts::Storage::self()->subContainmentId(applets.group(applet));
 
-            if (tSysId != -1) {
-                trays << tSysId;
+            if (Layouts::Storage::isValid(tSubId)) {
+                subs << tSubId;
             }
         }
     }
 
-    return trays;
+    return subs;
 }
 
 
@@ -1392,37 +1440,37 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
     }
     report += "</tr>";
 
-    //! latte containment ids, systrays
-    QHash<int, QList<int>> systrays;
-    QList<int> assignedSystrays;
-    QList<int> orphanSystrays;
+    //! latte containment ids, subcontainments
+    QHash<int, QList<int>> subContainments;
+    QList<int> assignedSubContainments;
+    QList<int> orphanSubContainments;
 
     if (isActive()) {
-        //! organize systrays
+        //! organize subcontainments
         for (const auto containment : m_containments) {
-            QList<int> trays = containmentSystrays(containment);
-            if (trays.count() > 0) {
-                systrays[containment->id()] = trays;
-                assignedSystrays << trays;
+            QList<int> subs = subContainmentsOf(containment);
+            if (subs.count() > 0) {
+                subContainments[containment->id()] = subs;
+                assignedSubContainments << subs;
             }
         }
 
-        //! orphan systrays
+        //! orphan subcontainments
         for (const auto containment : m_containments) {
-            if (!m_storage->isLatteContainment(containment) && !assignedSystrays.contains(containment->id())) {
-                orphanSystrays << containment->id();
+            if (!Layouts::Storage::self()->isLatteContainment(containment) && !assignedSubContainments.contains(containment->id())) {
+                orphanSubContainments << containment->id();
             }
         }
     } else {
-        m_storage->systraysInformation(systrays, assignedSystrays, orphanSystrays);
+        Layouts::Storage::self()->subContainmentsInfo(file(), subContainments, assignedSubContainments, orphanSubContainments);
     }
 
     report += "<tr>";
-    report += "<td><b>" + i18n("Orphan Systrays:") +"</b></td>";
-    if (orphanSystrays.count() == 0) {
+    report += "<td><b>" + i18n("Orphan SubContainments:") +"</b></td>";
+    if (orphanSubContainments.count() == 0) {
         report += "<td><b> -- </b></td>";
     } else {
-        report += "<td><b><font color='red'>" + idsLineStr(orphanSystrays) +"</font></b></td>";
+        report += "<td><b><font color='red'>" + idsLineStr(orphanSubContainments) +"</font></b></td>";
     }
     report += "</tr>";
     report += "</table>";
@@ -1432,7 +1480,7 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
             "<td align='center'><b>" + i18n("Screen") + "</b></td>" +
             "<td align='center'><b>" + i18nc("screen edge","Edge") + "</b></td>" +
             "<td align='center'><b>" + i18nc("active dock/panel","Active") + "</b></td>" +
-            "<td align='center'><b>" + i18n("Systrays") + "</b></td>";
+            "<td align='center'><b>" + i18n("SubContainments") + "</b></td>";
 
     report += "<tr><td colspan='5'><hr></td></tr>";
 
@@ -1441,14 +1489,14 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
     if (isActive()) {
         //! collect viewData results
         for (const auto containment : m_containments) {
-            if (m_storage->isLatteContainment(containment)) {
+            if (Layouts::Storage::self()->isLatteContainment(containment)) {
                 ViewData vData;
                 vData.id = containment->id();
                 vData.active = latteViewExists(containment);
                 vData.location = containment->location();
 
                 //! onPrimary / Screen Id
-                int screenId = -1;
+                int screenId{Layouts::Storage::IDNULL};
                 bool onPrimary = true;
 
                 if (latteViewExists(containment)) {
@@ -1458,20 +1506,20 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
                     screenId = containment->screen();
                     onPrimary = containment->config().readEntry("onPrimary", true);
 
-                    if (screenId == -1) {
+                    if (!Layouts::Storage::isValid(screenId)) {
                         screenId = containment->lastScreen();
                     }
                 }
 
                 vData.onPrimary = onPrimary;
                 vData.screenId = screenId;
-                vData.systrays = containmentSystrays(containment);
+                vData.subContainments = subContainmentsOf(containment);
 
                 viewsData << vData;
             }
         }
     } else {
-        viewsData = m_storage->viewsData(systrays);
+        viewsData = Layouts::Storage::self()->viewsData(file(), subContainments);
     }
 
     //! sort views data
@@ -1523,15 +1571,15 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
         }
         report += "<td align='center'>" + activeStr + "</td>" ;
 
-        //! systrays
-        QString systraysStr = " -- ";
-        if (viewsData[i].systrays.count() > 0) {
-            systraysStr = idsLineStr(viewsData[i].systrays);
+        //! subcontainments
+        QString subContainmentsStr = " -- ";
+        if (viewsData[i].subContainments.count() > 0) {
+            subContainmentsStr = idsLineStr(viewsData[i].subContainments);
         }
         if(viewsData[i].active) {
-            systraysStr = "<b>" + systraysStr + "</b>";
+            subContainmentsStr = "<b>" + subContainmentsStr + "</b>";
         }
-        report += "<td align='center'>" + systraysStr + "</td>";
+        report += "<td align='center'>" + subContainmentsStr + "</td>";
 
         report += "</tr>";
     }
@@ -1541,7 +1589,7 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
     report += "<br/><hr>";
 
     QStringList errorsList;
-    bool broken = m_storage->layoutIsBroken(errorsList);
+    bool broken = Layouts::Storage::self()->isBroken(this, errorsList);
 
     if (!broken && unknownScreens.count() == 0) {
         report += "<font color='green'>" + i18n("No errors were identified for this layout...") + "</font><br/>";
@@ -1568,8 +1616,8 @@ QList<int> GenericLayout::viewsScreens()
 
     if (isActive()) {
         for (const auto containment : m_containments) {
-            if (m_storage->isLatteContainment(containment)) {
-                int screenId = -1;
+            if (Layouts::Storage::self()->isLatteContainment(containment)) {
+                int screenId{Layouts::Storage::IDNULL};
 
                 //! valid screen id
                 if (latteViewExists(containment)) {
@@ -1577,12 +1625,12 @@ QList<int> GenericLayout::viewsScreens()
                 } else {
                     screenId = containment->screen();
 
-                    if (screenId == -1) {
+                    if (!Layouts::Storage::isValid(screenId)) {
                         screenId = containment->lastScreen();
                     }
                 }
 
-                if (screenId!=-1 &&!screens.contains(screenId)) {
+                if (Layouts::Storage::isValid(screenId) && !screens.contains(screenId)) {
                     screens << screenId;
                 }
             }
@@ -1590,7 +1638,7 @@ QList<int> GenericLayout::viewsScreens()
 
         return screens;
     } else {
-        return m_storage->viewsScreens();
+        return Layouts::Storage::self()->viewsScreens(file());
     }
 }
 
@@ -1599,39 +1647,52 @@ QList<int> GenericLayout::viewsScreens()
 
 bool GenericLayout::isWritable() const
 {
-    return m_storage->isWritable();
+    return Layouts::Storage::self()->isWritable(this);
 }
 
 void GenericLayout::lock()
 {
-    m_storage->lock();
+    Layouts::Storage::self()->lock(this);
 }
 
 void GenericLayout::unlock()
 {
-    m_storage->unlock();
+    Layouts::Storage::self()->unlock(this);
 }
 
 void GenericLayout::syncToLayoutFile(bool removeLayoutId)
 {
-    m_storage->syncToLayoutFile(removeLayoutId);
+    syncSettings();
+    Layouts::Storage::self()->syncToLayoutFile(this, removeLayoutId);
 }
 
 void GenericLayout::copyView(Plasma::Containment *containment)
 {
-    m_storage->copyView(containment);
+    //! Don't create LatteView when the containment is created because we must update its screen settings first
+    setBlockAutomaticLatteViewCreation(true);
+
+    Layouts::ViewDelayedCreationData result = Layouts::Storage::self()->copyView(this, containment);
+    if (result.containment) {
+        addView(result.containment, result.forceOnPrimary, result.explicitScreen);
+
+        if (result.reactToScreenChange) {
+            result.containment->reactToScreenChange();
+        }
+    }
+
+    setBlockAutomaticLatteViewCreation(false);
     emit viewEdgeChanged();
 }
 
 void GenericLayout::importToCorona()
 {
-    m_storage->importToCorona();
+    Layouts::Storage::self()->importToCorona(this);
 }
 
-bool GenericLayout::layoutIsBroken() const
+bool GenericLayout::isBroken() const
 {
     QStringList errors;
-    return m_storage->layoutIsBroken(errors);
+    return Layouts::Storage::self()->isBroken(this, errors);
 }
 
 }

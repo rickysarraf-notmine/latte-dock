@@ -23,20 +23,24 @@
 // Qt
 #include <QStyledItemDelegate>
 
-namespace Latte {
-class SettingsDialog;
-}
 
-class CheckBoxDelegate : public QStyledItemDelegate
+namespace Latte {
+namespace Settings {
+namespace Layout {
+namespace Delegate {
+
+class CheckBox : public QStyledItemDelegate
 {
 public:
-    CheckBoxDelegate(QObject *parent = 0);
+    CheckBox(QObject *parent = 0);
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-    virtual bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index);
-
-private:
-    Latte::SettingsDialog *m_settingsDialog{nullptr};
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    virtual bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override;
 };
+
+}
+}
+}
+}
 
 #endif

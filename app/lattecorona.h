@@ -22,10 +22,10 @@
 #define LATTECORONA_H
 
 // local
+#include <coretypes.h>
 #include "plasma/quick/configview.h"
-#include "layout/storage.h"
+#include "layouts/storage.h"
 #include "view/panelshadows_p.h"
-#include "../liblatte2/types.h"
 
 // Qt
 #include <QObject>
@@ -67,20 +67,24 @@ class ScreenPool;
 class GlobalShortcuts;
 class UniversalSettings;
 class View;
+class ViewSettingsFactory;
 namespace Indicator{
 class Factory;
 }
 namespace Layout{
 class GenericLayout;
-class Storage;
 }
 namespace Layouts{
 class LaunchersSignals;
 class Manager;
 }
 namespace PlasmaExtended{
+class ScreenGeometries;
 class ScreenPool;
 class Theme;
+}
+namespace Templates {
+class Manager;
 }
 namespace WindowSystem{
 class AbstractWindowInterface;
@@ -101,6 +105,8 @@ public:
                QObject *parent = nullptr);
     virtual ~Corona();
 
+    bool inQuit() const;
+
     int numScreens() const override;
     QRect screenGeometry(int id) const override;
     QRegion availableScreenRegion(int id) const override;
@@ -108,32 +114,33 @@ public:
 
     //! This is a very generic function in order to return the availableScreenRect of specific screen
     //! by calculating only the user specified visibility modes and edges. Empty QLists for both
-    //! arguments mean that all choices are accepted in calculations. includeExternalPanels means that
-    //! external panels should be considered in the calculations
+    //! arguments mean that all choices are accepted in calculations. ignoreExternalPanels means that
+    //! external panels should be not considered in the calculations
     QRect availableScreenRectWithCriteria(int id,
-                                          QString forLayout = QString(),
-                                          QList<Types::Visibility> modes = QList<Types::Visibility>(),
-                                          QList<Plasma::Types::Location> edges = QList<Plasma::Types::Location>(),
-                                          bool includeExternalPanels = false) const;
+                                          QString activityid = QString(),
+                                          QList<Types::Visibility> ignoreModes = QList<Types::Visibility>(),
+                                          QList<Plasma::Types::Location> ignoreEdges = QList<Plasma::Types::Location>(),
+                                          bool ignoreExternalPanels = true,
+                                          bool desktopUse = false) const;
 
     QRegion availableScreenRegionWithCriteria(int id,
-                                              QString forLayout = QString(),
-                                              QList<Types::Visibility> modes = QList<Types::Visibility>(),
-                                              QList<Plasma::Types::Location> edges = QList<Plasma::Types::Location>(),
-                                              bool includeExternalPanels = false) const;
+                                              QString activityid = QString(),
+                                              QList<Types::Visibility> ignoreModes = QList<Types::Visibility>(),
+                                              QList<Plasma::Types::Location> ignoreEdges = QList<Plasma::Types::Location>(),
+                                              bool ignoreExternalPanels = true,
+                                              bool desktopUse = false) const;
 
     int screenForContainment(const Plasma::Containment *containment) const override;
 
-    void closeApplication();
-
-    KActivities::Consumer *activityConsumer() const;
     KWayland::Client::PlasmaShell *waylandCoronaInterface() const;
 
     KActivities::Consumer *activitiesConsumer() const;
     GlobalShortcuts *globalShortcuts() const;
     ScreenPool *screenPool() const;
     UniversalSettings *universalSettings() const;
+    ViewSettingsFactory *viewSettingsFactory() const;
     Layouts::Manager *layoutsManager() const;   
+    Templates::Manager *templatesManager() const;
 
     Indicator::Factory *indicatorFactory() const;
 
@@ -144,7 +151,12 @@ public:
 
     PanelShadows *dialogShadows() const;
 
-    //! these functions are used from context menu through containmentactions
+    //! Needs to be called in order to import and load application properly after application
+    //! finished all its exit operations
+    void importFullConfiguration(const QString &file);
+
+    //! these functions are used from context menu through containmentactions    
+    void quitApplication();
     void switchToLayout(QString layout);
     void showSettingsWindow(int page);
     void setContextMenuView(int id);
@@ -158,6 +170,8 @@ public slots:
     void setBackgroundFromBroadcast(QString activity, QString screenName, QString filename);
     void setBroadcastedBackgroundsEnabled(QString activity, QString screenName, bool enabled);
     void showAlternativesForApplet(Plasma::Applet *applet);
+    void toggleHiddenState(QString layoutName, QString screenName, int screenEdge);
+
     //! values are separated with a "-" character
     void windowColorScheme(QString windowIdAndScheme);
     void updateDockItemBadge(QString identifier, QString value);
@@ -170,6 +184,7 @@ signals:
     void raiseViewsTemporaryChanged();
     void availableScreenRectChangedFrom(Latte::View *origin);
     void availableScreenRegionChangedFrom(Latte::View *origin);
+    void verticalUnityViewHasFocus();
 
 private slots:
     void alternativesVisibilityChanged(bool visible);
@@ -194,12 +209,14 @@ private:
     QStringList containmentsIds();
     QStringList appletsIds();
 
+    Layout::GenericLayout *layout(QString name) const;
     CentralLayout *centralLayout(QString name) const;
 
 private:
 
     bool m_activitiesStarting{true};
     bool m_defaultLayoutOnStartup{false}; //! this is used to enforce loading the default layout on startup
+    bool m_inQuit{false}; //! this is used in order to identify when application is in quit phase
     bool m_quitTimedEnded{false}; //! this is used on destructor in order to delay it and slide-out the views
 
     //!it can be used on startup to change memory usage from command line
@@ -208,23 +225,25 @@ private:
     int m_contextMenuViewId{-1};
 
     QString m_layoutNameOnStartUp;
+    QString m_importFullConfigurationFile;
 
     QList<KDeclarative::QmlObjectSharedEngine *> m_alternativesObjects;
 
-    KDeclarative::QmlObjectSharedEngine *m_backgroundTracer;
-
     QTimer m_viewsScreenSyncTimer;
 
-    KActivities::Consumer *m_activityConsumer;
+    KActivities::Consumer *m_activitiesConsumer;
     QPointer<KAboutApplicationDialog> aboutDialog;
 
     ScreenPool *m_screenPool{nullptr};
     UniversalSettings *m_universalSettings{nullptr};
+    ViewSettingsFactory *m_viewSettingsFactory{nullptr};
     GlobalShortcuts *m_globalShortcuts{nullptr};
 
     Indicator::Factory *m_indicatorFactory{nullptr};
     Layouts::Manager *m_layoutsManager{nullptr};
+    Templates::Manager *m_templatesManager{nullptr};
 
+    PlasmaExtended::ScreenGeometries *m_plasmaGeometries{nullptr};
     PlasmaExtended::ScreenPool *m_plasmaScreenPool{nullptr};
     PlasmaExtended::Theme *m_themeExtended{nullptr};
 
@@ -235,9 +254,9 @@ private:
     KWayland::Client::PlasmaShell *m_waylandCorona{nullptr};
 
     friend class GlobalShortcuts;
-    friend class Layout::Storage;
     friend class Layouts::LaunchersSignals;
     friend class Layouts::Manager;
+    friend class Layouts::Storage;
 };
 
 }

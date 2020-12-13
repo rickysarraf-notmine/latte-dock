@@ -22,8 +22,6 @@ import QtQuick 2.7
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
-
 Item {
     anchors.fill: parent
 
@@ -185,6 +183,11 @@ Item {
 
     Loader {
         anchors.fill: parent
+        anchors.topMargin: plasmoid.location === PlasmaCore.Types.TopEdge ? indicator.screenEdgeMargin : 0
+        anchors.bottomMargin: plasmoid.location === PlasmaCore.Types.BottomEdge ? indicator.screenEdgeMargin : 0
+        anchors.leftMargin: plasmoid.location === PlasmaCore.Types.LeftEdge ? indicator.screenEdgeMargin : 0
+        anchors.rightMargin: plasmoid.location === PlasmaCore.Types.RightEdge ? indicator.screenEdgeMargin : 0
+
         visible: !indicator.isApplet && indicator.isGroup
         sourceComponent: Item{
             anchors.fill: parent
@@ -205,7 +208,7 @@ Item {
                 svg: groupSvg
                 elementId: elementForLocation(plasmoid.location)
 
-                readonly property QtObject groupSvg: indicator.resources.svgs.length > 0 ? indicator.resources.svgs[0] : null
+                readonly property QtObject groupSvg: indicator.resources && indicator.resources.svgs.length > 0 ? indicator.resources.svgs[0] : null
 
                 function elementForLocation(location) {
                     switch (location) {

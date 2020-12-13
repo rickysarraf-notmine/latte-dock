@@ -21,16 +21,15 @@
 #include "importer.h"
 
 // local
+#include <coretypes.h>
 #include "manager.h"
 #include "../lattecorona.h"
 #include "../screenpool.h"
 #include "../layout/abstractlayout.h"
 #include "../settings/universalsettings.h"
-#include "../liblatte2/types.h"
 
 // Qt
 #include <QFile>
-#include <QTemporaryDir>
 
 // KDE
 #include <KArchive/KTar>
@@ -40,6 +39,13 @@
 #include <KLocalizedString>
 #include <KNotification>
 
+
+enum SessionType
+{
+    DefaultSession = 0,
+    AlternativeSession
+};
+
 namespace Latte {
 namespace Layouts {
 
@@ -47,6 +53,8 @@ Importer::Importer(QObject *parent)
     : QObject(parent)
 {
     m_manager = qobject_cast<Layouts::Manager *>(parent);
+
+    qDebug() << " IMPORTER, STORAGE TEMP DIR ::: " << m_storageTmpDir.path();
 }
 
 Importer::~Importer()
@@ -80,7 +88,7 @@ bool Importer::updateOldConfiguration()
     }
 
     m_manager->corona()->universalSettings()->setVersion(2);
-    m_manager->corona()->universalSettings()->setCurrentLayoutName(i18n("My Layout"));
+    m_manager->corona()->universalSettings()->setSingleModeLayoutName(i18n("My Layout"));
 
     return true;
 }
@@ -106,14 +114,14 @@ bool Importer::importOldLayout(QString oldAppletsPath, QString newName, bool alt
         KConfigGroup containmentGroup = containments.group(containmentId);
 
         QString plugin = containmentGroup.readEntry("plugin", QString());
-        Types::SessionType session = (Types::SessionType)containmentGroup.readEntry("session", (int)Types::DefaultSession);
+        SessionType session = (SessionType)containmentGroup.readEntry("session", (int)DefaultSession);
 
         bool shouldImport = false;
 
-        if (plugin == "org.kde.latte.containment" && session == Types::DefaultSession && !alternative) {
+        if (plugin == "org.kde.latte.containment" && session == DefaultSession && !alternative) {
             qDebug() << containmentId << " - " << plugin << " - " << session;
             shouldImport = true;
-        } else if (plugin == "org.kde.latte.containment" && session == Types::AlternativeSession && alternative) {
+        } else if (plugin == "org.kde.latte.containment" && session == AlternativeSession && alternative) {
             qDebug() << containmentId << " - " << plugin << " - " << session;
             shouldImport = true;
         }
@@ -215,7 +223,6 @@ QStringList Importer::standardPathsFor(QString subPath, bool localfirst)
     return paths;
 }
 
-
 QString Importer::standardPath(QString subPath, bool localfirst)
 {
     QStringList paths = standardPaths(localfirst);
@@ -233,6 +240,11 @@ QString Importer::standardPath(QString subPath, bool localfirst)
     }
 
     return "";
+}
+
+QString Importer::storageTmpDir() const
+{
+    return m_storageTmpDir.path();
 }
 
 QString Importer::layoutCanBeImported(QString oldAppletsPath, QString newName, QString exportDirectory)
@@ -253,7 +265,7 @@ QString Importer::layoutCanBeImported(QString oldAppletsPath, QString newName, Q
         return QString();
     }
 
-    QDir layoutDir(exportDirectory.isNull() ? QDir::homePath() + "/.config/latte" : exportDirectory);
+    QDir layoutDir(exportDirectory.isNull() ? layoutUserDir() : exportDirectory);
 
     if (!layoutDir.exists() && exportDirectory.isNull()) {
         QDir(QDir::homePath() + "/.config").mkdir("latte");
@@ -388,10 +400,8 @@ bool Importer::exportFullConfiguration(QString file)
     archive.addLocalFile(QString(QDir::homePath() + "/.config/lattedockrc"), QStringLiteral("lattedockrc"));
 
     for(const auto &layoutName : availableLayouts()) {
-        archive.addLocalFile(layoutFilePath(layoutName), QString("latte/" + layoutName + ".layout.latte"));
+        archive.addLocalFile(layoutUserFilePath(layoutName), QString("latte/" + layoutName + ".layout.latte"));
     }
-
-    //archive.addLocalDirectory(QString(QDir::homePath() + "/.config/latte"), QStringLiteral("latte"));
 
     archive.close();
 
@@ -475,7 +485,7 @@ Importer::LatteFileVersion Importer::fileVersion(QString file)
         version2LatteDir = true;
     }
 
-    if (version1applets && version1applets) {
+    if (version1applets) {
         return ConfigVersion1;
     } else if (version2rc && version2LatteDir) {
         return ConfigVersion2;
@@ -499,8 +509,7 @@ bool Importer::importHelper(QString fileName)
         return false;
     }
 
-    QString latteDirPath(QDir::homePath() + "/.config/latte");
-    QDir latteDir(latteDirPath);
+    QDir latteDir(layoutUserDir());
 
     if (latteDir.exists()) {
         latteDir.removeRecursively();
@@ -509,6 +518,17 @@ bool Importer::importHelper(QString fileName)
     archive.directory()->copyTo(QString(QDir::homePath() + "/.config"));
 
     return true;
+}
+
+QString Importer::importLayout(QString fileName)
+{
+    QString newLayoutName = importLayoutHelper(fileName);
+
+    if (!newLayoutName.isEmpty()) {
+        emit newLayoutAdded(layoutUserFilePath(newLayoutName));
+    }
+
+    return newLayoutName;
 }
 
 QString Importer::importLayoutHelper(QString fileName)
@@ -522,22 +542,21 @@ QString Importer::importLayoutHelper(QString fileName)
     QString newLayoutName = Layout::AbstractLayout::layoutName(fileName);
     newLayoutName = uniqueLayoutName(newLayoutName);
 
-    QString newPath = QDir::homePath() + "/.config/latte/" + newLayoutName + ".layout.latte";
+    QString newPath = layoutUserFilePath(newLayoutName);
     QFile(fileName).copy(newPath);
 
     QFileInfo newFileInfo(newPath);
 
     if (newFileInfo.exists() && !newFileInfo.isWritable()) {
         QFile(newPath).setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ReadGroup | QFileDevice::ReadOther);
-    }
+    }    
 
     return newLayoutName;
-
 }
 
 QStringList Importer::availableLayouts()
 {
-    QDir layoutDir(QDir::homePath() + "/.config/latte");
+    QDir layoutDir(layoutUserDir());
     QStringList filter;
     filter.append(QString("*.layout.latte"));
     QStringList files = layoutDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
@@ -566,18 +585,23 @@ QString Importer::nameOfConfigFile(const QString &fileName)
 
 bool Importer::layoutExists(QString layoutName)
 {
-    return QFile::exists(layoutFilePath(layoutName));
+    return QFile::exists(layoutUserFilePath(layoutName));
 }
 
 
-QString Importer::layoutFilePath(QString layoutName)
+QString Importer::layoutUserDir()
 {
-    return QString(QDir::homePath() + "/.config/latte/" + layoutName + ".layout.latte");
+    return QString(QDir::homePath() + "/.config/latte");
+}
+
+QString Importer::layoutUserFilePath(QString layoutName)
+{
+    return QString(layoutUserDir() + "/" + layoutName + ".layout.latte");
 }
 
 QString Importer::uniqueLayoutName(QString name)
 {
-    int pos_ = name.lastIndexOf(QRegExp(QString("[-][0-9]+")));
+    int pos_ = name.lastIndexOf(QRegExp(QString(" - [0-9]+")));
 
     if (layoutExists(name) && pos_ > 0) {
         name = name.left(pos_);
@@ -588,7 +612,7 @@ QString Importer::uniqueLayoutName(QString name)
     QString namePart = name;
 
     while (layoutExists(name)) {
-        name = namePart + "-" + QString::number(i);
+        name = namePart + " - " + QString::number(i);
         i++;
     }
 
@@ -597,7 +621,7 @@ QString Importer::uniqueLayoutName(QString name)
 
 QStringList Importer::checkRepairMultipleLayoutsLinkedFile()
 {
-    QString linkedFilePath = QDir::homePath() + "/.config/latte/" + Layout::AbstractLayout::MultipleLayoutsName + ".layout.latte";
+    QString linkedFilePath = layoutUserFilePath(Layout::MULTIPLELAYOUTSHIDDENNAME);
     KSharedConfigPtr filePtr = KSharedConfig::openConfig(linkedFilePath);
     KConfigGroup linkedContainments = KConfigGroup(filePtr, "Containments");
 
@@ -617,9 +641,9 @@ QStringList Importer::checkRepairMultipleLayoutsLinkedFile()
     QStringList updatedLayouts;
 
     for(const auto &layoutName : linkedLayoutContainmentGroups.uniqueKeys()) {
-        if (layoutName != Layout::AbstractLayout::MultipleLayoutsName && layoutExists(layoutName)) {
+        if (layoutName != Layout::MULTIPLELAYOUTSHIDDENNAME && layoutExists(layoutName)) {
             updatedLayouts << layoutName;
-            KSharedConfigPtr layoutFilePtr = KSharedConfig::openConfig(layoutFilePath(layoutName));
+            KSharedConfigPtr layoutFilePtr = KSharedConfig::openConfig(layoutUserFilePath(layoutName));
             KConfigGroup origLayoutContainments = KConfigGroup(layoutFilePtr, "Containments");
 
             //Clear old containments

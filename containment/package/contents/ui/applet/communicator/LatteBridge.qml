@@ -19,6 +19,8 @@
 
 import QtQuick 2.7
 
+import org.kde.latte.abilities.bridge 0.1 as AbilityBridge
+
 Item{
     id: settings
 
@@ -61,7 +63,7 @@ Item{
     //   USE CASE: when Latte is transparent and applets colors need to be adjusted in order
     //       to look consistent with the underlying desktop background
     // @since: 0.9
-    readonly property QtObject palette: !latteSideColoringEnabled ? colorizerManager : null
+    readonly property QtObject palette: !applet.latteSideColoringEnabled ? colorizerManager : null
 
     // NAME: applyPalette
     //   USAGE: read-only
@@ -70,7 +72,7 @@ Item{
     //   USE CASE: when Latte is transparent and applets colors need to be adjusted in order
     //       to look consistent with the underlying desktop background
     // @since: 0.9
-    readonly property bool applyPalette: !latteSideColoringEnabled ? colorizerManager.mustBeShown : false
+    readonly property bool applyPalette: !applet.latteSideColoringEnabled ? colorizerManager.mustBeShown : false
 
     // NAME: parabolicEffectEnabled
     //   USAGE: read-only
@@ -78,7 +80,7 @@ Item{
     //   USE CASE: it can be used from applets that want to be adjusted based
     //       on the parabolic Effect or not
     // @since: 0.9
-    readonly property bool parabolicEffectEnabled: root.parabolicEffectEnabled && !appletItem.originalAppletBehavior
+    readonly property bool parabolicEffectEnabled: appletItem.parabolic.isEnabled && !appletItem.originalAppletBehavior
 
     // NAME: iconSize
     //   USAGE: read-only
@@ -86,7 +88,15 @@ Item{
     //   USE CASE: it can be used from applets that want their size to be always
     //       relevant to the view icon size
     // @since: 0.9
-    readonly property int iconSize: root.iconSize
+    readonly property int iconSize: appletItem.metrics.iconSize
+
+    // NAME: screenEdgeMargin
+    //   USAGE: read-only
+    //   EXPLANATION: The screen edge margin applied in pixels
+    //   USE CASE: it can be used from applets that want to be informed what is the screen edge margin
+    //       currently applied
+    // @since: 0.10
+    readonly property int screenEdgeMargin: appletItem.metrics.margin.screenEdge
 
     // NAME: maxZoomFactor
     //   USAGE: read-only
@@ -94,7 +104,7 @@ Item{
     //   USE CASE: it can be used from applets that want to be informed what is the maximum
     //       zoom factor currently used
     // @since: 0.9
-    readonly property real maxZoomFactor: root.zoomFactor
+    readonly property real maxZoomFactor: appletItem.parabolic.factor.zoom
 
     // NAME: windowsTracker
     //   USAGE: read-only
@@ -102,10 +112,36 @@ Item{
     //   USE CASE: it can be used from applets that want windows tracking in order
     //       to update their appearance or their behavior accordingly
     // @since: 0.9
-    readonly property QtObject windowsTracker: mainCommunicator.windowsTrackingEnabled && latteView && latteView.windowsTracker ?
+    readonly property QtObject windowsTracker: applet.windowsTrackingEnabled && latteView && latteView.windowsTracker ?
                                                    latteView.windowsTracker : null
 
-    property Item actions: Actions{}
+    readonly property Item actions: Actions{}
+    readonly property Item applet: mainCommunicator.requires
+    readonly property Item debug: appletItem.debug.publicApi
+    readonly property Item metrics: appletItem.metrics.publicApi
+    readonly property Item userRequests: appletItem.userRequests
+
+    readonly property AbilityBridge.Animations animations: AbilityBridge.Animations {
+        host: appletItem.animations.publicApi
+        appletIndex: index
+    }
+
+    readonly property AbilityBridge.Indexer indexer: AbilityBridge.Indexer {
+        host: appletItem.indexer
+        appletIndex: index
+        headAppletIsSeparator: appletItem.headAppletIsSeparator
+        tailAppletIsSeparator: appletItem.tailAppletIsSeparator
+    }
+
+    readonly property AbilityBridge.ParabolicEffect parabolic: AbilityBridge.ParabolicEffect {
+        host: appletItem.parabolic
+        appletIndex: index
+    }
+
+    readonly property AbilityBridge.PositionShortcuts shortcuts: AbilityBridge.PositionShortcuts {
+        host: appletItem.shortcuts
+        appletIndex: index
+    }
 
     Connections {
         target: root
@@ -118,6 +154,14 @@ Item{
 
     //! Initialize
     Component.onCompleted: {
-        appletRootItem.latteBridge = settings;
+        if (appletContainsLatteBridge) {
+            appletRootItem.latteBridge = settings;
+        }
+    }
+
+    Component.onDestruction: {
+        if (appletContainsLatteBridge) {
+            appletRootItem.latteBridge = null;
+        }
     }
 }

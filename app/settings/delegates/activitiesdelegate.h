@@ -20,37 +20,45 @@
 #ifndef ACTIVITIESDELEGATE_H
 #define ACTIVITIESDELEGATE_H
 
+// local
+#include "../../data/activitydata.h"
+
 // Qt
-#include <QItemDelegate>
+#include <QMenu>
+#include <QStyledItemDelegate>
 
 class QModelIndex;
 class QWidget;
 class QVariant;
 
 namespace Latte {
-class SettingsDialog;
-}
+namespace Settings {
+namespace Layout {
+namespace Delegate {
 
-class ActivitiesDelegate : public QItemDelegate
+class Activities : public QStyledItemDelegate
 {
     Q_OBJECT
 public:
-    ActivitiesDelegate(QObject *parent);
+    Activities(QObject *parent);
 
-    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-    void setEditorData(QWidget *editor, const QModelIndex &index) const;
-    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const;
-    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-
-private:
-    void updateButton(QWidget *editor) const;
-
-    QString joinedActivities(const QStringList &activities, bool boldForActive = true) const;
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
+    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    virtual bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override;
 
 private:
-    Latte::SettingsDialog *m_settingsDialog{nullptr};
+    void updateCurrentActivityAction(QMenu *menu) const;
+    void updateButton(QWidget *editor, const Latte::Data::ActivitiesTable &allActivitiesTable) const;
 
+    QString joinedActivities(const QList<Latte::Data::Activity> &activities, const QStringList &originalIds, bool isActive = false, bool formatText = true) const;
 };
+
+}
+}
+}
+}
 
 #endif

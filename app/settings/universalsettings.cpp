@@ -21,6 +21,8 @@
 #include "universalsettings.h"
 
 // local
+#include "../data/layoutdata.h"
+#include "../layout/centrallayout.h"
 #include "../layouts/importer.h"
 #include "../layouts/manager.h"
 
@@ -40,6 +42,8 @@
 #define KWINCOLORSSCRIPT "kwin/scripts/lattewindowcolors"
 #define KWINRC "/.config/kwinrc"
 
+#define KWINRCTRACKERINTERVAL 2500
+
 namespace Latte {
 
 UniversalSettings::UniversalSettings(KSharedConfig::Ptr config, QObject *parent)
@@ -50,18 +54,15 @@ UniversalSettings::UniversalSettings(KSharedConfig::Ptr config, QObject *parent)
     m_corona = qobject_cast<Latte::Corona *>(parent);
 
     connect(this, &UniversalSettings::badges3DStyleChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::canDisableBordersChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::currentLayoutNameChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::downloadWindowSizeChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::lastNonAssignedLayoutNameChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::canDisableBordersChanged, this, &UniversalSettings::saveConfig);  
+    connect(this, &UniversalSettings::inAdvancedModeForEditSettingsChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::launchersChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::layoutsColumnWidthsChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::layoutsMemoryUsageChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::layoutsWindowSizeChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::metaPressAndHoldEnabledChanged, this, &UniversalSettings::saveConfig);
-    connect(this, &UniversalSettings::mouseSensitivityChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::sensitivityChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::screenTrackerIntervalChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::showInfoWindowChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::singleModeLayoutNameChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::versionChanged, this, &UniversalSettings::saveConfig);
 
     connect(this, &UniversalSettings::screenScalesChanged, this, &UniversalSettings::saveScalesConfig);
@@ -104,12 +105,31 @@ void UniversalSettings::load()
     KDirWatch::self()->addFile(kwinrcFilePath);
     recoverKWinOptions();
 
+    m_kwinrcTrackerTimer.setSingleShot(true);
+    m_kwinrcTrackerTimer.setInterval(KWINRCTRACKERINTERVAL);
+    connect(&m_kwinrcTrackerTimer, &QTimer::timeout, this, &UniversalSettings::recoverKWinOptions);
+
     connect(KDirWatch::self(), &KDirWatch::created, this, &UniversalSettings::trackedFileChanged);
     connect(KDirWatch::self(), &KDirWatch::deleted, this, &UniversalSettings::trackedFileChanged);
     connect(KDirWatch::self(), &KDirWatch::dirty, this, &UniversalSettings::trackedFileChanged);
 
     //! this is needed to inform globalshortcuts to update its modifiers tracking
     emit metaPressAndHoldEnabledChanged();
+}
+
+bool UniversalSettings::inAdvancedModeForEditSettings() const
+{
+    return m_inAdvancedModeForEditSettings;
+}
+
+void UniversalSettings::setInAdvancedModeForEditSettings(const bool &inAdvanced)
+{
+    if (m_inAdvancedModeForEditSettings == inAdvanced) {
+        return;
+    }
+
+    m_inAdvancedModeForEditSettings = inAdvanced;
+    emit inAdvancedModeForEditSettingsChanged();
 }
 
 bool UniversalSettings::showInfoWindow() const
@@ -159,80 +179,19 @@ void UniversalSettings::setScreenTrackerInterval(int duration)
     emit screenTrackerIntervalChanged();
 }
 
-QString UniversalSettings::currentLayoutName() const
+QString UniversalSettings::singleModeLayoutName() const
 {
-    return m_currentLayoutName;
+    return m_singleModeLayoutName;
 }
 
-void UniversalSettings::setCurrentLayoutName(QString layoutName)
+void UniversalSettings::setSingleModeLayoutName(QString layoutName)
 {
-    if (m_currentLayoutName == layoutName) {
+    if (m_singleModeLayoutName == layoutName) {
         return;
     }
 
-    m_currentLayoutName = layoutName;
-    emit currentLayoutNameChanged();
-}
-
-QString UniversalSettings::lastNonAssignedLayoutName() const
-{
-    return m_lastNonAssignedLayoutName;
-}
-
-void UniversalSettings::setLastNonAssignedLayoutName(QString layoutName)
-{
-    if (m_lastNonAssignedLayoutName == layoutName) {
-        return;
-    }
-
-    m_lastNonAssignedLayoutName = layoutName;
-    emit lastNonAssignedLayoutNameChanged();
-}
-
-QSize UniversalSettings::downloadWindowSize() const
-{
-    return m_downloadWindowSize;
-}
-
-void UniversalSettings::setDownloadWindowSize(QSize size)
-{
-    if (m_downloadWindowSize == size) {
-        return;
-    }
-
-    m_downloadWindowSize = size;
-    emit downloadWindowSizeChanged();
-}
-
-
-QSize UniversalSettings::layoutsWindowSize() const
-{
-    return m_layoutsWindowSize;
-}
-
-void UniversalSettings::setLayoutsWindowSize(QSize size)
-{
-    if (m_layoutsWindowSize == size) {
-        return;
-    }
-
-    m_layoutsWindowSize = size;
-    emit layoutsWindowSizeChanged();
-}
-
-QStringList UniversalSettings::layoutsColumnWidths() const
-{
-    return m_layoutsColumnWidths;
-}
-
-void UniversalSettings::setLayoutsColumnWidths(QStringList widths)
-{
-    if (m_layoutsColumnWidths == widths) {
-        return;
-    }
-
-    m_layoutsColumnWidths = widths;
-    emit layoutsColumnWidthsChanged();
+    m_singleModeLayoutName = layoutName;
+    emit singleModeLayoutNameChanged();
 }
 
 QStringList UniversalSettings::launchers() const
@@ -356,7 +315,7 @@ void UniversalSettings::trackedFileChanged(const QString &file)
     }
 
     if (file.endsWith(KWINRC)) {
-        recoverKWinOptions();
+        m_kwinrcTrackerTimer.start();
     }
 }
 
@@ -413,6 +372,7 @@ void UniversalSettings::kwin_setDisabledMaximizedBorders(bool disable)
 
     if (iface.isValid()) {
         iface.call("reconfigure");
+        m_kwinBorderlessMaximizedWindows = disable;
     }
 }
 
@@ -437,7 +397,6 @@ void UniversalSettings::recoverKWinOptions()
     m_kwinBorderlessMaximizedWindows = (output == "true");
 }
 
-
 bool UniversalSettings::metaPressAndHoldEnabled() const
 {
     return m_metaPressAndHoldEnabled;
@@ -454,12 +413,12 @@ void UniversalSettings::setMetaPressAndHoldEnabled(bool enabled)
     emit metaPressAndHoldEnabledChanged();
 }
 
-Types::LayoutsMemoryUsage UniversalSettings::layoutsMemoryUsage() const
+MemoryUsage::LayoutsMemory UniversalSettings::layoutsMemoryUsage() const
 {
     return m_memoryUsage;
 }
 
-void UniversalSettings::setLayoutsMemoryUsage(Types::LayoutsMemoryUsage layoutsMemoryUsage)
+void UniversalSettings::setLayoutsMemoryUsage(MemoryUsage::LayoutsMemory layoutsMemoryUsage)
 {
     if (m_memoryUsage == layoutsMemoryUsage) {
         return;
@@ -469,19 +428,19 @@ void UniversalSettings::setLayoutsMemoryUsage(Types::LayoutsMemoryUsage layoutsM
     emit layoutsMemoryUsageChanged();
 }
 
-Types::MouseSensitivity UniversalSettings::mouseSensitivity() const
+Settings::MouseSensitivity UniversalSettings::sensitivity()
 {
-    return m_mouseSensitivity;
+    return m_sensitivity;
 }
 
-void UniversalSettings::setMouseSensitivity(Types::MouseSensitivity sensitivity)
+void UniversalSettings::setSensitivity(Settings::MouseSensitivity sense)
 {
-    if (m_mouseSensitivity == sensitivity) {
+    if (m_sensitivity == sense) {
         return;
     }
 
-    m_mouseSensitivity = sensitivity;
-    emit mouseSensitivityChanged();
+    m_sensitivity = sense;
+    emit sensitivityChanged();
 }
 
 float UniversalSettings::screenWidthScale(QString screenName) const
@@ -520,24 +479,56 @@ void UniversalSettings::setScreenScales(QString screenName, float widthScale, fl
     emit screenScalesChanged();
 }
 
+void UniversalSettings::syncSettings()
+{
+    m_universalGroup.sync();
+}
+
+void UniversalSettings::upgrade_v010()
+{
+    if (m_singleModeLayoutName.isEmpty()) {
+        //!Upgrading path for v0.9 to v0.10
+        QString lastNonAssigned = m_universalGroup.readEntry("lastNonAssignedLayout", QString());
+        QString currentLayout = m_universalGroup.readEntry("currentLayout", QString());
+
+        if (!lastNonAssigned.isEmpty()) {
+            m_singleModeLayoutName = lastNonAssigned;
+        } else if (!currentLayout.isEmpty()) {
+            m_singleModeLayoutName = currentLayout;
+        }
+
+        if (!m_singleModeLayoutName.isEmpty() && Layouts::Importer::layoutExists(m_singleModeLayoutName)) {
+            //! it is executed only after the upgrade path
+            m_universalGroup.writeEntry("singleModeLayoutName", m_singleModeLayoutName);
+            CentralLayout storage(this, Layouts::Importer::layoutUserFilePath(m_singleModeLayoutName));
+            if (m_singleModeLayoutName == lastNonAssigned) {
+                storage.setActivities(QStringList(Data::Layout::FREEACTIVITIESID));
+            } else if (storage.activities().isEmpty()) {
+                storage.setActivities(QStringList(Data::Layout::ALLACTIVITIESID));
+            }
+        }
+    }
+}
+
 void UniversalSettings::loadConfig()
 {
     m_version = m_universalGroup.readEntry("version", 1);
     m_badges3DStyle = m_universalGroup.readEntry("badges3DStyle", false);
     m_canDisableBorders = m_universalGroup.readEntry("canDisableBorders", false);
-    m_currentLayoutName = m_universalGroup.readEntry("currentLayout", QString());
-    m_downloadWindowSize = m_universalGroup.readEntry("downloadWindowSize", QSize(800, 550));
-    m_lastNonAssignedLayoutName = m_universalGroup.readEntry("lastNonAssignedLayout", QString());
-    m_layoutsWindowSize = m_universalGroup.readEntry("layoutsWindowSize", QSize(700, 450));
-    m_layoutsColumnWidths = m_universalGroup.readEntry("layoutsColumnWidths", QStringList());
+    m_inAdvancedModeForEditSettings = m_universalGroup.readEntry("inAdvancedModeForEditSettings", false);
     m_launchers = m_universalGroup.readEntry("launchers", QStringList());
     m_metaPressAndHoldEnabled = m_universalGroup.readEntry("metaPressAndHoldEnabled", true);
     m_screenTrackerInterval = m_universalGroup.readEntry("screenTrackerInterval", 2500);
     m_showInfoWindow = m_universalGroup.readEntry("showInfoWindow", true);
-    m_memoryUsage = static_cast<Types::LayoutsMemoryUsage>(m_universalGroup.readEntry("memoryUsage", (int)Types::SingleLayout));
-    m_mouseSensitivity = static_cast<Types::MouseSensitivity>(m_universalGroup.readEntry("mouseSensitivity", (int)Types::HighSensitivity));
+    m_singleModeLayoutName = m_universalGroup.readEntry("singleModeLayoutName", QString());
+    m_memoryUsage = static_cast<MemoryUsage::LayoutsMemory>(m_universalGroup.readEntry("memoryUsage", (int)MemoryUsage::SingleLayout));
+    m_sensitivity = static_cast<Settings::MouseSensitivity>(m_universalGroup.readEntry("mouseSensitivity", (int)Settings::HighMouseSensitivity));
 
     loadScalesConfig();
+
+    if (m_singleModeLayoutName.isEmpty()) {
+        upgrade_v010();
+    }
 }
 
 void UniversalSettings::saveConfig()
@@ -545,19 +536,14 @@ void UniversalSettings::saveConfig()
     m_universalGroup.writeEntry("version", m_version);
     m_universalGroup.writeEntry("badges3DStyle", m_badges3DStyle);
     m_universalGroup.writeEntry("canDisableBorders", m_canDisableBorders);
-    m_universalGroup.writeEntry("currentLayout", m_currentLayoutName);
-    m_universalGroup.writeEntry("downloadWindowSize", m_downloadWindowSize);
-    m_universalGroup.writeEntry("lastNonAssignedLayout", m_lastNonAssignedLayoutName);
-    m_universalGroup.writeEntry("layoutsWindowSize", m_layoutsWindowSize);
-    m_universalGroup.writeEntry("layoutsColumnWidths", m_layoutsColumnWidths);
+    m_universalGroup.writeEntry("inAdvancedModeForEditSettings", m_inAdvancedModeForEditSettings);
     m_universalGroup.writeEntry("launchers", m_launchers);
     m_universalGroup.writeEntry("metaPressAndHoldEnabled", m_metaPressAndHoldEnabled);
     m_universalGroup.writeEntry("screenTrackerInterval", m_screenTrackerInterval);
     m_universalGroup.writeEntry("showInfoWindow", m_showInfoWindow);
+    m_universalGroup.writeEntry("singleModeLayoutName", m_singleModeLayoutName);
     m_universalGroup.writeEntry("memoryUsage", (int)m_memoryUsage);
-    m_universalGroup.writeEntry("mouseSensitivity", (int)m_mouseSensitivity);
-
-    m_universalGroup.sync();
+    m_universalGroup.writeEntry("mouseSensitivity", (int)m_sensitivity);
 }
 
 void UniversalSettings::cleanupSettings()
@@ -573,9 +559,14 @@ QString UniversalSettings::splitterIconPath()
     return m_corona->kPackage().filePath("splitter");
 }
 
-QString UniversalSettings::trademarkIconPath()
+QString UniversalSettings::trademarkPath()
 {
     return m_corona->kPackage().filePath("trademark");
+}
+
+QString UniversalSettings::trademarkIconPath()
+{
+    return m_corona->kPackage().filePath("trademarkicon");
 }
 
 QQmlListProperty<QScreen> UniversalSettings::screens()

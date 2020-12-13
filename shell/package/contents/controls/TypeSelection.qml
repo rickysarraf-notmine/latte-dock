@@ -28,7 +28,8 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 
 import org.kde.plasma.plasmoid 2.0
 
-import org.kde.latte 0.2 as Latte
+import org.kde.latte.core 0.2 as LatteCore
+import org.kde.latte.private.containment 0.1 as LatteContainment
 
 Grid {
     id: typeRow
@@ -61,34 +62,33 @@ Grid {
     PlasmaComponents.Button {
         id: dockTypeButton
         width: horizontal ? (parent.width - parent.spacing)/ 2 : parent.width
+        enabled: LatteCore.WindowSystem.compositingActive
 
         checkable: true
-        checked: latteView.type === Latte.Types.DockView
+        checked: latteView.type === LatteCore.Types.DockView
         text: i18nc("dock type","Dock")
         exclusiveGroup: viewTypeGroup
         tooltip: i18n("Change the behavior and appearance to Dock type")
 
         onPressedChanged: {
             if (pressed && !checked) {
-                latteView.visibility.mode = Latte.Types.DodgeActive;
-                plasmoid.configuration.panelPosition = Latte.Types.Center;
+                latteView.userRequestedViewType(LatteCore.Types.DockView);
+
+                latteView.visibility.mode = LatteCore.Types.DodgeActive;
+                plasmoid.configuration.alignment = LatteCore.Types.Center;
                 plasmoid.configuration.useThemePanel = true;
                 plasmoid.configuration.solidPanel = false;
                 plasmoid.configuration.panelSize = 5;
-                plasmoid.configuration.shadows = 2;
+                plasmoid.configuration.appletShadowsEnabled = true;
                 plasmoid.configuration.zoomLevel = 16;
-                plasmoid.configuration.titleTooltips = true;
-                plasmoid.configuration.activeIndicator = Latte.Types.InternalsIndicator;
                 //plasmoid.configuration.autoDecreaseIconSize = true;
 
                 //! Empty Areas
                 plasmoid.configuration.dragActiveWindowEnabled = false;
-                plasmoid.configuration.scrollAction = Latte.Types.ScrollNone;
+                plasmoid.configuration.scrollAction = LatteContainment.Types.ScrollNone;
 
-                //! Animations
-                plasmoid.configuration.animationLauncherBouncing = true;
-                plasmoid.configuration.animationWindowInAttention = true;
-                plasmoid.configuration.animationWindowAddedInGroup = true;
+                //! Items
+                plasmoid.configuration.autoSizeEnabled = true;
 
                 //! Dynamic Background
                 plasmoid.configuration.solidBackgroundForMaximized = false;
@@ -96,6 +96,9 @@ Grid {
                 plasmoid.configuration.backgroundOnlyOnMaximized = false;
                 plasmoid.configuration.disablePanelShadowForMaximized = false;
                 plasmoid.configuration.plasmaBackgroundForPopups = false;
+
+                //! Floating
+                plasmoid.configuration.floatingInternalGapIsForced = Qt.PartiallyChecked;
             }
         }
     }
@@ -103,34 +106,34 @@ Grid {
     PlasmaComponents.Button {
         id: panelTypeButton
         width: dockTypeButton.width
+        enabled: LatteCore.WindowSystem.compositingActive
 
         checkable: true
-        checked: latteView.type === Latte.Types.PanelView
+        checked: latteView.type === LatteCore.Types.PanelView
         text: i18nc("panel type","Panel")
         exclusiveGroup: viewTypeGroup
         tooltip: i18n("Change the behavior and appearance to Panel type")
 
         onPressedChanged: {
             if (pressed && !checked) {
-                latteView.visibility.mode = Latte.Types.AlwaysVisible;
-                plasmoid.configuration.panelPosition = Latte.Types.Justify;
+                latteView.userRequestedViewType(LatteCore.Types.PanelView);
+
+                latteView.visibility.mode = LatteCore.Types.AlwaysVisible;
+                plasmoid.configuration.alignment = LatteCore.Types.Justify;
                 plasmoid.configuration.useThemePanel = true;
                 plasmoid.configuration.solidPanel = false;
                 plasmoid.configuration.panelSize = 100;
                 plasmoid.configuration.panelShadows = true;
-                plasmoid.configuration.shadows = 0;
+                plasmoid.configuration.appletShadowsEnabled = false;
                 plasmoid.configuration.zoomLevel = 0;
                 plasmoid.configuration.titleTooltips = false;
-                plasmoid.configuration.activeIndicator = Latte.Types.NoneIndicator;
                 //plasmoid.configuration.autoDecreaseIconSize = false;
 
                 //! Empty Areas
                 plasmoid.configuration.dragActiveWindowEnabled = true;
 
-                //! Animations
-                plasmoid.configuration.animationLauncherBouncing = false;
-                plasmoid.configuration.animationWindowInAttention = false;
-                plasmoid.configuration.animationWindowAddedInGroup = false;
+                //! Items
+                plasmoid.configuration.autoSizeEnabled = false;
 
                 //! Dynamic Background
                 plasmoid.configuration.solidBackgroundForMaximized = (plasmoid.configuration.panelTransparency !== 100 ? true : false);
@@ -138,6 +141,13 @@ Grid {
                 plasmoid.configuration.backgroundOnlyOnMaximized = false;
                 plasmoid.configuration.disablePanelShadowForMaximized = false;
                 plasmoid.configuration.plasmaBackgroundForPopups = true;
+
+                //! Floating
+                plasmoid.configuration.floatingInternalGapIsForced = Qt.PartiallyChecked;
+
+                //! Custom Background that overrides Plasma Theme metrics
+                plasmoid.configuration.backgroundRadius = -1;
+                plasmoid.configuration.backgroundShadowSize = -1;
             }
         }
     }

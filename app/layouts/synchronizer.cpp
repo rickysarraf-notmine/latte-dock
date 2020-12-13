@@ -22,11 +22,13 @@
 //! local
 #include "importer.h"
 #include "manager.h"
+#include "../apptypes.h"
+#include "../data/layoutdata.h"
 #include "../lattecorona.h"
 #include "../layout/centrallayout.h"
 #include "../layout/genericlayout.h"
-#include "../layout/sharedlayout.h"
 #include "../settings/universalsettings.h"
+#include "../templates/templatesmanager.h"
 #include "../view/view.h"
 
 // Qt
@@ -39,6 +41,9 @@
 // KDE
 #include <KActivities/Consumer>
 #include <KActivities/Controller>
+#include <KWindowSystem>
+
+#define LAYOUTSINITINTERVAL 350
 
 namespace Latte {
 namespace Layouts {
@@ -49,19 +54,23 @@ Synchronizer::Synchronizer(QObject *parent)
 {
     m_manager = qobject_cast<Manager *>(parent);
 
-    //! Dynamic Switching
-    m_dynamicSwitchTimer.setSingleShot(true);
-    updateDynamicSwitchInterval();
-    connect(m_manager->corona()->universalSettings(), &UniversalSettings::showInfoWindowChanged, this, &Synchronizer::updateDynamicSwitchInterval);
-    connect(&m_dynamicSwitchTimer, &QTimer::timeout, this, &Synchronizer::confirmDynamicSwitch);
+    connect(this, &Synchronizer::layoutsChanged, this, &Synchronizer::reloadAssignedLayouts);
+
+    //! KWin update Disabled Borders
+    connect(this, &Synchronizer::centralLayoutsChanged, this, &Synchronizer::updateKWinDisabledBorders);
+    connect(m_manager->corona()->universalSettings(), &UniversalSettings::canDisableBordersChanged, this, &Synchronizer::updateKWinDisabledBorders);
+
 
     //! KActivities tracking
+    connect(m_manager->corona()->activitiesConsumer(), &KActivities::Consumer::activityRemoved,
+            this, &Synchronizer::onActivityRemoved);
+
     connect(m_manager->corona()->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged,
-            this, &Synchronizer::currentActivityChanged);
+            this, &Synchronizer::onCurrentActivityChanged);
 
     connect(m_manager->corona()->activitiesConsumer(), &KActivities::Consumer::runningActivitiesChanged,
             this, [&]() {
-        if (m_manager->memoryUsage() == Types::MultipleLayouts) {
+        if (m_manager->memoryUsage() == MemoryUsage::MultipleLayouts) {
             syncMultipleLayoutsToActivities();
         }
     });
@@ -70,6 +79,11 @@ Synchronizer::Synchronizer(QObject *parent)
 Synchronizer::~Synchronizer()
 {
     m_activitiesController->deleteLater();
+}
+
+KActivities::Controller *Synchronizer::activitiesController() const
+{
+    return m_activitiesController;
 }
 
 bool Synchronizer::latteViewExists(Latte::View *view) const
@@ -87,61 +101,19 @@ bool Synchronizer::latteViewExists(Latte::View *view) const
 
 bool Synchronizer::layoutExists(QString layoutName) const
 {
-    return m_layouts.contains(layoutName);
+    return m_layouts.containsName(layoutName);
 }
 
 
-bool Synchronizer::layoutIsAssigned(QString layoutName)
+bool Synchronizer::isAssigned(QString layoutName) const
 {
-    QHashIterator<const QString, QString> i(m_assignedLayouts);
-
-    while (i.hasNext()) {
-        i.next();
-
-        if (i.value() == layoutName) {
+    for(auto activityid : m_assignedLayouts.keys()) {
+        if (m_assignedLayouts[activityid].contains(layoutName)) {
             return true;
         }
     }
 
     return false;
-}
-
-bool Synchronizer::mapHasRecord(const QString &record, SharesMap &map)
-{
-    for (SharesMap::iterator i=map.begin(); i!=map.end(); ++i) {
-        if (i.value().contains(record)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool Synchronizer::registerAtSharedLayout(CentralLayout *central, QString id)
-{
-    if (m_manager->memoryUsage() == Types::SingleLayout || centralLayout(id)) {
-        //! if memory is functioning to SINGLE mode OR shared layout has already
-        //! been loaded as CentralLayout
-        return false;
-    }
-
-    for (int i = 0; i < m_sharedLayouts.size(); ++i) {
-        SharedLayout *layout = m_sharedLayouts.at(i);
-
-        if (layout->name() == id) {
-            layout->addCentralLayout(central);
-            return true;
-        }
-    }
-
-    //! If SharedLayout was not found, we must create it
-    SharedLayout *top = new SharedLayout(central, this, Importer::layoutFilePath(id));
-    m_sharedLayouts.append(top);
-    top->importToCorona();
-
-    connect(top, &SharedLayout::layoutDestroyed, this, &Synchronizer::unloadSharedLayout);
-
-    return true;
 }
 
 int Synchronizer::centralLayoutPos(QString id) const
@@ -150,7 +122,6 @@ int Synchronizer::centralLayoutPos(QString id) const
         CentralLayout *layout = m_centralLayouts.at(i);
 
         if (layout->name() == id) {
-
             return i;
         }
     }
@@ -158,25 +129,9 @@ int Synchronizer::centralLayoutPos(QString id) const
     return -1;
 }
 
-QString Synchronizer::currentLayoutName() const
-{
-    if (m_manager->memoryUsage() == Types::SingleLayout) {
-        return m_manager->corona()->universalSettings()->currentLayoutName();
-    } else if (m_manager->memoryUsage() == Types::MultipleLayouts) {
-        return currentLayoutNameInMultiEnvironment();
-    }
-
-    return QString();
-}
-
-QString Synchronizer::currentLayoutNameInMultiEnvironment() const
-{
-    return m_currentLayoutNameInMultiEnvironment;
-}
-
 QString Synchronizer::layoutPath(QString layoutName)
 {
-    QString path = QDir::homePath() + "/.config/latte/" + layoutName + ".layout.latte";
+    QString path = Layouts::Importer::layoutUserFilePath(layoutName);
 
     if (!QFile(path).exists()) {
         path = "";
@@ -190,30 +145,55 @@ QStringList Synchronizer::activities()
     return m_manager->corona()->activitiesConsumer()->activities();
 }
 
+QStringList Synchronizer::freeActivities()
+{
+    QStringList frees = activities();
+
+    for(auto assigned : m_assignedLayouts.keys()) {
+        frees.removeAll(assigned);
+    }
+
+    return frees;
+}
+
 QStringList Synchronizer::runningActivities()
 {
     return m_manager->corona()->activitiesConsumer()->runningActivities();
 }
 
-QStringList Synchronizer::orphanedActivities()
+QStringList Synchronizer::freeRunningActivities()
 {
-    QStringList orphans;
+    QStringList fActivities;
 
-    for (const auto &activity : activities()) {
-        if (m_assignedLayouts[activity].isEmpty()) {
-            orphans.append(activity);
+    for (const auto &activity : runningActivities()) {
+        if (!m_assignedLayouts.contains(activity)) {
+            fActivities.append(activity);
         }
     }
 
-    return orphans;
+    return fActivities;
+}
+
+QStringList Synchronizer::validActivities(const QStringList &layoutActivities)
+{
+    QStringList valids;
+    QStringList allactivities = activities();
+
+    for(auto activity : layoutActivities) {
+        if (allactivities.contains(activity)) {
+            valids << activity;
+        }
+    }
+
+    return valids;
 }
 
 QStringList Synchronizer::centralLayoutsNames()
 {
     QStringList names;
 
-    if (m_manager->memoryUsage() == Types::SingleLayout) {
-        names << currentLayoutName();
+    if (m_manager->memoryUsage() == MemoryUsage::SingleLayout) {
+        names << m_centralLayouts.at(0)->name();
     } else {
         for (int i = 0; i < m_centralLayouts.size(); ++i) {
             CentralLayout *layout = m_centralLayouts.at(i);
@@ -224,89 +204,84 @@ QStringList Synchronizer::centralLayoutsNames()
     return names;
 }
 
+QStringList Synchronizer::currentLayoutsNames() const
+{
+    QList<CentralLayout *> currents = currentLayouts();
+    QStringList currentNames;
+
+    for (int i = 0; i < currents.size(); ++i) {
+        CentralLayout *layout = currents.at(i);
+        currentNames << layout->name();
+    }
+
+    return currentNames;
+}
+
 QStringList Synchronizer::layouts() const
 {
-    return m_layouts;
+    return m_layouts.names();
 }
 
 QStringList Synchronizer::menuLayouts() const
 {
-    QStringList fixedMenuLayouts = m_menuLayouts;
+    QStringList menulayouts;
 
-    //! in case the current layout isnt checked to be shown in the menus
-    //! we must add it on top
-    if (!fixedMenuLayouts.contains(currentLayoutName()) && m_manager->memoryUsage() == Types::SingleLayout) {
-        fixedMenuLayouts.prepend(currentLayoutName());
-    } else if (m_manager->memoryUsage() == Types::MultipleLayouts) {
-        for (const auto layout : m_centralLayouts) {
-            if (!fixedMenuLayouts.contains(layout->name())) {
-                fixedMenuLayouts.prepend(layout->name());
-            }
+    for (int i=0; i<m_layouts.rowCount(); ++i) {
+        if (!m_layouts[i].isShownInMenu) {
+            continue;
+        }
+
+        menulayouts << m_layouts[i].name;
+    }
+
+    for (const auto layout : m_centralLayouts) {
+        if (!menulayouts.contains(layout->name())) {
+            menulayouts.prepend(layout->name());
         }
     }
 
-    return fixedMenuLayouts;
+    return menulayouts;
 }
 
-void Synchronizer::setMenuLayouts(QStringList layouts)
+Data::LayoutsTable Synchronizer::layoutsTable() const
 {
-    if (m_menuLayouts == layouts) {
+    return m_layouts;
+}
+
+void Synchronizer::setLayoutsTable(const Data::LayoutsTable &table)
+{
+    if (m_layouts == table) {
         return;
     }
 
-    m_menuLayouts = layouts;
-    emit menuLayoutsChanged();
+    m_layouts = table;
+    emit layoutsChanged();
 }
 
-QString Synchronizer::shouldSwitchToLayout(QString activityId)
-{
-    if (m_assignedLayouts.contains(activityId) && m_assignedLayouts[activityId] != currentLayoutName()) {
-        return m_assignedLayouts[activityId];
-    } else if (!m_assignedLayouts.contains(activityId) && !m_manager->corona()->universalSettings()->lastNonAssignedLayoutName().isEmpty()
-               && m_manager->corona()->universalSettings()->lastNonAssignedLayoutName() != currentLayoutName()) {
-        return m_manager->corona()->universalSettings()->lastNonAssignedLayoutName();
-    }
-
-    return QString();
-}
-
-QStringList Synchronizer::sharedLayoutsNames()
-{
-    QStringList names;
-
-    for (int i = 0; i < m_sharedLayouts.size(); ++i) {
-        SharedLayout *layout = m_sharedLayouts.at(i);
-        names << layout->name();
-    }
-
-    return names;
-}
-
-QStringList Synchronizer::storedSharedLayouts() const
-{
-    return m_sharedLayoutIds;
-}
-
-QStringList Synchronizer::validActivities(QStringList currentList)
-{
-    QStringList validIds;
-
-    for (const auto &activity : currentList) {
-        if (activities().contains(activity)) {
-            validIds.append(activity);
-        }
-    }
-
-    return validIds;
-}
-
-CentralLayout *Synchronizer::centralLayout(QString id) const
+void Synchronizer::updateLayoutsTable()
 {
     for (int i = 0; i < m_centralLayouts.size(); ++i) {
         CentralLayout *layout = m_centralLayouts.at(i);
 
-        if (layout->name() == id) {
+        if (m_layouts.containsId(layout->file())) {
+            m_layouts[layout->file()] = layout->data();
+        }
+    }
 
+    for (int i = 0; i < m_layouts.rowCount(); ++i) {
+        if (m_layouts[i].isBroken && !m_layouts[i].isActive) {
+            CentralLayout central(this, m_layouts[i].id);
+            m_layouts[i].isBroken = central.isBroken();
+        }
+    }
+}
+
+CentralLayout *Synchronizer::centralLayout(QString layoutname) const
+{
+    for (int i = 0; i < m_centralLayouts.size(); ++i) {
+        CentralLayout *layout = m_centralLayouts.at(i);
+
+        if (layout->name() == layoutname) {
             return layout;
         }
     }
@@ -314,45 +289,96 @@ CentralLayout *Synchronizer::centralLayout(QString id) const
     return nullptr;
 }
 
-CentralLayout *Synchronizer::currentLayout() const
+QList<CentralLayout *> Synchronizer::currentLayouts() const
 {
-    if (m_manager->memoryUsage() == Types::SingleLayout) {
-        return m_centralLayouts.at(0);
+    QList<CentralLayout *> layouts;
+
+    if (m_manager->memoryUsage() == MemoryUsage::SingleLayout) {
+        layouts << m_centralLayouts.at(0);
     } else {
         for (auto layout : m_centralLayouts) {
-            if (layout->activities().contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
-                return layout;
-            }
-        }
-
-        for (auto layout : m_centralLayouts) {
-            if (layout->activities().isEmpty()) {
-                return layout;
+            if (layout->isOnAllActivities() || layout->appliedActivities().contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
+                layouts << layout;
             }
         }
     }
 
-    return nullptr;
+    return layouts;
 }
 
-Layout::GenericLayout *Synchronizer::layout(QString id) const
+QList<CentralLayout *> Synchronizer::centralLayoutsForActivity(const QString activityid) const
 {
-    Layout::GenericLayout *l = centralLayout(id);
+    QList<CentralLayout *> layouts;
 
-    if (!l) {
-        l = sharedLayout(id);
+    if (m_manager->memoryUsage() == MemoryUsage::SingleLayout && m_centralLayouts.count() >= 1) {
+        layouts << m_centralLayouts.at(0);
+    } else {
+        for (auto layout : m_centralLayouts) {
+            if (layout->isOnAllActivities() || layout->appliedActivities().contains(activityid)) {
+                layouts << layout;
+            }
+        }
     }
+
+    return layouts;
+}
+
+QList<Latte::View *> Synchronizer::currentViews() const
+{
+    QList<Latte::View *> views;
+
+    for(auto layout : currentLayouts()) {
+        views << layout->latteViews();
+    }
+
+    return views;
+}
+
+QList<Latte::View *> Synchronizer::currentViewsWithPlasmaShortcuts() const
+{
+    QList<Latte::View *> views;
+
+    for(auto layout : currentLayouts()) {
+        views << layout->viewsWithPlasmaShortcuts();
+    }
+
+    return views;
+}
+
+QList<Latte::View *> Synchronizer::sortedCurrentViews() const
+{
+    QList<Latte::View *> views = currentViews();
+
+    return Layout::GenericLayout::sortedLatteViews(views);
+}
+
+QList<Latte::View *> Synchronizer::viewsBasedOnActivityId(const QString &id) const
+{
+    QList<Latte::View *> views;
+
+    for(auto layout : centralLayoutsForActivity(id)) {
+        if (m_centralLayouts.contains(layout)) {
+            views << layout->latteViews();
+        }
+    }
+
+    return views;
+}
+
+Layout::GenericLayout *Synchronizer::layout(QString layoutname) const
+{
+    Layout::GenericLayout *l = centralLayout(layoutname);
 
     return l;
 }
 
-SharedLayout *Synchronizer::sharedLayout(QString id) const
+Latte::View *Synchronizer::viewForContainment(uint id)
 {
-    for (int i = 0; i < m_sharedLayouts.size(); ++i) {
-        SharedLayout *layout = m_sharedLayouts.at(i);
+    for (auto layout : m_centralLayouts) {
+        Latte::View *view = layout->viewForContainment(id);
 
-        if (layout->name() == id) {
-            return layout;
+        if (view) {
+            return view;
         }
     }
 
@@ -362,14 +388,6 @@ SharedLayout *Synchronizer::sharedLayout(QString id) const
 Latte::View *Synchronizer::viewForContainment(Plasma::Containment *containment)
 {
     for (auto layout : m_centralLayouts) {
-        Latte::View *view = layout->viewForContainment(containment);
-
-        if (view) {
-            return view;
-        }
-    }
-
-    for (auto layout : m_sharedLayouts) {
         Latte::View *view = layout->viewForContainment(containment);
 
         if (view) {
@@ -388,67 +406,45 @@ void Synchronizer::addLayout(CentralLayout *layout)
     }
 }
 
-void Synchronizer::clearSharedLayoutsFromCentralLists()
+void Synchronizer::onActivityRemoved(const QString &activityid)
 {
-    QStringList unassign;
-
-    for(const QString &name : m_sharedLayoutIds) {
-        //! remove from ContextMenu
-        m_menuLayouts.removeAll(name);
-
-        //! remove from layouts assigned to activities
-        QHashIterator<const QString, QString> i(m_assignedLayouts);
-
-        while (i.hasNext()) {
-            i.next();
-
-            if (i.value() == name) {
-                unassign << i.key();
-            }
-        }
-    }
-
-    for(const QString &activity : unassign) {
-        m_assignedLayouts.remove(activity);
-    }
-}
-
-void Synchronizer::confirmDynamicSwitch()
-{
-    QString tempShouldSwitch = shouldSwitchToLayout(m_manager->corona()->activitiesConsumer()->currentActivity());
-
-    if (tempShouldSwitch.isEmpty()) {
+    if (!m_assignedLayouts.contains(activityid)) {
         return;
     }
 
-    if (m_shouldSwitchToLayout == tempShouldSwitch && m_shouldSwitchToLayout != currentLayoutName()) {
-        qDebug() << "dynamic switch to layout :: " << m_shouldSwitchToLayout;
+    //! remove any other explicit set layouts for the current activity
+    QStringList explicits = m_assignedLayouts[activityid];
 
-        emit currentLayoutIsSwitching(currentLayoutName());
+    for(auto explicitlayoutname : explicits) {
+        QString explicitlayoutid = m_layouts.idForName(explicitlayoutname);
 
-        if (m_manager->corona()->universalSettings()->showInfoWindow()) {
-            m_manager->showInfoWindow(i18n("Switching to layout <b>%0</b> ...").arg(m_shouldSwitchToLayout), 4000);
+        m_layouts[explicitlayoutid].activities.removeAll(activityid);
+        m_manager->setOnActivities(explicitlayoutname, m_layouts[explicitlayoutid].activities);
+        emit layoutActivitiesChanged(m_layouts[explicitlayoutid]);
+    }
+
+    QStringList freelayoutnames;
+
+    if (m_assignedLayouts.contains(Data::Layout::FREEACTIVITIESID)) {
+        freelayoutnames = m_assignedLayouts[Data::Layout::FREEACTIVITIESID];
+    }
+
+    reloadAssignedLayouts();
+
+    for(auto freelayoutname : freelayoutnames) {
+        //! inform free activities layouts that their activities probably changed
+        CentralLayout *central = centralLayout(freelayoutname);
+
+        if (central) {
+            emit central->activitiesChanged();
         }
-
-        QTimer::singleShot(500, [this, tempShouldSwitch]() {
-            switchToLayout(tempShouldSwitch);
-        });
-    } else {
-        m_shouldSwitchToLayout = tempShouldSwitch;
-        m_dynamicSwitchTimer.start();
     }
 }
 
-void Synchronizer::currentActivityChanged(const QString &id)
+void Synchronizer::onCurrentActivityChanged(const QString &activityid)
 {
-    if (m_manager->memoryUsage() == Types::SingleLayout) {
-        qDebug() << "activity changed :: " << id;
-
-        m_shouldSwitchToLayout = shouldSwitchToLayout(id);
-
-        m_dynamicSwitchTimer.start();
-    } else if (m_manager->memoryUsage() == Types::MultipleLayouts) {
-        updateCurrentLayoutNameInMultiEnvironment();
+    if (m_manager->memoryUsage() == MemoryUsage::MultipleLayouts) {
+        updateKWinDisabledBorders();
     }
 }
 
@@ -461,17 +457,23 @@ void Synchronizer::hideAllViews()
 
 void Synchronizer::pauseLayout(QString layoutName)
 {
-    if (m_manager->memoryUsage() == Types::MultipleLayouts) {
+    if (m_manager->memoryUsage() == MemoryUsage::MultipleLayouts) {        
         CentralLayout *layout = centralLayout(layoutName);
 
-        if (layout && !layout->activities().isEmpty()) {
+        if (layout->isOnAllActivities()) {
+            return;
+        }
+
+        QStringList appliedactivities = layout->appliedActivities();
+
+        if (layout && !appliedactivities.isEmpty()) {
             int i = 0;
 
-            for (const auto &activityId : layout->activities()) {
+            for (const auto &activityid : appliedactivities) {
                 //! Stopping the activities must be done asynchronous because otherwise
                 //! the activity manager cant close multiple activities
-                QTimer::singleShot(i * 1000, [this, activityId]() {
-                    m_activitiesController->stopActivity(activityId);
+                QTimer::singleShot(i * 1000, [this, activityid]() {
+                    m_activitiesController->stopActivity(activityid);
                 });
 
                 i = i + 1;
@@ -482,12 +484,8 @@ void Synchronizer::pauseLayout(QString layoutName)
 
 void Synchronizer::syncActiveLayoutsToOriginalFiles()
 {
-    if (m_manager->memoryUsage() == Types::MultipleLayouts) {
+    if (m_manager->memoryUsage() == MemoryUsage::MultipleLayouts) {
         for (const auto layout : m_centralLayouts) {
-            layout->syncToLayoutFile();
-        }
-
-        for (const auto layout : m_sharedLayouts) {
             layout->syncToLayoutFile();
         }
     }
@@ -495,10 +493,6 @@ void Synchronizer::syncActiveLayoutsToOriginalFiles()
 
 void Synchronizer::syncLatteViewsToScreens()
 {
-    for (const auto layout : m_sharedLayouts) {
-        layout->syncLatteViewsToScreens();
-    }
-
     for (const auto layout : m_centralLayouts) {
         layout->syncLatteViewsToScreens();
     }
@@ -509,7 +503,7 @@ void Synchronizer::unloadCentralLayout(CentralLayout *layout)
     int pos = m_centralLayouts.indexOf(layout);
 
     if (pos>=0) {
-        CentralLayout *central = m_centralLayouts.takeAt(0);
+        CentralLayout *central = m_centralLayouts.takeAt(pos);
 
         if (m_multipleModeInitialized) {
             central->syncToLayoutFile(true);
@@ -526,69 +520,58 @@ void Synchronizer::unloadCentralLayout(CentralLayout *layout)
     }
 }
 
-void Synchronizer::unloadSharedLayout(SharedLayout *layout)
-{
-    if (m_sharedLayouts.contains(layout)) {
-        disconnect(layout, &SharedLayout::layoutDestroyed, this, &Synchronizer::unloadSharedLayout);
-        int pos = m_sharedLayouts.indexOf(layout);
-        SharedLayout *shared = m_sharedLayouts.takeAt(pos);
-        shared->syncToLayoutFile(true);
-        shared->unloadLatteViews();
-        shared->unloadContainments();
-        m_manager->clearUnloadedContainmentsFromLinkedFile(shared->unloadedContainmentsIds(), true);
-
-        delete layout;
-    }
-}
-
-
-void Synchronizer::loadLayouts()
+void Synchronizer::initLayouts()
 {
     m_layouts.clear();
-    m_menuLayouts.clear();
-    m_assignedLayouts.clear();
-    m_sharedLayoutIds.clear();
 
-    QDir layoutDir(QDir::homePath() + "/.config/latte");
+    QDir layoutDir(Layouts::Importer::layoutUserDir());
     QStringList filter;
     filter.append(QString("*.layout.latte"));
     QStringList files = layoutDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
 
     for (const auto &layout : files) {
-        if (layout.contains(Layout::AbstractLayout::MultipleLayoutsName)) {
+        if (layout.contains(Layout::MULTIPLELAYOUTSHIDDENNAME)) {
             //! IMPORTANT: DON'T ADD MultipleLayouts hidden file in layouts list
             continue;
         }
 
-        CentralLayout centralLayout(this, layoutDir.absolutePath() + "/" + layout);
-
-        QStringList validActivityIds = validActivities(centralLayout.activities());
-        centralLayout.setActivities(validActivityIds);
-
-        for (const auto &activity : validActivityIds) {
-            m_assignedLayouts[activity] = centralLayout.name();
-        }
-
-        m_layouts.append(centralLayout.name());
-
-        if (centralLayout.showInMenu()) {
-            m_menuLayouts.append(centralLayout.name());
-        }
-
-        QString sharedName = centralLayout.sharedLayoutName();
-
-        if (!sharedName.isEmpty() && !m_sharedLayoutIds.contains(sharedName)) {
-            m_sharedLayoutIds << sharedName;
-        }
+        QString layoutpath = layoutDir.absolutePath() + "/" + layout;
+        onLayoutAdded(layoutpath);
     }
 
-    //! Shared Layouts should not be used for Activities->Layouts assignments or published lists
-    clearSharedLayoutsFromCentralLists();
-
     emit layoutsChanged();
-    emit menuLayoutsChanged();
+
+    if (!m_isLoaded) {
+        m_isLoaded = true;
+        connect(m_manager->corona()->templatesManager(), &Latte::Templates::Manager::newLayoutAdded, this, &Synchronizer::onLayoutAdded);
+        connect(m_manager->importer(), &Latte::Layouts::Importer::newLayoutAdded, this, &Synchronizer::onLayoutAdded);
+    }
 }
 
+void Synchronizer::onLayoutAdded(const QString &layout)
+{
+    CentralLayout centrallayout(this, layout);
+    m_layouts.insertBasedOnName(centrallayout.data());
+
+    if (m_isLoaded) {
+        emit layoutsChanged();
+    }
+}
+
+void Synchronizer::reloadAssignedLayouts()
+{
+    m_assignedLayouts.clear();
+
+    for (int i=0; i< m_layouts.rowCount(); ++i) {
+        for (const auto &activity : m_layouts[i].activities) {
+            if (m_assignedLayouts.contains(activity)) {
+                m_assignedLayouts[activity] << m_layouts[i].name;
+            } else {
+                m_assignedLayouts[activity] = QStringList(m_layouts[i].name);
+            }
+        }
+    }
+}
 
 void Synchronizer::unloadLayouts()
 {
@@ -601,260 +584,363 @@ void Synchronizer::unloadLayouts()
     m_multipleModeInitialized = false;
 }
 
-void Synchronizer::updateCurrentLayoutNameInMultiEnvironment()
+bool Synchronizer::memoryInitialized() const
 {
-    for (const auto layout : m_centralLayouts) {
-        if (layout->activities().contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
-            m_currentLayoutNameInMultiEnvironment = layout->name();
-            emit currentLayoutNameChanged();
-            return;
-        }
-    }
-
-    for (const auto layout : m_centralLayouts) {
-        if (layout->activities().isEmpty()) {
-            m_currentLayoutNameInMultiEnvironment = layout->name();
-            emit currentLayoutNameChanged();
-            return;
-        }
-    }
+    return ((m_manager->memoryUsage() == MemoryUsage::SingleLayout && m_centralLayouts.size()>0)
+            || (m_manager->memoryUsage() == MemoryUsage::MultipleLayouts && m_multipleModeInitialized));
 }
 
-void Synchronizer::updateDynamicSwitchInterval()
+bool Synchronizer::initSingleMode(QString layoutName)
 {
-    if (m_manager->corona()->universalSettings()->showInfoWindow()) {
-        m_dynamicSwitchTimer.setInterval(1800);
-    } else {
-        m_dynamicSwitchTimer.setInterval(2300);
-    }
-}
+    QString layoutpath = layoutName.isEmpty() ? layoutPath(m_manager->corona()->universalSettings()->singleModeLayoutName()) : layoutPath(layoutName);
 
-bool Synchronizer::switchToLayout(QString layoutName, int previousMemoryUsage)
-{
-    if (m_centralLayouts.size() > 0 && currentLayoutName() == layoutName && previousMemoryUsage == -1) {
+    if (layoutpath.isEmpty()) {
+        qDebug() << "Layout : " << layoutName << " was not found...";
         return false;
     }
 
-    //! First Check If that Layout is already present and in that case
-    //! we can just switch to the proper Activity
-    if (m_manager->memoryUsage() == Types::MultipleLayouts && previousMemoryUsage == -1) {
-        CentralLayout *layout = centralLayout(layoutName);
+    if (m_centralLayouts.size() > 0) {
+        emit currentLayoutIsSwitching(m_centralLayouts[0]->name());
+    }
 
-        if (layout) {
+    //! this code must be called asynchronously because it can create crashes otherwise.
+    //! Tasks plasmoid case that triggers layouts switching through its context menu
+    QTimer::singleShot(LAYOUTSINITINTERVAL, [this, layoutName, layoutpath]() {
+        qDebug() << " ... initializing layout in single mode : " << layoutName << " - " << layoutpath;
+        unloadLayouts();
 
-            QStringList appliedActivities = layout->appliedActivities();
-            QString nextActivity = !layout->lastUsedActivity().isEmpty() ? layout->lastUsedActivity() : appliedActivities[0];
+        //! load the main layout/corona file
+        CentralLayout *newLayout = new CentralLayout(this, layoutpath, layoutName);
+        addLayout(newLayout);
 
-            //! it means we are at a foreign activity
-            if (!appliedActivities.contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
-                m_activitiesController->setCurrentActivity(nextActivity);
-                return true;
+        m_manager->loadLatteLayout(layoutpath);
+
+        emit centralLayoutsChanged();
+
+        m_manager->corona()->universalSettings()->setSingleModeLayoutName(layoutName);
+    });
+
+    return true;
+}
+
+bool Synchronizer::initMultipleMode(QString layoutName)
+{
+    if (m_multipleModeInitialized) {
+        return false;
+    }
+
+    for (const auto layout : m_centralLayouts) {
+        emit currentLayoutIsSwitching(layout->name());
+    }
+
+    //! this code must be called asynchronously because it can create crashes otherwise.
+    //! Tasks plasmoid case that triggers layouts switching through its context menu
+    QTimer::singleShot(LAYOUTSINITINTERVAL, [this, layoutName]() {
+        qDebug() << " ... initializing layout in multiple mode : " << layoutName ;
+        unloadLayouts();
+
+        m_manager->loadLatteLayout(layoutPath(QString(Layout::MULTIPLELAYOUTSHIDDENNAME)));
+
+        m_multipleModeInitialized = true;
+
+        emit centralLayoutsChanged();
+
+        if (!layoutName.isEmpty()) {
+            switchToLayoutInMultipleModeBasedOnActivities(layoutName);
+        }
+
+        syncMultipleLayoutsToActivities();
+    });
+
+    return true;
+}
+
+bool Synchronizer::switchToLayoutInSingleMode(QString layoutName)
+{
+    if (!memoryInitialized() || m_manager->memoryUsage() != MemoryUsage::SingleLayout) {
+        return false;
+    }
+
+    if (m_centralLayouts.size()>0 && m_centralLayouts[0]->name() == layoutName) {
+        return true;
+    }
+
+    return initSingleMode(layoutName);
+}
+
+bool Synchronizer::switchToLayoutInMultipleModeBasedOnActivities(const QString &layoutName)
+{
+    Data::Layout layoutdata;
+    CentralLayout *central = centralLayout(layoutName);
+
+    if (central) {
+        layoutdata = central->data();
+    } else if (m_layouts.containsName(layoutName)) {
+        QString layoutid = m_layouts.idForName(layoutName);
+        CentralLayout storagedlayout(this, layoutid);
+        layoutdata = storagedlayout.data();
+
+        m_layouts[layoutid] = layoutdata;
+    }
+
+    if (layoutdata.isEmpty()) {
+        return false;
+    }
+
+    QString switchToActivity;
+
+    //! try to not remove activityids that belong to different machines that are not currently present
+    QStringList validlayoutactivities = validActivities(layoutdata.activities);
+
+    if (layoutdata.isOnAllActivities()) {
+        //! no reason to switch in any activity;
+    } else if (layoutdata.isForFreeActivities()) {
+        //! free-activities case
+        QStringList freerunningactivities = freeRunningActivities();
+
+        if (freerunningactivities.count() > 0) {
+            if (freerunningactivities.contains(layoutdata.lastUsedActivity)) {
+                switchToActivity = layoutdata.lastUsedActivity;
+            } else {
+                switchToActivity = freerunningactivities[0];
+            }
+        } else {
+            QStringList freepausedactivities = freeActivities();
+
+            if (freepausedactivities.count() > 0) {
+                switchToActivity = freepausedactivities[0];
+            }
+        }
+    } else if (!validlayoutactivities.isEmpty())  {
+        //! set on-explicit activities
+        QStringList allactivities = activities();
+
+        if (validlayoutactivities.contains(layoutdata.lastUsedActivity)) {
+            switchToActivity = layoutdata.lastUsedActivity;
+        } else {
+            switchToActivity = validlayoutactivities[0];
+        }
+    } else if (validlayoutactivities.isEmpty() && m_layouts.containsName(layoutName)) {
+        //! no-activities are set
+        //! has not been set in any activities but nonetheless it is requested probably by the user
+        //! requested layout is assigned explicitly in current activity and any remaining explicit layouts
+        //! are removing current activity from their activities list
+        QString layoutid = m_layouts.idForName(layoutName);
+        QString currentactivityid = m_activitiesController->currentActivity();
+
+        QStringList layoutIdsChanged;
+
+        m_layouts[layoutid].activities.append(currentactivityid);
+        m_manager->setOnActivities(layoutName, m_layouts[layoutid].activities);
+        emit layoutActivitiesChanged(m_layouts[layoutid]);
+
+        layoutIdsChanged << layoutid;
+
+        if (m_assignedLayouts.contains(currentactivityid)) {
+            //! remove any other explicit set layouts for the current activity
+            QStringList explicits = m_assignedLayouts[currentactivityid];
+
+            for(auto explicitlayoutname : explicits) {
+                QString explicitlayoutid = m_layouts.idForName(explicitlayoutname);
+
+                m_layouts[explicitlayoutid].activities.removeAll(currentactivityid);
+                m_manager->setOnActivities(explicitlayoutname, m_layouts[explicitlayoutid].activities);
+                emit layoutActivitiesChanged(m_layouts[explicitlayoutid]);
+            }
+        }
+
+        QStringList freelayoutnames;
+        if (m_assignedLayouts.contains(Data::Layout::FREEACTIVITIESID)) {
+            freelayoutnames = m_assignedLayouts[Data::Layout::FREEACTIVITIESID];
+        }
+
+        reloadAssignedLayouts();
+
+        for(auto freelayoutname : freelayoutnames) {
+            //! inform free activities layouts that their activities probably changed
+            CentralLayout *central = centralLayout(freelayoutname);
+
+            if (central) {
+                emit central->activitiesChanged();
             }
         }
     }
 
-    //! When going from memory usage to different memory usage we first
-    //! send the layouts that will be changed. This signal creates the
-    //! nice animation that hides these docks/panels
-    if (previousMemoryUsage != -1) {
-        for (const auto layout : m_centralLayouts) {
-            emit currentLayoutIsSwitching(layout->name());
+    if (!switchToActivity.isEmpty()) {
+        if (!m_manager->corona()->activitiesConsumer()->runningActivities().contains(switchToActivity)) {
+            m_activitiesController->startActivity(switchToActivity);
         }
 
-        for (const auto layout : m_sharedLayouts) {
-            emit currentLayoutIsSwitching(layout->name());
-        }
-    }
-
-    QString lPath = layoutPath(layoutName);
-
-    if (lPath.isEmpty() && layoutName == i18n("Alternative")) {
-        lPath = m_manager->newLayout(i18n("Alternative"), i18n("Default"));
-    }
-
-    if (!lPath.isEmpty()) {
-        if (m_manager->memoryUsage() == Types::SingleLayout) {
-            //  emit currentLayoutIsSwitching(currentLayoutName());
-        } else if (m_manager->memoryUsage() == Types::MultipleLayouts && layoutName != Layout::AbstractLayout::MultipleLayoutsName) {
-            CentralLayout toLayout(this, lPath);
-
-            QStringList toActivities = toLayout.activities();
-
-            CentralLayout *centralForOrphans{nullptr};
-
-            for (const auto fromLayout : m_centralLayouts) {
-                if (fromLayout->activities().isEmpty()) {
-                    centralForOrphans = fromLayout;
-                    break;
-                }
-            }
-
-            if (toActivities.isEmpty() && centralForOrphans && (toLayout.name() != centralForOrphans->name())) {
-                emit currentLayoutIsSwitching(centralForOrphans->name());
-            }
-        }
-
-        //! this code must be called asynchronously because it is called
-        //! also from qml (Tasks plasmoid). This change fixes a very important
-        //! crash when switching sessions through the Tasks plasmoid Context menu
-        //! Latte was unstable and was crashing very often during changing
-        //! sessions.
-        QTimer::singleShot(350, [this, layoutName, lPath, previousMemoryUsage]() {
-            qDebug() << layoutName << " - " << lPath;
-            QString fixedLPath = lPath;
-            QString fixedLayoutName = layoutName;
-
-            bool initializingMultipleLayouts{false};
-
-            if (m_manager->memoryUsage() == Types::MultipleLayouts && !m_multipleModeInitialized) {
-                initializingMultipleLayouts = true;
-            }
-
-            if (m_manager->memoryUsage() == Types::SingleLayout || initializingMultipleLayouts || previousMemoryUsage == Types::MultipleLayouts) {
-                unloadLayouts();
-
-                if (initializingMultipleLayouts) {
-                    fixedLayoutName = QString(Layout::AbstractLayout::MultipleLayoutsName);
-                    fixedLPath = layoutPath(fixedLayoutName);
-                }
-
-                if (fixedLayoutName != Layout::AbstractLayout::MultipleLayoutsName) {
-                    CentralLayout *newLayout = new CentralLayout(this, fixedLPath, fixedLayoutName);
-                    addLayout(newLayout);
-                }
-
-                m_manager->loadLatteLayout(fixedLPath);
-
-                if (initializingMultipleLayouts) {
-                    m_multipleModeInitialized = true;
-                }
-
-                emit centralLayoutsChanged();
-            }
-
-            if (m_manager->memoryUsage() == Types::MultipleLayouts) {
-                if (!initializingMultipleLayouts && !centralLayout(layoutName)) {
-                    //! When we are in Multiple Layouts Environment and the user activates
-                    //! a Layout that is assigned to specific activities but this
-                    //! layout isnt loaded (this means neither of its activities are running)
-                    //! is such case we just activate these Activities
-                    CentralLayout layout(this, Importer::layoutFilePath(layoutName));
-
-                    int i = 0;
-                    bool lastUsedActivityFound{false};
-                    QString lastUsedActivity = layout.lastUsedActivity();
-
-                    bool orphanedLayout = !layoutIsAssigned(layoutName);
-
-                    QStringList assignedActivities = orphanedLayout ? orphanedActivities() : layout.activities();
-
-                    if (!orphanedLayout) {
-                        for (const auto &assignedActivity : assignedActivities) {
-                            //! Starting the activities must be done asynchronous because otherwise
-                            //! the activity manager cant close multiple activities
-                            QTimer::singleShot(i * 1000, [this, assignedActivity, lastUsedActivity]() {
-                                m_activitiesController->startActivity(assignedActivity);
-
-                                if (lastUsedActivity == assignedActivity) {
-                                    m_activitiesController->setCurrentActivity(lastUsedActivity);
-                                }
-                            });
-
-                            if (lastUsedActivity == assignedActivity) {
-                                lastUsedActivityFound = true;
-                            }
-
-                            i = i + 1;
-                        }
-                    } else {
-                        //! orphaned layout
-                        for (const auto &assignedActivity : assignedActivities) {
-                            if (lastUsedActivity == assignedActivity) {
-                                lastUsedActivityFound = true;
-                            }
-                        }
-
-                        if ((!lastUsedActivityFound && assignedActivities.count() == 0)
-                                || !assignedActivities.contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
-
-                            //! Starting the activities must be done asynchronous because otherwise
-                            //! the activity manager cant close multiple activities
-                            QTimer::singleShot(1000, [this, lastUsedActivity, lastUsedActivityFound]() {
-                                m_activitiesController->startActivity(lastUsedActivity);
-                                m_activitiesController->setCurrentActivity(lastUsedActivity);
-                            });
-                        }
-                    }
-
-                    if (orphanedLayout) {
-                        syncMultipleLayoutsToActivities(layoutName);
-                    } else if (!orphanedLayout && !lastUsedActivityFound) {
-                        m_activitiesController->setCurrentActivity(layout.activities()[0]);
-                    }
-                } else {
-                    syncMultipleLayoutsToActivities(layoutName);
-                }
-            }
-
-            m_manager->corona()->universalSettings()->setCurrentLayoutName(layoutName);
-
-            if (!layoutIsAssigned(layoutName)) {
-                m_manager->corona()->universalSettings()->setLastNonAssignedLayoutName(layoutName);
-            }
-        });
-    } else {
-        qDebug() << "Layout : " << layoutName << " was not found...";
+        m_activitiesController->setCurrentActivity(switchToActivity);
     }
 
     return true;
 }
 
-void Synchronizer::syncMultipleLayoutsToActivities(QString layoutForOrphans)
+bool Synchronizer::switchToLayoutInMultipleMode(QString layoutName)
+{
+    if (!memoryInitialized() || m_manager->memoryUsage() != MemoryUsage::MultipleLayouts) {
+        return false;
+    }
+
+    CentralLayout *layout = centralLayout(layoutName);
+
+    if (layout) {
+        QStringList appliedActivities = layout->appliedActivities();
+        QString nextActivity = !layout->lastUsedActivity().isEmpty() ? layout->lastUsedActivity() : appliedActivities[0];
+
+        if (!appliedActivities.contains(m_manager->corona()->activitiesConsumer()->currentActivity())) {
+            //! it means we are at a foreign activity and we can switch to correct one
+            m_activitiesController->setCurrentActivity(nextActivity);
+            return true;
+        }
+    } else {
+        if (!layoutName.isEmpty()) {
+            switchToLayoutInMultipleModeBasedOnActivities(layoutName);
+        }
+
+        syncMultipleLayoutsToActivities();
+    }
+
+    return true;
+}
+
+
+bool Synchronizer::switchToLayout(QString layoutName, MemoryUsage::LayoutsMemory newMemoryUsage)
+{
+    qDebug() << " >>>>> SWITCHING >> " << layoutName << " __ from memory: " << m_manager->memoryUsage() << " to memory: " << newMemoryUsage;
+
+    if (newMemoryUsage == MemoryUsage::Current) {
+        newMemoryUsage = m_manager->memoryUsage();
+    }
+
+    if (!memoryInitialized() || newMemoryUsage != m_manager->memoryUsage()) {
+        //! Initiate Layouts memory properly
+        m_manager->setMemoryUsage(newMemoryUsage);
+
+        return (newMemoryUsage == MemoryUsage::SingleLayout ? initSingleMode(layoutName) : initMultipleMode(layoutName));
+    }
+
+    if (m_manager->memoryUsage() == MemoryUsage::SingleLayout) {
+        return switchToLayoutInSingleMode(layoutName);
+    } else {
+        return switchToLayoutInMultipleMode(layoutName);
+    }
+}
+
+void Synchronizer::syncMultipleLayoutsToActivities()
 {
     qDebug() << "   ----  --------- ------    syncMultipleLayoutsToActivities       -------   ";
     qDebug() << "   ----  --------- ------    -------------------------------       -------   ";
 
-    QStringList layoutsToUnload;
-    QStringList layoutsToLoad;
+    QStringList layoutNamesToUnload;
+    QStringList layoutNamesToLoad;
+    QStringList currentNames = centralLayoutsNames();
 
-    bool allRunningActivitiesWillBeReserved{true};
-
-    if (layoutForOrphans.isEmpty() || m_assignedLayouts.values().contains(layoutForOrphans)) {
-        layoutForOrphans = m_manager->corona()->universalSettings()->lastNonAssignedLayoutName();
+    //! discover OnAllActivities layouts
+    if (m_assignedLayouts.contains(Data::Layout::ALLACTIVITIESID)) {
+        layoutNamesToLoad << m_assignedLayouts[Data::Layout::ALLACTIVITIESID];
     }
 
+    //! discover ForFreeActivities layouts
+    if (m_assignedLayouts.contains(Data::Layout::FREEACTIVITIESID) && freeRunningActivities().count()>0) {
+        layoutNamesToLoad << m_assignedLayouts[Data::Layout::FREEACTIVITIESID];
+    }
+
+    //! discover layouts assigned to explicit activities based on running activities
     for (const auto &activity : runningActivities()) {
-        if (!m_assignedLayouts[activity].isEmpty()) {
-            if (!layoutsToLoad.contains(m_assignedLayouts[activity])) {
-                layoutsToLoad.append(m_assignedLayouts[activity]);
-            }
-        } else {
-            allRunningActivitiesWillBeReserved = false;
+        if (KWindowSystem::isPlatformWayland() && (m_activitiesController->currentActivity() != activity)){
+            //! Wayland Protection: Plasma wayland does not support yet Activities for windows
+            //! but we can load the layouts that belong OnAllActivities + (ForFreeActivities OR SpecificActivity)
+            continue;
+        }
+
+        if (m_assignedLayouts.contains(activity)) {
+            layoutNamesToLoad << m_assignedLayouts[activity];
         }
     }
 
+    //! discover layouts that must be unloaded because of running activities changes
     for (const auto layout : m_centralLayouts) {
-        QString tempLayoutName;
-
-        if (!layoutsToLoad.contains(layout->name()) && layout->name() != layoutForOrphans) {
-            tempLayoutName = layout->name();
-        } else if (layout->activities().isEmpty() && allRunningActivitiesWillBeReserved) {
-            //! in such case the layout for the orphaned must be unloaded
-            tempLayoutName = layout->name();
+        if (!layoutNamesToLoad.contains(layout->name())) {
+            layoutNamesToUnload << layout->name();
         }
+    }
 
-        if (!tempLayoutName.isEmpty() && !layoutsToUnload.contains(tempLayoutName)) {
-            layoutsToUnload << tempLayoutName;
+    QString defaultForcedLayout;
+
+    //! Safety
+    if (layoutNamesToLoad.isEmpty()) {
+        //! If no layout is found then force loading Default Layout
+        QString layoutPath = m_manager->corona()->templatesManager()->newLayout("", i18n(Templates::DEFAULTLAYOUTTEMPLATENAME));
+        layoutNamesToLoad << Layout::AbstractLayout::layoutName(layoutPath);
+        m_manager->setOnAllActivities(layoutNamesToLoad[0]);
+        defaultForcedLayout = layoutNamesToLoad[0];
+    }
+
+    QStringList newlyActivatedLayouts;
+
+    //! Add needed Layouts based on Activities settings
+    for (const auto &layoutname : layoutNamesToLoad) {
+        if (!centralLayout(layoutname)) {
+            CentralLayout *newLayout = new CentralLayout(this, QString(layoutPath(layoutname)), layoutname);
+
+            if (newLayout) {
+                qDebug() << "ACTIVATING LAYOUT ::::: " << layoutname;
+                addLayout(newLayout);
+                newLayout->importToCorona();
+
+                if (!defaultForcedLayout.isEmpty() && defaultForcedLayout == layoutname) {
+                    emit newLayoutAdded(newLayout->data());
+                }
+
+                newlyActivatedLayouts << newLayout->name();
+            }
+        }
+    }
+
+    if (m_manager->corona()->universalSettings()->showInfoWindow()) {
+        if (newlyActivatedLayouts.count() == 1) {
+            m_manager->showInfoWindow(i18n("Activating layout: <b>%0</b> ...").arg(newlyActivatedLayouts[0]), 4000, QStringList(Data::Layout::ALLACTIVITIESID));
+        } else if (newlyActivatedLayouts.count() > 1) {
+            m_manager->showInfoWindow(i18n("Activating layouts: <b>%0</b> ...").arg(newlyActivatedLayouts.join(", ")), 4000, QStringList(Data::Layout::ALLACTIVITIESID));
         }
     }
 
     //! Unload no needed Layouts
-    for (const auto &layoutName : layoutsToUnload) {
-        CentralLayout *layout = centralLayout(layoutName);
-        int posLayout = centralLayoutPos(layoutName);
+
+    //! hide layouts that will be removed in the end
+    if (!layoutNamesToUnload.isEmpty()) {
+        for (const auto layoutname : layoutNamesToUnload) {
+            emit currentLayoutIsSwitching(layoutname);
+        }
+
+        QTimer::singleShot(LAYOUTSINITINTERVAL, [this, layoutNamesToUnload]() {
+            unloadLayouts(layoutNamesToUnload);
+        });
+    }
+
+    qSort(currentNames);
+    qSort(layoutNamesToLoad);
+
+    if (currentNames != layoutNamesToLoad) {
+        emit centralLayoutsChanged();
+    }
+}
+
+void Synchronizer::unloadLayouts(const QStringList &layoutNames)
+{
+    if (layoutNames.isEmpty()) {
+        return;
+    }
+
+    //! Unload no needed Layouts
+    for (const auto &layoutname : layoutNames) {
+        CentralLayout *layout = centralLayout(layoutname);
+        int posLayout = centralLayoutPos(layoutname);
 
         if (posLayout >= 0) {
-            qDebug() << "REMOVING LAYOUT ::::: " << layoutName;
+            qDebug() << "REMOVING LAYOUT ::::: " << layoutname;
             m_centralLayouts.removeAt(posLayout);
 
             layout->syncToLayoutFile(true);
@@ -865,123 +951,30 @@ void Synchronizer::syncMultipleLayoutsToActivities(QString layoutForOrphans)
         }
     }
 
-    //! Add needed Layouts based on Activities
-    for (const auto &layoutName : layoutsToLoad) {
-        if (!centralLayout(layoutName)) {
-            CentralLayout *newLayout = new CentralLayout(this, QString(layoutPath(layoutName)), layoutName);
-
-            if (newLayout) {
-                qDebug() << "ACTIVATING LAYOUT ::::: " << layoutName;
-                addLayout(newLayout);
-                newLayout->importToCorona();
-
-                if (m_manager->corona()->universalSettings()->showInfoWindow()) {
-                    m_manager->showInfoWindow(i18n("Activating layout: <b>%0</b> ...").arg(newLayout->name()), 5000, newLayout->appliedActivities());
-                }
-            }
-        }
-    }
-
-    //! Add Layout for orphan activities
-    if (!allRunningActivitiesWillBeReserved) {
-        if (!centralLayout(layoutForOrphans) && !sharedLayout(layoutForOrphans)) {
-            //! CENTRAL Layout for Orphaned Activities is not loaded and at the same time
-            //! that layout is not already configured as SHARED for other CENTRAL layouts
-            CentralLayout *newLayout = new CentralLayout(this, layoutPath(layoutForOrphans), layoutForOrphans);
-
-            if (newLayout) {
-                qDebug() << "ACTIVATING ORPHANED LAYOUT ::::: " << layoutForOrphans;
-                addLayout(newLayout);
-                newLayout->importToCorona();
-            }
-        }
-    }
-
-    updateCurrentLayoutNameInMultiEnvironment();
     emit centralLayoutsChanged();
 }
 
-void Synchronizer::syncActiveShares(SharesMap &sharesMap, QStringList &deprecatedShares)
+void Synchronizer::updateKWinDisabledBorders()
 {
-    if (m_manager->memoryUsage() != Types::MultipleLayouts) {
-        return;
-    }
+    if (!m_manager->corona()->universalSettings()->canDisableBorders()) {
+        m_manager->corona()->universalSettings()->kwin_setDisabledMaximizedBorders(false);
+    } else {
+        if (m_manager->corona()->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout) {
+            m_manager->corona()->universalSettings()->kwin_setDisabledMaximizedBorders(m_centralLayouts.at(0)->disableBordersForMaximizedWindows());
+        } else if (m_manager->corona()->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
+            QList<CentralLayout *> centrals = centralLayoutsForActivity(m_manager->corona()->activitiesConsumer()->currentActivity());
 
-    qDebug() << " CURRENT SHARES MAP :: " << sharesMap;
-    qDebug() << " DEPRECATED SHARES :: " << deprecatedShares;
+            for (int i = 0; i < centrals.size(); ++i) {
+                CentralLayout *layout = centrals.at(i);
 
-    QHash<CentralLayout *, SharedLayout *> unassign;
-
-    //! CENTRAL (inactive) layouts that must update their SharedLayoutName because they
-    //! were unassigned from a Shared Layout
-    for (const auto &share : deprecatedShares) {
-        CentralLayout *central = centralLayout(share);
-        if (!central) {
-            //! Central Layout is not loaded
-            CentralLayout centralInStorage(this, Importer::layoutFilePath(share));
-            centralInStorage.setSharedLayoutName(QString());
-        }
-    }
-
-    //! CENTRAL (active) layouts that will become SHARED must be unloaded first
-    for (SharesMap::iterator i=sharesMap.begin(); i!=sharesMap.end(); ++i) {
-        CentralLayout *central = centralLayout(i.key());
-        if (central) {
-            unloadCentralLayout(central);
-        }
-    }
-
-    //! CENTRAL (active) layouts that update their (active) SHARED layouts
-    //! AND load SHARED layouts that are NOT ACTIVE
-    for (SharesMap::iterator i=sharesMap.begin(); i!=sharesMap.end(); ++i) {
-        SharedLayout *shared = sharedLayout(i.key());
-        qDebug() << " SHARED :: " << i.key();
-        for (const auto &centralName : i.value()) {
-            CentralLayout *central = centralLayout(centralName);
-            qDebug() << " CENTRAL NAME :: " << centralName;
-            if (central) {
-                //! Assign this Central Layout at a different Shared Layout
-                SharedLayout *oldShared = central->sharedLayout();
-
-                if (!shared) {
-                    //Shared not loaded and it must be loaded before proceed
-                    registerAtSharedLayout(central, i.key());
-                    shared = sharedLayout(i.key());
+                if (layout->disableBordersForMaximizedWindows()) {
+                    m_manager->corona()->universalSettings()->kwin_setDisabledMaximizedBorders(true);
+                    return;
                 }
-
-                if (shared != oldShared) {
-                    shared->addCentralLayout(central);
-                    central->setSharedLayout(shared);
-                    if (oldShared) {
-                        //! CENTRAL layout that changed from one ACTIVESHARED layout to another
-                        unassign[central] = shared;
-                    }
-                }
-            } else {
-                //! Central Layout is not loaded
-                CentralLayout centralInStorage(this, Importer::layoutFilePath(centralName));
-                centralInStorage.setSharedLayoutName(i.key());
             }
-        }
-    }
 
-    //! CENTRAL Layouts that wont have any SHARED Layout any more
-    for (const auto &centralName : centralLayoutsNames()) {
-        if (!mapHasRecord(centralName, sharesMap)) {
-            CentralLayout *central = centralLayout(centralName);
-            if (central && central->sharedLayout()) {
-                central->sharedLayout()->removeCentralLayout(central);
-                central->setSharedLayoutName(QString());
-                central->setSharedLayout(nullptr);
-            }
+            m_manager->corona()->universalSettings()->kwin_setDisabledMaximizedBorders(false);
         }
-    }
-
-    //! Unassing from Shared Layouts Central ones that are not assigned any more
-    //! IMPORTANT: This must be done after all the ASSIGNMENTS in order to avoid
-    //! to unload a SharedLayout that it should not
-    for (QHash<CentralLayout *, SharedLayout *>::iterator i=unassign.begin(); i!=unassign.end(); ++i) {
-        i.value()->removeCentralLayout(i.key());
     }
 }
 

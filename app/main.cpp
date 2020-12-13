@@ -20,9 +20,9 @@
 
 // local
 #include "config-latte.h"
+#include "apptypes.h"
 #include "lattecorona.h"
 #include "layouts/importer.h"
-#include "../liblatte2/types.h"
 
 // C++
 #include <memory>
@@ -56,6 +56,9 @@
 
 inline void configureAboutData();
 inline void detectPlatform(int argc, char **argv);
+inline void filterDebugMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
+
+QString filterDebugMessageText;
 
 int main(int argc, char **argv)
 {
@@ -98,17 +101,17 @@ int main(int argc, char **argv)
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOptions({
-        {{"r", "replace"}, i18nc("command line", "Replace the current Latte instance.")}
-        , {{"d", "debug"}, i18nc("command line", "Show the debugging messages on stdout.")}
-        , {{"cc", "clear-cache"}, i18nc("command line", "Clear qml cache. It can be useful after system upgrades.")}
-        , {"default-layout", i18nc("command line", "Import and load default layout on startup.")}
-        , {"available-layouts", i18nc("command line", "Print available layouts")}
-        , {"layout", i18nc("command line", "Load specific layout on startup."), i18nc("command line: load", "layout_name")}
-        , {"import-layout", i18nc("command line", "Import and load a layout."), i18nc("command line: import", "file_name")}
-        , {"import-full", i18nc("command line", "Import full configuration."), i18nc("command line: import", "file_name")}
-        , {"single", i18nc("command line", "Single layout memory mode. Only one layout is active at any case.")}
-        , {"multiple", i18nc("command line", "Multiple layouts memory mode. Multiple layouts can be active at any time based on Activities running.")}
-    });
+                          {{"r", "replace"}, i18nc("command line", "Replace the current Latte instance.")}
+                          , {{"d", "debug"}, i18nc("command line", "Show the debugging messages on stdout.")}
+                          , {{"cc", "clear-cache"}, i18nc("command line", "Clear qml cache. It can be useful after system upgrades.")}
+                          , {"default-layout", i18nc("command line", "Import and load default layout on startup.")}
+                          , {"available-layouts", i18nc("command line", "Print available layouts")}
+                          , {"layout", i18nc("command line", "Load specific layout on startup."), i18nc("command line: load", "layout_name")}
+                          , {"import-layout", i18nc("command line", "Import and load a layout."), i18nc("command line: import", "file_name")}
+                          , {"import-full", i18nc("command line", "Import full configuration."), i18nc("command line: import", "file_name")}
+                          , {"single", i18nc("command line", "Single layout memory mode. Only one layout is active at any case.")}
+                          , {"multiple", i18nc("command line", "Multiple layouts memory mode. Multiple layouts can be active at any time based on Activities running.")}
+                      });
 
     //! START: Hidden options for Developer and Debugging usage
     QCommandLineOption graphicsOption(QStringList() << QStringLiteral("graphics"));
@@ -142,9 +145,30 @@ int main(int argc, char **argv)
     parser.addOption(overloadedIconsOption);
 
     QCommandLineOption edgesOption(QStringList() << QStringLiteral("kwinedges"));
-    graphicsOption.setDescription(QStringLiteral("Show visual window indicators for hidden screen edge windows."));
-    graphicsOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    edgesOption.setDescription(QStringLiteral("Show visual window indicators for hidden screen edge windows."));
+    edgesOption.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOption(edgesOption);
+
+    QCommandLineOption localGeometryOption(QStringList() << QStringLiteral("localgeometry"));
+    localGeometryOption.setDescription(QStringLiteral("Show visual window indicators for calculated local geometry."));
+    localGeometryOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(localGeometryOption);
+
+    QCommandLineOption layouterOption(QStringList() << QStringLiteral("layouter"));
+    layouterOption.setDescription(QStringLiteral("Show visual debug tags for items sizes."));
+    layouterOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(layouterOption);
+
+    QCommandLineOption filterDebugTextOption(QStringList() << QStringLiteral("debug-text"));
+    filterDebugTextOption.setDescription(QStringLiteral("Show only debug messages that contain specific text."));
+    filterDebugTextOption.setFlags(QCommandLineOption::HiddenFromHelp);
+    filterDebugTextOption.setValueName(i18nc("command line: debug-text", "filter_debug_text"));
+    parser.addOption(filterDebugTextOption);
+
+    QCommandLineOption filterDebugInputMask(QStringList() << QStringLiteral("input"));
+    filterDebugInputMask.setDescription(QStringLiteral("Show visual window indicators for calculated input mask."));
+    filterDebugInputMask.setFlags(QCommandLineOption::HiddenFromHelp);
+    parser.addOption(filterDebugInputMask);
     //! END: Hidden options
 
     parser.process(app);
@@ -245,24 +269,19 @@ int main(int argc, char **argv)
 
     //! memory usage option
     if (parser.isSet(QStringLiteral("multiple"))) {
-        memoryUsage = (int)(Latte::Types::MultipleLayouts);
+        memoryUsage = (int)(Latte::MemoryUsage::MultipleLayouts);
     } else if (parser.isSet(QStringLiteral("single"))) {
-        memoryUsage = (int)(Latte::Types::SingleLayout);
+        memoryUsage = (int)(Latte::MemoryUsage::SingleLayout);
+    }
+
+    //! text filter for debug messages
+    if (parser.isSet(QStringLiteral("debug-text"))) {
+        filterDebugMessageText = parser.value(QStringLiteral("debug-text"));
     }
 
     //! debug/mask options
-    if (parser.isSet(QStringLiteral("debug")) || parser.isSet(QStringLiteral("mask"))) {
-        //! set pattern for debug messages
-        //! [%{type}] [%{function}:%{line}] - %{message} [%{backtrace}]
-
-        qSetMessagePattern(QStringLiteral(
-                               CIGREEN "[%{type} " CGREEN "%{time h:mm:ss.zz}" CIGREEN "]" CNORMAL
-#ifndef QT_NO_DEBUG
-                               CIRED " [" CCYAN "%{function}" CIRED ":" CCYAN "%{line}" CIRED "]"
-#endif
-                               CICYAN " - " CNORMAL "%{message}"
-                               CIRED "%{if-fatal}\n%{backtrace depth=8 separator=\"\n\"}%{endif}"
-                               "%{if-critical}\n%{backtrace depth=8 separator=\"\n\"}%{endif}" CNORMAL));
+    if (parser.isSet(QStringLiteral("debug")) || parser.isSet(QStringLiteral("mask")) || parser.isSet(QStringLiteral("debug-text"))) {
+        qInstallMessageHandler(filterDebugMessageOutput);
     } else {
         const auto noMessageOutput = [](QtMsgType, const QMessageLogContext &, const QString &) {};
         qInstallMessageHandler(noMessageOutput);
@@ -283,6 +302,60 @@ int main(int argc, char **argv)
     KDBusService service(KDBusService::Unique);
 
     return app.exec();
+}
+
+inline void filterDebugMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    if (msg.endsWith("QML Binding: Not restoring previous value because restoreMode has not been set.This behavior is deprecated.In Qt < 6.0 the default is Binding.RestoreBinding.In Qt >= 6.0 the default is Binding.RestoreBindingOrValue.")
+        || msg.endsWith("QML Binding: Not restoring previous value because restoreMode has not been set.\nThis behavior is deprecated.\nYou have to import QtQml 2.15 after any QtQuick imports and set\nthe restoreMode of the binding to fix this warning.\nIn Qt < 6.0 the default is Binding.RestoreBinding.\nIn Qt >= 6.0 the default is Binding.RestoreBindingOrValue.\n")
+        || msg.endsWith("QML Binding: Not restoring previous value because restoreMode has not been set.\nThis behavior is deprecated.\nYou have to import QtQml 2.15 after any QtQuick imports and set\nthe restoreMode of the binding to fix this warning.\nIn Qt < 6.0 the default is Binding.RestoreBinding.\nIn Qt >= 6.0 the default is Binding.RestoreBindingOrValue.")
+        || msg.endsWith("QML Connections: Implicitly defined onFoo properties in Connections are deprecated. Use this syntax instead: function onFoo(<arguments>) { ... }")) {
+        //! block warnings because they will be needed only after qt6.0 support. Currently Binding.restoreMode can not be supported because
+        //! qt5.9 is the minimum supported version.
+        return;
+    }
+
+    if (!filterDebugMessageText.isEmpty() && !msg.contains(filterDebugMessageText)) {
+        return;
+    }
+
+    const char *function = context.function ? context.function : "";
+
+    QString typeStr;
+    switch (type) {
+    case QtDebugMsg:
+        typeStr = "Debug";
+        break;
+    case QtInfoMsg:
+        typeStr = "Info";
+        break;
+    case QtWarningMsg:
+        typeStr = "Warning" ;
+        break;
+    case QtCriticalMsg:
+        typeStr = "Critical";
+        break;
+    case QtFatalMsg:
+        typeStr = "Fatal";
+        break;
+    };
+
+    const char *TypeColor;
+
+    if (type == QtInfoMsg || type == QtWarningMsg) {
+        TypeColor = CGREEN;
+    } else if (type == QtCriticalMsg || type == QtFatalMsg) {
+        TypeColor = CRED;
+    } else {
+        TypeColor = CIGREEN;
+
+    }
+
+    qDebug().nospace() << TypeColor << "[" << typeStr.toStdString().c_str() << " : " << CGREEN << QTime::currentTime().toString("h:mm:ss.zz").toStdString().c_str() << TypeColor << "]" << CNORMAL
+                      #ifndef QT_NO_DEBUG
+                       << CIRED << " [" << CCYAN << function << CIRED << ":" << CCYAN << context.line << CIRED << "]"
+                      #endif
+                       << CICYAN << " - " << CNORMAL << msg;
 }
 
 inline void configureAboutData()
@@ -317,9 +390,9 @@ inline void detectPlatform(int argc, char **argv)
 
     for (int i = 0; i < argc; i++) {
         if (qstrcmp(argv[i], "-platform") == 0 ||
-            qstrcmp(argv[i], "--platform") == 0 ||
-            QByteArray(argv[i]).startsWith("-platform=") ||
-            QByteArray(argv[i]).startsWith("--platform=")) {
+                qstrcmp(argv[i], "--platform") == 0 ||
+                QByteArray(argv[i]).startsWith("-platform=") ||
+                QByteArray(argv[i]).startsWith("--platform=")) {
             return;
         }
     }

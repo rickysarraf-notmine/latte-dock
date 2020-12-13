@@ -22,6 +22,7 @@
 #define VIEW_H
 
 // local
+#include <coretypes.h>
 #include "containmentinterface.h"
 #include "effects.h"
 #include "positioner.h"
@@ -33,7 +34,6 @@
 #include "../layout/genericlayout.h"
 #include "../plasma/quick/containmentview.h"
 #include "../plasma/quick/configview.h"
-#include "../../liblatte2/types.h"
 
 // C++
 #include <array>
@@ -41,16 +41,23 @@
 // Qt
 #include <QQuickView>
 #include <QMenu>
+#include <QMetaObject>
 #include <QMimeData>
 #include <QScreen>
 #include <QPointer>
 #include <QTimer>
+
 
 namespace Plasma {
 class Types;
 class Corona;
 class Containment;
 }
+
+namespace PlasmaQuick {
+class AppletQuickItem;
+}
+
 
 namespace KWayland {
 namespace Client {
@@ -60,6 +67,7 @@ class PlasmaShellSurface;
 
 namespace Latte {
 class Corona;
+class Interfaces;
 class GenericLayout;
 
 namespace ViewPart {
@@ -80,12 +88,12 @@ class View : public PlasmaQuick::ContainmentView
     Q_PROPERTY(bool byPassWM READ byPassWM WRITE setByPassWM NOTIFY byPassWMChanged)
     Q_PROPERTY(bool containsDrag READ containsDrag NOTIFY containsDragChanged)
     Q_PROPERTY(bool contextMenuIsShown READ contextMenuIsShown NOTIFY contextMenuIsShownChanged)
-    //! Because Latte uses animations, changing to edit mode it may be different than
-    //! when the isUserConfiguring changes value
-    Q_PROPERTY(bool inEditMode READ inEditMode WRITE setInEditMode NOTIFY inEditModeChanged)
+    Q_PROPERTY(bool inSettingsAdvancedMode READ inSettingsAdvancedMode NOTIFY inSettingsAdvancedModeChanged)
+
+    Q_PROPERTY(bool inEditMode READ inEditMode NOTIFY inEditModeChanged)
     Q_PROPERTY(bool isPreferredForShortcuts READ isPreferredForShortcuts WRITE setIsPreferredForShortcuts NOTIFY isPreferredForShortcutsChanged)
-    Q_PROPERTY(bool latteTasksArePresent READ latteTasksArePresent WRITE setLatteTasksArePresent NOTIFY latteTasksArePresentChanged)
     Q_PROPERTY(bool onPrimary READ onPrimary WRITE setOnPrimary NOTIFY onPrimaryChanged)
+    Q_PROPERTY(bool screenEdgeMarginEnabled READ screenEdgeMarginEnabled WRITE setScreenEdgeMarginEnabled NOTIFY screenEdgeMarginEnabledChanged)
 
     //! values to be used from Smart surrounding Views
     Q_PROPERTY(bool isTouchingBottomViewAndIsBusy READ isTouchingBottomViewAndIsBusy WRITE setIsTouchingBottomViewAndIsBusy NOTIFY isTouchingBottomViewAndIsBusyChanged)
@@ -97,19 +105,27 @@ class View : public PlasmaQuick::ContainmentView
     Q_PROPERTY(int y READ y NOTIFY yChanged)
     Q_PROPERTY(int width READ width NOTIFY widthChanged)
     Q_PROPERTY(int height READ height NOTIFY heightChanged)
-    Q_PROPERTY(int editThickness READ editThickness WRITE setEditThickness NOTIFY editThicknessChanged)
+    Q_PROPERTY(int editThickness READ editThickness NOTIFY editThicknessChanged)
     Q_PROPERTY(int maxThickness READ maxThickness WRITE setMaxThickness NOTIFY maxThicknessChanged)
     Q_PROPERTY(int normalThickness READ normalThickness WRITE setNormalThickness NOTIFY normalThicknessChanged)
-    Q_PROPERTY(int offset READ offset WRITE setOffset NOTIFY offsetChanged)
+    Q_PROPERTY(int normalHighestThickness READ normalHighestThickness WRITE setNormalHighestThickness NOTIFY normalHighestThicknessChanged)
+    Q_PROPERTY(int headThicknessGap READ headThicknessGap WRITE setHeadThicknessGap NOTIFY headThicknessGapChanged)
+    Q_PROPERTY(int screenEdgeMargin READ screenEdgeMargin WRITE setScreenEdgeMargin NOTIFY screenEdgeMarginChanged)
 
     Q_PROPERTY(float maxLength READ maxLength WRITE setMaxLength NOTIFY maxLengthChanged)
+    Q_PROPERTY(float offset READ offset WRITE setOffset NOTIFY offsetChanged)
+
+    Q_PROPERTY(QQuickItem *colorizer READ colorizer WRITE setColorizer NOTIFY colorizerChanged)
 
     Q_PROPERTY(Latte::Layout::GenericLayout *layout READ layout WRITE setLayout NOTIFY layoutChanged)
     Q_PROPERTY(Latte::ViewPart::Effects *effects READ effects NOTIFY effectsChanged)
+    Q_PROPERTY(Latte::ViewPart::ContainmentInterface *extendedInterface READ extendedInterface NOTIFY extendedInterfaceChanged)
     Q_PROPERTY(Latte::ViewPart::Indicator *indicator READ indicator NOTIFY indicatorChanged)
     Q_PROPERTY(Latte::ViewPart::Positioner *positioner READ positioner NOTIFY positionerChanged)
     Q_PROPERTY(Latte::ViewPart::VisibilityManager *visibility READ visibility NOTIFY visibilityChanged)
     Q_PROPERTY(Latte::ViewPart::WindowsTracker *windowsTracker READ windowsTracker NOTIFY windowsTrackerChanged)
+
+    Q_PROPERTY(Latte::Interfaces *interfacesGraphicObj READ interfacesGraphicObj WRITE setInterfacesGraphicObj NOTIFY interfacesGraphicObjChanged)
 
     Q_PROPERTY(QRect absoluteGeometry READ absoluteGeometry NOTIFY absoluteGeometryChanged)
     Q_PROPERTY(QRect localGeometry READ localGeometry WRITE setLocalGeometry NOTIFY localGeometryChanged)
@@ -119,7 +135,7 @@ public:
     View(Plasma::Corona *corona, QScreen *targetScreen = nullptr, bool byPassWM = false);
     virtual ~View();
 
-    void init();
+    void init(Plasma::Containment *plasma_containment = nullptr);
 
     Types::ViewType type() const;
     void setType(Types::ViewType type);
@@ -128,6 +144,7 @@ public:
     void setAlternativesIsShown(bool show);
 
     bool inDelete() const;
+    bool inReadyState() const;
 
     bool onPrimary() const;
     void setOnPrimary(bool flag);
@@ -146,13 +163,13 @@ public:
     void setByPassWM(bool bypass);
 
     bool inEditMode() const;
-    void setInEditMode(bool edit);
+
+    bool isFloatingPanel() const;
 
     bool isPreferredForShortcuts() const;
     void setIsPreferredForShortcuts(bool preferred);
 
-    bool latteTasksArePresent() const;
-    void setLatteTasksArePresent(bool present);
+    bool inSettingsAdvancedMode() const;
 
     bool isTouchingBottomViewAndIsBusy() const;
     void setIsTouchingBottomViewAndIsBusy(bool touchAndBusy);
@@ -160,14 +177,13 @@ public:
     bool isTouchingTopViewAndIsBusy() const;
     void setIsTouchingTopViewAndIsBusy(bool touchAndBusy);
 
-    float maxLength() const;
-    void setMaxLength(float length);
+    bool screenEdgeMarginEnabled() const;
+    void setScreenEdgeMarginEnabled(bool enabled); 
 
     int fontPixelSize() const;
     void setFontPixelSize(int size);
 
     int editThickness() const;
-    void setEditThickness(int thickness);
 
     int maxThickness() const;
     void setMaxThickness(int thickness);
@@ -175,11 +191,23 @@ public:
     int normalThickness() const;
     void setNormalThickness(int thickness);
 
-    int offset() const;
-    void setOffset(int offset);
+    int normalHighestThickness() const;
+    void setNormalHighestThickness(int thickness);
+
+    int headThicknessGap() const;
+    void setHeadThicknessGap(int thickness);
+
+    int screenEdgeMargin() const;
+    void setScreenEdgeMargin(int margin);
 
     int alignment() const;
     void setAlignment(int alignment);
+
+    float maxLength() const;
+    void setMaxLength(float length);
+
+    float offset() const;
+    void setOffset(float offset);
 
     QRect absoluteGeometry() const;
     QRect screenGeometry() const;
@@ -187,21 +215,32 @@ public:
     QRect localGeometry() const;
     void setLocalGeometry(const QRect &geometry);
 
+    QString validTitle() const;
+
     bool isOnActivity(const QString &activity) const;
     bool isOnAllActivities() const;
+
     QStringList activities() const;
+    void setActivities(const QStringList &ids);
 
     bool settingsWindowIsShown();
     void showSettingsWindow();
 
-    PlasmaQuick::ConfigView *configView();
+    QQuickItem *colorizer() const;
+    void setColorizer(QQuickItem *colorizer);
+
+    QQuickView *configView();
 
     ViewPart::Effects *effects() const;   
+    ViewPart::ContextMenu *contextMenu() const;
+    ViewPart::ContainmentInterface *extendedInterface() const;
     ViewPart::Indicator *indicator() const;
-    ViewPart::ContainmentInterface *interface() const;
     ViewPart::Positioner *positioner() const;
     ViewPart::VisibilityManager *visibility() const;
     ViewPart::WindowsTracker *windowsTracker() const;
+
+    Latte::Interfaces *interfacesGraphicObj() const;
+    void setInterfacesGraphicObj(Latte::Interfaces *ifaces);
 
     Layout::GenericLayout *layout() const;
     void setLayout(Layout::GenericLayout *layout);
@@ -217,21 +256,18 @@ public:
     //! when its containment is destroyed
     void disconnectSensitiveSignals();
 
+    //! used from ViewSettingsFactory in order to move Configuration Windows to different View
+    void releaseConfigView();
+
 public slots:
     Q_INVOKABLE void copyView();
     Q_INVOKABLE void removeView();
 
     Q_INVOKABLE QVariantList containmentActions();
 
-    Q_INVOKABLE void deactivateApplets();
     Q_INVOKABLE void moveToLayout(QString layoutName);
-    Q_INVOKABLE void removeTasksPlasmoid();
-    Q_INVOKABLE void setBlockHiding(bool block);
-    Q_INVOKABLE void toggleAppletExpanded(const int id);
 
-    Q_INVOKABLE bool appletIsExpandable(const int id);
     Q_INVOKABLE bool mimeContainsPlasmoid(QMimeData *mimeData, QString name);
-    Q_INVOKABLE bool tasksPresent();
 
     void updateAbsoluteGeometry(bool bypassChecks = false);
 
@@ -248,36 +284,44 @@ signals:
     void eventTriggered(QEvent *ev);
     void mousePressed(const QPoint pos, const int button);
     void mouseReleased(const QPoint pos, const int button);
+    void wheelScrolled(const QPoint pos, const QPoint angleDelta, const int buttons);
 
     void activitiesChanged();
     void alternativesIsShownChanged();
     void alignmentChanged();
     void behaveAsPlasmaPanelChanged();
     void byPassWMChanged();
+    void colorizerChanged();
     void configWindowGeometryChanged(); // is called from config windows
     void containsDragChanged();
     void contextMenuIsShownChanged();
     void dockLocationChanged();
     void editThicknessChanged();
     void effectsChanged();
+    void extendedInterfaceChanged();
     void fontPixelSizeChanged();
     void forcedShown(); //[workaround] forced shown to avoid a KWin issue that hides windows when closing activities
     void widthChanged();
+    void headThicknessGapChanged();
     void heightChanged();
     void inEditModeChanged();
     void indicatorChanged();
+    void inSettingsAdvancedModeChanged();
+    void interfacesGraphicObjChanged();
     void isPreferredForShortcutsChanged();
     void isTouchingBottomViewAndIsBusyChanged();
     void isTouchingTopViewAndIsBusyChanged();
-    void latteTasksArePresentChanged();
     void layoutChanged();
     void localGeometryChanged();
     void maxLengthChanged();
     void maxThicknessChanged();
     void normalThicknessChanged();
+    void normalHighestThicknessChanged();
     void offsetChanged();
     void onPrimaryChanged();
     void positionerChanged();
+    void screenEdgeMarginChanged();
+    void screenEdgeMarginEnabledChanged();
     void screenGeometryChanged();
     void typeChanged();
     void visibilityChanged();
@@ -287,7 +331,9 @@ signals:
 
     void absoluteGeometryChanged(const QRect &geometry);
 
-    void customPluginsChanged();
+    void indicatorPluginChanged(const QString &indicatorId);
+    void indicatorPluginRemoved(const QString &indicatorId);
+    void userRequestedViewType(const int &type);
 
     //! are used to trigger the Corona relevant signals and in that
     //! way we can disable any such signaling all together, e.g. through disconnectSensitiveSignals()
@@ -295,19 +341,29 @@ signals:
     void availableScreenRegionChangedFrom(Latte::View *origin);
 
 private slots:
+    void applyActivitiesToWindows();
     void availableScreenRectChangedFromSlot(View *origin);
-    void configViewCreatedFor(Latte::View *view);
     void hideWindowsForSlidingOut();
     void preferredViewForShortcutsChangedSlot(Latte::View *view);
     void releaseGrab();
     void reloadSource();
+    void updateTransientWindowsTracking();
     void statusChanged(Plasma::Types::ItemStatus);
+
+    void addTransientWindow(QWindow *window);
+    void removeTransientWindow(const bool &visible);
+
+    //! workaround in order for top panels to be always on top
+    void topViewAlwaysOnTop();
+    void verticalUnityViewHasFocus();
+
+    //!workround for when kwin hides view when an activity is closing
+    void showHiddenViewFromActivityStopping();
 
     void restoreConfig();
     void saveConfig();
 
 private:
-    void applyActivitiesToWindows();
     void initSignalingForLocationChangeSliding();
     void setupWaylandIntegration();
     void updateAppletContainsMethod();
@@ -323,20 +379,21 @@ private:
     bool m_containsDrag{false};
     bool m_containsMouse{false};
     bool m_inDelete{false};
-    bool m_inEditMode{false};
     bool m_isPreferredForShortcuts{false};
-    bool m_latteTasksArePresent{false};
     bool m_onPrimary{true};
+    bool m_screenEdgeMarginEnabled{false};
 
     bool m_isTouchingBottomViewAndIsBusy{false};
     bool m_isTouchingTopViewAndIsBusy{false};
 
     int m_fontPixelSize{ -1};
-    int m_editThickness{24};
     int m_maxThickness{24};
     int m_normalThickness{24};
-    int m_offset{0};
+    int m_normalHighestThickness{24};
+    int m_headThicknessGap{0};
+    int m_screenEdgeMargin{-1};
     float m_maxLength{1};
+    float m_offset{0};
 
     Types::Alignment m_alignment{Types::Center};
     Types::ViewType m_type{Types::DockView};
@@ -345,6 +402,10 @@ private:
     QRect m_absoluteGeometry;
 
     QStringList m_activities;
+
+    //! HACK: In order to avoid crashes when the View is added and removed
+    //! immediately during startup
+    QTimer m_initLayoutTimer;
 
     //! HACK: Timers in order to handle KWin faulty
     //! behavior that hides Views when closing Activities
@@ -357,7 +418,11 @@ private:
     int m_releaseGrab_y;
 
     Layout::GenericLayout *m_layout{nullptr};
-    QPointer<PlasmaQuick::ConfigView> m_configView;
+
+    QQuickItem *m_colorizer{nullptr};
+
+    QPointer<PlasmaQuick::ConfigView> m_appletConfigView;
+    QPointer<ViewPart::PrimaryConfigView> m_primaryConfigView;
 
     QPointer<ViewPart::ContextMenu> m_contextMenu;
     QPointer<ViewPart::Effects> m_effects;
@@ -367,8 +432,13 @@ private:
     QPointer<ViewPart::VisibilityManager> m_visibility;
     QPointer<ViewPart::WindowsTracker> m_windowsTracker;
 
+    QPointer<Latte::Interfaces> m_interfacesGraphicObj;
+
     //! Connections to release and bound for the assigned layout
     QList<QMetaObject::Connection> connectionsLayout;
+
+    //! track transientWindows
+    QList<QWindow *> m_transientWindows;
 
     QPointer<Latte::Corona> m_corona;
 

@@ -20,11 +20,12 @@
 #include "indicator.h"
 
 // local
+#include <coretypes.h>
 #include "indicatorinfo.h"
+#include "../containmentinterface.h"
 #include "../view.h"
 #include "../../lattecorona.h"
 #include "../../indicator/factory.h"
-#include "../../../liblatte2/types.h"
 
 // Qt
 #include <QFileDialog>
@@ -34,6 +35,7 @@
 #include <KPluginMetaData>
 #include <KDeclarative/ConfigPropertyMap>
 #include <KDeclarative/QmlObjectSharedEngine>
+
 
 namespace Latte {
 namespace ViewPart {
@@ -48,23 +50,23 @@ Indicator::Indicator(Latte::View *parent)
     loadConfig();
 
     connect(this, &Indicator::enabledChanged, this, &Indicator::saveConfig);
-    connect(this, &Indicator::enabledForAppletsChanged, this, &Indicator::saveConfig);
-    connect(this, &Indicator::paddingChanged, this, &Indicator::saveConfig);
     connect(this, &Indicator::pluginChanged, this, &Indicator::saveConfig);
 
-    connect(m_view, &Latte::View::latteTasksArePresentChanged, this, &Indicator::latteTasksArePresentChanged);
+    connect(m_view->extendedInterface(), &ContainmentInterface::hasLatteTasksChanged, this, &Indicator::latteTasksArePresentChanged);
 
-    connect(m_view, &Latte::View::customPluginsChanged, [this]() {
-        if (m_corona && !m_corona->indicatorFactory()->pluginExists(m_type)) {
+    connect(m_view, &Latte::View::indicatorPluginChanged, [this](const QString &indicatorId) {
+        if (m_corona && m_corona->indicatorFactory()->isCustomType(indicatorId)) {
+            emit customPluginsChanged();
+        }
+    });
+
+    connect(m_view, &Latte::View::indicatorPluginRemoved, [this](const QString &indicatorId) {
+        if (m_corona && m_type == indicatorId && !m_corona->indicatorFactory()->pluginExists(indicatorId)) {
             setType("org.kde.latte.default");
         }
 
-        emit customPluginsChanged();
-    });
-
-    connect(this, &Indicator::pluginChanged, [this]() {
-        if ((m_type != "org.kde.latte.default") && m_type != "org.kde.latte.plasma") {
-            setCustomType(m_type);
+        if (m_corona && m_corona->indicatorFactory()->isCustomType(indicatorId)) {
+            emit customPluginsChanged();
         }
     });
 
@@ -75,6 +77,8 @@ Indicator::Indicator(Latte::View *parent)
 
 Indicator::~Indicator()
 {
+    unloadIndicators();
+
     if (m_component) {
         m_component->deleteLater();
     }
@@ -122,39 +126,14 @@ void Indicator::setEnabledForApplets(bool enabled)
     emit enabledForAppletsChanged();
 }
 
+bool Indicator::isCustomIndicator() const
+{
+    return m_corona->indicatorFactory()->isCustomType(type());
+}
+
 bool Indicator::latteTasksArePresent()
 {
-    return m_view->latteTasksArePresent();
-}
-
-bool Indicator::providesConfigUi() const
-{
-    return m_providesConfigUi;
-}
-
-void Indicator::setProvidesConfigUi(bool provides)
-{
-    if (m_providesConfigUi == provides) {
-        return;
-    }
-
-    m_providesConfigUi = provides;
-    emit providesConfigUiChanged();
-}
-
-float Indicator::padding() const
-{
-    return m_padding;
-}
-
-void Indicator::setPadding(float padding)
-{
-    if (m_padding == padding) {
-        return;
-    }
-
-    m_padding = padding;
-    emit paddingChanged();
+    return m_view->extendedInterface()->hasLatteTasks();
 }
 
 bool Indicator::pluginIsReady()
@@ -266,6 +245,10 @@ void Indicator::load(QString type)
         QString path = m_metadata.fileName();
         m_pluginPath = path.remove("metadata.desktop");
 
+        if (m_corona && m_corona->indicatorFactory()->isCustomType(type)) {
+            setCustomType(type);
+        }
+
         updateScheme();
         updateComponent();
 
@@ -299,7 +282,7 @@ void Indicator::loadPlasmaComponent()
 {
     auto prevComponent = m_plasmaComponent;
 
-    KPluginMetaData metadata = m_corona->indicatorFactory()->metadata("org.kde.latte.plasma");
+    KPluginMetaData metadata = m_corona->indicatorFactory()->metadata("org.kde.latte.plasmatabstyle");
     QString uiPath = metadata.value("X-Latte-MainScript");
 
     if (!uiPath.isEmpty()) {
@@ -315,45 +298,6 @@ void Indicator::loadPlasmaComponent()
     }
 
     emit plasmaComponentChanged();
-}
-
-void Indicator::configUiFor(QString type, QQuickItem *parent)
-{
-    if (m_lastCreatedConfigUi) {
-        delete m_lastCreatedConfigUi;
-        m_lastCreatedConfigUi = nullptr;
-    }
-    auto prevConfigUi = m_lastCreatedConfigUi;
-
-    KPluginMetaData metadata;
-
-    if (m_metadata.pluginId() == type) {
-        metadata = m_metadata;
-    } else {
-        metadata = m_corona->indicatorFactory()->metadata(type);
-    }
-
-    if (metadata.isValid()) {
-        QString uiPath = metadata.value("X-Latte-ConfigUi");
-
-        if (!uiPath.isEmpty()) {
-            m_lastCreatedConfigUi = new KDeclarative::QmlObjectSharedEngine(parent);
-            m_lastCreatedConfigUi->setTranslationDomain(QLatin1String("latte_indicator_") + m_metadata.pluginId());
-            m_lastCreatedConfigUi->setInitializationDelayed(true);
-            uiPath = m_pluginPath + "package/" + uiPath;
-            m_lastCreatedConfigUi->setSource(QUrl::fromLocalFile(uiPath));
-            m_lastCreatedConfigUi->rootContext()->setContextProperty(QStringLiteral("dialog"), parent);
-            m_lastCreatedConfigUi->rootContext()->setContextProperty(QStringLiteral("indicator"), this);
-            m_lastCreatedConfigUi->completeInitialization();
-
-            QQuickItem *qmlItem = qobject_cast<QQuickItem*>(m_lastCreatedConfigUi->rootObject());
-            qmlItem->setParentItem(parent);
-
-            setProvidesConfigUi(true);
-        } else {
-            setProvidesConfigUi(false);
-        }
-    }
 }
 
 void Indicator::unloadIndicators()
@@ -386,55 +330,11 @@ void Indicator::updateScheme()
     }
 }
 
-void Indicator::addIndicator()
-{
-    QFileDialog *fileDialog = new QFileDialog(nullptr
-                                              , i18nc("add indicator", "Add Indicator")
-                                              , QDir::homePath()
-                                              , QStringLiteral("indicator.latte"));
-
-    fileDialog->setFileMode(QFileDialog::AnyFile);
-    fileDialog->setAcceptMode(QFileDialog::AcceptOpen);
-    fileDialog->setDefaultSuffix("indicator.latte");
-
-    QStringList filters;
-    filters << QString(i18nc("add indicator file", "Latte Indicator") + "(*.indicator.latte)");
-    fileDialog->setNameFilters(filters);
-
-    connect(fileDialog, &QFileDialog::finished, fileDialog, &QFileDialog::deleteLater);
-
-    connect(fileDialog, &QFileDialog::fileSelected, this, [&](const QString & file) {
-        qDebug() << "Trying to import indicator file ::: " << file;
-        m_corona->indicatorFactory()->importIndicatorFile(file);
-    });
-
-    fileDialog->open();
-}
-
-void Indicator::downloadIndicator()
-{
-    //! call asynchronously in order to not crash when view settings window
-    //! loses focus and it closes
-    QTimer::singleShot(0, [this]() {
-        m_corona->indicatorFactory()->downloadIndicator();
-    });
-}
-
-void Indicator::removeIndicator(QString pluginId)
-{    //! call asynchronously in order to not crash when view settings window
-    //! loses focus and it closes
-    QTimer::singleShot(0, [this, pluginId]() {
-        m_corona->indicatorFactory()->removeIndicator(pluginId);
-    });
-}
-
 void Indicator::loadConfig()
 {
     auto config = m_view->containment()->config().group("Indicator");
     m_customType = config.readEntry("customType", QString());
     m_enabled = config.readEntry("enabled", true);
-    m_enabledForApplets = config.readEntry("enabledForApplets", true);
-    m_padding = config.readEntry("padding", (float)0.08);
     m_type = config.readEntry("type", "org.kde.latte.default");
 }
 
@@ -443,11 +343,7 @@ void Indicator::saveConfig()
     auto config = m_view->containment()->config().group("Indicator");
     config.writeEntry("customType", m_customType);
     config.writeEntry("enabled", m_enabled);
-    config.writeEntry("enabledForApplets", m_enabledForApplets);
-    config.writeEntry("padding", m_padding);
     config.writeEntry("type", m_type);
-
-    config.sync();
 }
 
 }

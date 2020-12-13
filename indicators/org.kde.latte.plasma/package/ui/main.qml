@@ -21,7 +21,6 @@ import QtQuick 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.latte 0.2 as Latte
 import org.kde.latte.components 1.0 as LatteComponents
 
 LatteComponents.IndicatorItem {
@@ -33,20 +32,32 @@ LatteComponents.IndicatorItem {
     providesFrontLayer: true
     svgImagePaths: ["widgets/tasks"]
 
+    enabledForApplets: configurationIsReady && indicator.configuration.clickedAnimationEnabled !== undefined ?
+                           indicator.configuration.enabledForApplets : true
+    lengthPadding: configurationIsReady && indicator.configuration.clickedAnimationEnabled !== undefined ?
+                       indicator.configuration.lengthPadding : 0.08
+
     //! config options
-    readonly property bool clickedAnimationEnabled: indicator && indicator.configuration
+    readonly property bool clickedAnimationEnabled: configurationIsReady
                                                     && indicator.configuration.clickedAnimationEnabled !== undefined
                                                     && indicator.configuration.clickedAnimationEnabled
 
-    readonly property bool reversedEnabled: indicator && indicator.configuration
+    readonly property bool reversedEnabled: configurationIsReady
                                             && indicator.configuration.reversed !== undefined
                                             && indicator.configuration.reversed
 
+
+    readonly property bool configurationIsReady: indicator && indicator.configuration
 
     //! Background Layer
     Loader{
         id: backLayer
         anchors.fill: parent
+        anchors.topMargin: plasmoid.location === PlasmaCore.Types.TopEdge ? indicator.screenEdgeMargin : 0
+        anchors.bottomMargin: plasmoid.location === PlasmaCore.Types.BottomEdge ? indicator.screenEdgeMargin : 0
+        anchors.leftMargin: plasmoid.location === PlasmaCore.Types.LeftEdge ? indicator.screenEdgeMargin : 0
+        anchors.rightMargin: plasmoid.location === PlasmaCore.Types.RightEdge ? indicator.screenEdgeMargin : 0
+
         active: level.isBackground && !indicator.isEmptySpace
         sourceComponent: BackLayer{}
     }
@@ -54,7 +65,7 @@ LatteComponents.IndicatorItem {
     /* progress overlay for BackLayer*/
     /* it is not added in the BackLayer because the BackLayer is rotated in some cases*/
     Loader {
-        anchors.fill: parent
+        anchors.fill: backLayer
         asynchronous: true
         active: level.isBackground && indicator.progressVisible
         sourceComponent: Item {

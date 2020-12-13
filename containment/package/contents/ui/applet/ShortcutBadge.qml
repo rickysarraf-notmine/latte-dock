@@ -20,16 +20,15 @@
 import QtQuick 2.1
 import QtGraphicalEffects 1.0
 
-import org.kde.latte 0.2 as Latte
 import org.kde.latte.components 1.0 as LatteComponents
 
 Loader{
     id: appletNumberLoader
 
     active: appletItem.canShowAppletNumberBadge &&
-            (root.showLatteShortcutBadges
-             || root.showAppletShortcutBadges
-             || root.showMetaBadge && applet.id===applicationLauncherId)
+            (appletItem.shortcuts.showPositionShortcutBadges
+             || appletItem.shortcuts.showAppletShortcutBadges
+             || appletItem.shortcuts.showMetaBadge && applet.id===appletItem.shortcuts.applicationLauncherId)
 
     asynchronous: true
     visible: badgeString!==""
@@ -38,16 +37,16 @@ Loader{
     property string badgeString: ""
 
     onActiveChanged: {
-        if (active && root.showLatteShortcutBadges && root.unifiedGlobalShortcuts) {
-            fixedIndex = parabolicManager.pseudoAppletIndex(index);
+        if (active && appletItem.shortcuts.showPositionShortcutBadges && appletItem.shortcuts.unifiedGlobalShortcuts) {
+            fixedIndex = appletItem.indexer.visibleIndex(index);
         } else {
             fixedIndex = -1;
         }
     }
 
     Component.onCompleted: {
-        if (active && root.showLatteShortcutBadges && root.unifiedGlobalShortcuts) {
-            fixedIndex = parabolicManager.pseudoAppletIndex(index);
+        if (active && appletItem.shortcuts.showPositionShortcutBadges && appletItem.shortcuts.unifiedGlobalShortcuts) {
+            fixedIndex = appletItem.indexer.visibleIndex(index);
         } else {
             fixedIndex = -1;
         }
@@ -56,17 +55,13 @@ Loader{
     Binding{
         target: appletNumberLoader
         property:"badgeString"
+        when: appletItem.shortcuts.showMetaBadge || appletItem.shortcuts.showAppletShortcutBadges
         value: {
-            //! don't change value on hiding/releasing
-            if (!root.showMetaBadge && !root.showAppletShortcutBadges) {
-                return;
-            }
-
-            if (root.showMetaBadge && applet && applet.id === applicationLauncherId) {
+            if (appletItem.shortcuts.showMetaBadge && applet && applet.id === appletItem.shortcuts.applicationLauncherId) {
                 return '\u2318';
             }
 
-            if (root.showAppletShortcutBadges) {
+            if (appletItem.shortcuts.showAppletShortcutBadges) {
                 var plasmaShortcut = applet ? shortcutsEngine.appletShortcutBadge(applet.id) : "";
 
                 if (plasmaShortcut !== "") {
@@ -75,7 +70,7 @@ Loader{
             }
 
              if (appletNumberLoader.fixedIndex>=1 && appletNumberLoader.fixedIndex<20) {
-                return root.badgesForActivate[appletNumberLoader.fixedIndex-1];
+                return appletItem.shortcuts.badges[appletNumberLoader.fixedIndex-1];
             } else {
                 return "";
             }
@@ -102,13 +97,13 @@ Loader{
 
             // when iconSize < 48, height is always = 24, height / iconSize > 50%
             // we prefer center aligned badges to top-left aligned ones
-            property bool centerInParent: root.iconSize < 48
+            property bool centerInParent: appletItem.metrics.iconSize < 48
 
             anchors.left: centerInParent? undefined : parent.left
             anchors.top: centerInParent? undefined : parent.top
             anchors.centerIn: centerInParent? parent : undefined
-            minimumWidth: 0.4 * (wrapper.zoomScale * root.iconSize)
-            height: Math.max(24, 0.4 * (wrapper.zoomScale * root.iconSize))
+            minimumWidth: 0.4 * (wrapper.zoomScale * appletItem.metrics.iconSize)
+            height: Math.max(24, 0.4 * (wrapper.zoomScale * appletItem.metrics.iconSize))
 
             borderColor: colorizerManager.originalLightTextColor
             proportion: 0
