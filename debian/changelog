@@ -1,4 +1,4 @@
-latte-dock (0.9.11+git0.2e3b8396-1) UNRELEASED; urgency=medium
+latte-dock (0.9.11+git1.7a1b920a-1) norbert; urgency=medium
 
   [ Pino Toscano ]
   * Switch the transitional libxcb-util0-dev build dependency to
@@ -12,8 +12,9 @@ latte-dock (0.9.11+git0.2e3b8396-1) UNRELEASED; urgency=medium
   * Manually add upstream code
   * New upstream version 0.9.11
   * New upstream version 0.9.11+git0.2e3b8396
+  * New upstream version 0.9.11+git1.7a1b920a
 
- -- Ritesh Raj Sarraf <rrs@debian.org>  Sun, 13 Dec 2020 17:10:27 +0530
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Sun, 21 Feb 2021 12:50:38 +0530
 
 latte-dock (0.9.11-1) unstable; urgency=medium
 
