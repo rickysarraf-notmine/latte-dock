@@ -34,7 +34,6 @@
 #include "layouts/importer.h"
 #include "layouts/manager.h"
 #include "layouts/synchronizer.h"
-#include "layouts/launcherssignals.h"
 #include "shortcuts/globalshortcuts.h"
 #include "package/lattepackage.h"
 #include "plasma/extended/backgroundcache.h"
@@ -43,7 +42,6 @@
 #include "plasma/extended/screenpool.h"
 #include "plasma/extended/theme.h"
 #include "settings/universalsettings.h"
-#include "settings/dialogs/settingsdialog.h"
 #include "templates/templatesmanager.h"
 #include "view/view.h"
 #include "view/settings/viewsettingsfactory.h"
@@ -490,7 +488,7 @@ QRect Corona::screenGeometry(int id) const
 
     QString screenName;
 
-    if (m_screenPool->hasId(id)) {
+    if (m_screenPool->hasScreenId(id)) {
         screenName = m_screenPool->connector(id);
     }
 
@@ -829,8 +827,7 @@ void Corona::addOutput(QScreen *screen)
     int id = m_screenPool->id(screen->name());
 
     if (id == -1) {
-        int newId = m_screenPool->firstAvailableId();
-        m_screenPool->insertScreenMapping(newId, screen->name());
+        m_screenPool->insertScreenMapping(screen->name());
     }
 
     connect(screen, &QScreen::geometryChanged, this, [ = ]() {
@@ -906,6 +903,11 @@ void Corona::aboutApplication()
     m_wm->setKeepAbove(aboutDialog->winId(), true);
 
     aboutDialog->show();
+}
+
+void Corona::loadDefaultLayout()
+{
+  //disabled
 }
 
 int Corona::screenForContainment(const Plasma::Containment *containment) const
@@ -1029,61 +1031,6 @@ void Corona::alternativesVisibilityChanged(bool visible)
             obj->deleteLater();
         }
     }
-}
-
-void Corona::addViewForLayout(QString layoutName)
-{
-    qDebug() << "loading default layout";
-    //! Setting mutable for create a containment
-    setImmutability(Plasma::Types::Mutable);
-    QVariantList args;
-    auto defaultContainment = createContainmentDelayed("org.kde.latte.containment", args);
-    defaultContainment->setContainmentType(Plasma::Types::PanelContainment);
-    defaultContainment->init();
-
-    if (!defaultContainment || !defaultContainment->kPackage().isValid()) {
-        qWarning() << "the requested containment plugin can not be located or loaded";
-        return;
-    }
-
-    auto config = defaultContainment->config();
-    defaultContainment->restore(config);
-
-    using Plasma::Types;
-    QList<Types::Location> edges{Types::BottomEdge, Types::LeftEdge,
-                Types::TopEdge, Types::RightEdge};
-
-    Layout::GenericLayout *currentLayout = m_layoutsManager->synchronizer()->layout(layoutName);
-
-    if (currentLayout) {
-        edges = currentLayout->freeEdges(defaultContainment->screen());
-    }
-
-    if ((edges.count() > 0)) {
-        defaultContainment->setLocation(edges.at(0));
-    } else {
-        defaultContainment->setLocation(Plasma::Types::BottomEdge);
-    }
-
-    if (m_layoutsManager->memoryUsage() == MemoryUsage::MultipleLayouts) {
-        config.writeEntry("layoutId", layoutName);
-    }
-
-    defaultContainment->updateConstraints(Plasma::Types::StartupCompletedConstraint);
-
-    defaultContainment->save(config);
-    requestConfigSync();
-
-    defaultContainment->flushPendingConstraintsEvents();
-    emit containmentAdded(defaultContainment);
-    emit containmentCreated(defaultContainment);
-
-    defaultContainment->createApplet(QStringLiteral("org.kde.latte.plasmoid"));
-}
-
-void Corona::loadDefaultLayout()
-{
-  //  addViewForLayout(m_layoutsManager->currentLayoutsNames());
 }
 
 QStringList Corona::containmentsIds()

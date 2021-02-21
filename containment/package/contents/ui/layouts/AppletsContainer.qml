@@ -23,9 +23,7 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 
 import org.kde.latte.core 0.2 as LatteCore
 
-import "./abilities" as Abilities
-
-Abilities.AbilityGrid {
+Grid {
     id: appletsContainer
 
     columns: root.isVertical ? 1 : 0
@@ -35,7 +33,7 @@ Abilities.AbilityGrid {
     rowSpacing: 0
 
     opacity: {
-        if (root.inConfigureAppletsMode && root.panelAlignment===LatteCore.Types.Justify && layoutsContainer.mainLayout.isCoveredFromSideLayouts){
+        if (root.inConfigureAppletsMode && root.myView.alignment===LatteCore.Types.Justify && layoutsContainer.mainLayout.isCoveredFromSideLayouts){
             if (dragOverlay && (!dragOverlay.currentHoveredLayout || dragOverlay.currentHoveredLayout === appletsContainer)) {
                 return 1;
             } else {

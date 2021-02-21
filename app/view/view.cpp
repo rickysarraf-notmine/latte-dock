@@ -28,6 +28,7 @@
 #include "settings/primaryconfigview.h"
 #include "settings/secondaryconfigview.h"
 #include "settings/viewsettingsfactory.h"
+#include "settings/widgetexplorerview.h"
 #include "../apptypes.h"
 #include "../lattecorona.h"
 #include "../data/layoutdata.h"
@@ -38,11 +39,15 @@
 #include "../plasma/extended/theme.h"
 #include "../screenpool.h"
 #include "../settings/universalsettings.h"
+#include "../settings/exporttemplatedialog/exporttemplatedialog.h"
 #include "../shortcuts/globalshortcuts.h"
 #include "../shortcuts/shortcutstracker.h"
 
 // Qt
 #include <QAction>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QMouseEvent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -75,7 +80,9 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
     : PlasmaQuick::ContainmentView(corona),
       m_contextMenu(new ViewPart::ContextMenu(this)),
       m_effects(new ViewPart::Effects(this)),
-      m_interface(new ViewPart::ContainmentInterface(this))
+      m_interface(new ViewPart::ContainmentInterface(this)),
+      m_parabolic(new ViewPart::Parabolic(this)),
+      m_sink(new ViewPart::EventsSink(this))
 {      
     //! needs to be created after Effects because it catches some of its signals
     //! and avoid a crash from View::winId() at the same time
@@ -85,7 +92,6 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
     setIcon(qGuiApp->windowIcon());
     setResizeMode(QuickViewSharedEngine::SizeRootObjectToView);
     setColor(QColor(Qt::transparent));
-    setDefaultAlphaBuffer(true);
     setClearBeforeRendering(true);
 
     const auto flags = Qt::FramelessWindowHint
@@ -174,6 +180,7 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
         }
 
         connect(this->containment(), SIGNAL(statusChanged(Plasma::Types::ItemStatus)), SLOT(statusChanged(Plasma::Types::ItemStatus)));
+        connect(this->containment(), &Plasma::Containment::showAddWidgetsInterface, this, &View::showWidgetExplorer);
         connect(this->containment(), &Plasma::Containment::userConfiguringChanged, this, [&]() {
             emit inEditModeChanged();
         });
@@ -186,6 +193,7 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
             m_primaryConfigView->setParentView(this, true);
         }
 
+        emit containmentActionsChanged();
     }, Qt::DirectConnection);
 
     m_corona = qobject_cast<Latte::Corona *>(this->corona());
@@ -274,7 +282,7 @@ void View::init(Plasma::Containment *plasma_containment)
     connect(this, &QQuickWindow::heightChanged, this, &View::updateAbsoluteGeometry);
 
     connect(this, &View::fontPixelSizeChanged, this, &View::editThicknessChanged);
-    connect(this, &View::normalHighestThicknessChanged, this, &View::editThicknessChanged);
+    connect(this, &View::maxNormalThicknessChanged, this, &View::editThicknessChanged);
 
     connect(this, &View::activitiesChanged, this, &View::applyActivitiesToWindows);
 
@@ -302,7 +310,7 @@ void View::init(Plasma::Containment *plasma_containment)
 
     connect(m_effects, &ViewPart::Effects::innerShadowChanged, this, [&]() {
         emit availableScreenRectChangedFrom(this);
-    });
+    });        
     connect(m_positioner, &ViewPart::Positioner::onHideWindowsForSlidingOut, this, &View::hideWindowsForSlidingOut);
     connect(m_positioner, &ViewPart::Positioner::screenGeometryChanged, this, &View::screenGeometryChanged);
     connect(m_positioner, &ViewPart::Positioner::windowSizeChanged, this, [&]() {
@@ -355,9 +363,9 @@ void View::init(Plasma::Containment *plasma_containment)
 void View::reloadSource()
 {
     if (m_layout && containment()) {
-       // if (settingsWindowIsShown()) {
-       //     m_configView->deleteLater();
-       // }
+        // if (settingsWindowIsShown()) {
+        //     m_configView->deleteLater();
+        // }
 
         engine()->clearComponentCache();
         m_layout->recreateView(containment(), settingsWindowIsShown());
@@ -446,6 +454,12 @@ void View::copyView()
     m_layout->copyView(containment());
 }
 
+void View::exportTemplate()
+{
+    Latte::Settings::Dialog::ExportTemplateDialog *exportDlg = new Latte::Settings::Dialog::ExportTemplateDialog(this);
+    exportDlg->show();
+}
+
 void View::removeView()
 {
     if (m_layout && m_layout->viewsCount() > 1) {
@@ -512,10 +526,19 @@ void View::showConfigurationInterface(Plasma::Applet *applet)
     if (c && containment() && c->isContainment() && c->id() == containment()->id()) {
         m_primaryConfigView = m_corona->viewSettingsFactory()->primaryConfigView(this);
         applyActivitiesToWindows();
-    } else {       
+    } else {
         m_appletConfigView = new PlasmaQuick::ConfigView(applet);
         m_appletConfigView.data()->init();
         m_appletConfigView->show();
+    }
+}
+
+void View::showWidgetExplorer(const QPointF &point)
+{
+    auto widgetExplorerView = m_corona->viewSettingsFactory()->widgetExplorerView(this);
+
+    if (!widgetExplorerView->isVisible()) {
+        widgetExplorerView->showAfter(250);
     }
 }
 
@@ -609,7 +632,7 @@ void View::statusChanged(Plasma::Types::ItemStatus status)
 
 void View::addTransientWindow(QWindow *window)
 {
-    if (!m_transientWindows.contains(window) && !window->title().startsWith("#debugwindow#")) {
+    if (!m_transientWindows.contains(window) && !window->flags().testFlag(Qt::ToolTip) && !window->title().startsWith("#debugwindow#")) {
         m_transientWindows.append(window);
 
         QString winPtrStr = "0x" + QString::number((qulonglong)window,16);
@@ -712,15 +735,6 @@ bool View::contextMenuIsShown() const
     return m_contextMenu->menu();
 }
 
-int View::currentThickness() const
-{
-    if (formFactor() == Plasma::Types::Vertical) {
-        return m_effects->mask().isNull() ? width() : m_effects->mask().width() - m_effects->innerShadow();
-    } else {
-        return m_effects->mask().isNull() ? height() : m_effects->mask().height() - m_effects->innerShadow();
-    }
-}
-
 int View::normalThickness() const
 {
     return m_normalThickness;
@@ -736,19 +750,19 @@ void View::setNormalThickness(int thickness)
     emit normalThicknessChanged();
 }
 
-int View::normalHighestThickness() const
+int View::maxNormalThickness() const
 {
-    return m_normalHighestThickness;
+    return m_maxNormalThickness;
 }
 
-void View::setNormalHighestThickness(int thickness)
+void View::setMaxNormalThickness(int thickness)
 {
-    if (m_normalHighestThickness == thickness) {
+    if (m_maxNormalThickness == thickness) {
         return;
     }
 
-    m_normalHighestThickness = thickness;
-    emit normalHighestThicknessChanged();
+    m_maxNormalThickness = thickness;
+    emit maxNormalThicknessChanged();
 }
 
 int View::headThicknessGap() const
@@ -906,7 +920,9 @@ int View::editThickness() const
     int ruler_height{m_fontPixelSize};
     int header_height{m_fontPixelSize + 2*smallspacing};
 
-    return m_normalHighestThickness + ruler_height + header_height + 6*smallspacing;
+    int edgeThickness = behaveAsPlasmaPanel() && screenEdgeMarginEnabled() ? m_screenEdgeMargin : 0;
+
+    return edgeThickness + m_maxNormalThickness + ruler_height + header_height + 6*smallspacing;
 }
 
 int View::maxThickness() const
@@ -1287,9 +1303,19 @@ ViewPart::ContainmentInterface *View::extendedInterface() const
     return m_interface;
 }
 
+ViewPart::Parabolic *View::parabolic() const
+{
+    return m_parabolic;
+}
+
 ViewPart::Positioner *View::positioner() const
 {
     return m_positioner;
+}
+
+ViewPart::EventsSink *View::sink() const
+{
+    return m_sink;
 }
 
 ViewPart::VisibilityManager *View::visibility() const
@@ -1328,8 +1354,12 @@ void View::setInterfacesGraphicObj(Latte::Interfaces *ifaces)
 
 bool View::event(QEvent *e)
 {   
+    QEvent *sunkevent = e;
+
     if (!m_inDelete) {
         emit eventTriggered(e);
+
+        bool sinkableevent{false};
 
         switch (e->type()) {
         case QEvent::Enter:
@@ -1339,30 +1369,45 @@ bool View::event(QEvent *e)
         case QEvent::Leave:
             m_containsMouse = false;
             setContainsDrag(false);
+            sinkableevent = true;
             break;
 
         case QEvent::DragEnter:
             setContainsDrag(true);
+            sinkableevent = true;
             break;
 
         case QEvent::DragLeave:
-        case QEvent::Drop:
             setContainsDrag(false);
             break;
 
+        case QEvent::DragMove:
+            sinkableevent = true;
+            break;
+
+        case QEvent::Drop:
+            setContainsDrag(false);
+            sinkableevent = true;
+            break;
+
+        case QEvent::MouseMove:
+            sinkableevent = true;
+            break;
+
         case QEvent::MouseButtonPress:
-            if (auto mouseEvent = dynamic_cast<QMouseEvent *>(e)) {
-                emit mousePressed(mouseEvent->pos(), mouseEvent->button());
+            if (auto me = dynamic_cast<QMouseEvent *>(e)) {
+                emit mousePressed(me->pos(), me->button());
+                sinkableevent = true;
             }
             break;
+
         case QEvent::MouseButtonRelease:
-            if (auto mouseEvent = dynamic_cast<QMouseEvent *>(e)) {
-                emit mouseReleased(mouseEvent->pos(), mouseEvent->button());
+            if (auto me = dynamic_cast<QMouseEvent *>(e)) {
+                emit mouseReleased(me->pos(), me->button());
+                sinkableevent = true;
             }
             break;
-            /* case QEvent::DragMove:
-            qDebug() << "DRAG MOVING>>>>>>";
-            break;*/
+
         case QEvent::PlatformSurface:
             if (auto pe = dynamic_cast<QPlatformSurfaceEvent *>(e)) {
                 switch (pe->surfaceEventType()) {
@@ -1398,21 +1443,27 @@ bool View::event(QEvent *e)
             break;
 
         case QEvent::Wheel:
-            if (auto wheelEvent = dynamic_cast<QWheelEvent *>(e)) {
+            if (auto we = dynamic_cast<QWheelEvent *>(e)) {
 #if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-                QPoint position = QPoint(wheelEvent->x(), wheelEvent->y());
+                QPoint pos = QPoint(we->x(), we->y());
 #else
-                QPoint position = wheelEvent->position().toPoint();
+                QPoint pos = we->position().toPoint();
 #endif
-                emit wheelScrolled(position, wheelEvent->angleDelta(), wheelEvent->buttons());
+                emit wheelScrolled(pos, we->angleDelta(), we->buttons());
+
+                sinkableevent = true;
             }
             break;
         default:
             break;
         }
+
+        if (sinkableevent && m_sink->isActive()) {
+            sunkevent = m_sink->onEvent(e);
+        }
     }
 
-    return ContainmentView::event(e);
+    return ContainmentView::event(sunkevent);
 }
 
 void View::releaseConfigView()
@@ -1446,9 +1497,14 @@ void View::releaseGrab()
     QCoreApplication::instance()->sendEvent(this, &e);
 }
 
-QVariantList View::containmentActions()
+QVariantList View::containmentActions() const
 {
     QVariantList actions;
+
+    if (!containment()) {
+        return actions;
+    }
+
     /*if (containment()->corona()->immutability() != Plasma::Types::Mutable) {
         return actions;
     }*/

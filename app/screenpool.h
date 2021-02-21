@@ -20,6 +20,9 @@
 #ifndef SCREENPOOL_H
 #define SCREENPOOL_H
 
+// local
+#include "data/screendata.h"
+
 // Qt
 #include <QObject>
 #include <QHash>
@@ -43,26 +46,18 @@ public:
     void load();
     ~ScreenPool() override;
 
-    bool hasId(int id) const;
-    bool screenExists(int id) const;
+    bool hasScreenId(int screenId) const;
+    bool isScreenActive(int screenId) const;
     int primaryScreenId() const;
 
-    QString primaryConnector() const;
-    void setPrimaryConnector(const QString &primary);
-
-    void insertScreenMapping(int id, const QString &connector);
+    void insertScreenMapping(const QString &connector);
     void reload(QString path);
 
     int id(const QString &connector) const;
 
     QString connector(int id) const;
 
-    int firstAvailableId() const;
-
     QString reportHtml(const QList<int> &assignedScreens) const;
-
-    //all ids that are known, included screens not enabled at the moment
-    QList <int> knownIds() const;
 
     QScreen *screenForId(int id);
 
@@ -72,14 +67,23 @@ signals:
 protected:
     bool nativeEventFilter(const QByteArray &eventType, void *message, long *result) Q_DECL_OVERRIDE;
 
+    int firstAvailableId() const;
+
+private slots:
+    void updateScreenGeometry(const QScreen *screen);
+    void onScreenAdded(const QScreen *screen);
+    void onScreenRemoved(const QScreen *screen);
+
 private:
     void save();
+    void updateScreenGeometry(const int &screenId, const QRect &screenGeometry);
+
+private:
+    Latte::Data::ScreensTable m_screensTable;
 
     KConfigGroup m_configGroup;
-    QString m_primaryConnector;
-    //order is important
-    QMap<int, QString> m_connectorForId;
-    QHash<QString, int> m_idForConnector;
+    //! used to workaround a bug under X11 when primary screen changes and no screenChanged signal is emitted
+    QString m_lastPrimaryConnector;
 
     QTimer m_configSaveTimer;
 };

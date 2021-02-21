@@ -25,7 +25,9 @@
 #include <coretypes.h>
 #include "containmentinterface.h"
 #include "effects.h"
+#include "parabolic.h"
 #include "positioner.h"
+#include "eventssink.h"
 #include "visibilitymanager.h"
 #include "indicator/indicator.h"
 #include "settings/primaryconfigview.h"
@@ -108,7 +110,7 @@ class View : public PlasmaQuick::ContainmentView
     Q_PROPERTY(int editThickness READ editThickness NOTIFY editThicknessChanged)
     Q_PROPERTY(int maxThickness READ maxThickness WRITE setMaxThickness NOTIFY maxThicknessChanged)
     Q_PROPERTY(int normalThickness READ normalThickness WRITE setNormalThickness NOTIFY normalThicknessChanged)
-    Q_PROPERTY(int normalHighestThickness READ normalHighestThickness WRITE setNormalHighestThickness NOTIFY normalHighestThicknessChanged)
+    Q_PROPERTY(int maxNormalThickness READ maxNormalThickness WRITE setMaxNormalThickness NOTIFY maxNormalThicknessChanged)
     Q_PROPERTY(int headThicknessGap READ headThicknessGap WRITE setHeadThicknessGap NOTIFY headThicknessGapChanged)
     Q_PROPERTY(int screenEdgeMargin READ screenEdgeMargin WRITE setScreenEdgeMargin NOTIFY screenEdgeMarginChanged)
 
@@ -117,11 +119,15 @@ class View : public PlasmaQuick::ContainmentView
 
     Q_PROPERTY(QQuickItem *colorizer READ colorizer WRITE setColorizer NOTIFY colorizerChanged)
 
+    Q_PROPERTY(QVariantList containmentActions READ containmentActions NOTIFY containmentActionsChanged)
+
     Q_PROPERTY(Latte::Layout::GenericLayout *layout READ layout WRITE setLayout NOTIFY layoutChanged)
     Q_PROPERTY(Latte::ViewPart::Effects *effects READ effects NOTIFY effectsChanged)
     Q_PROPERTY(Latte::ViewPart::ContainmentInterface *extendedInterface READ extendedInterface NOTIFY extendedInterfaceChanged)
     Q_PROPERTY(Latte::ViewPart::Indicator *indicator READ indicator NOTIFY indicatorChanged)
+    Q_PROPERTY(Latte::ViewPart::Parabolic *parabolic READ parabolic NOTIFY parabolicChanged)
     Q_PROPERTY(Latte::ViewPart::Positioner *positioner READ positioner NOTIFY positionerChanged)
+    Q_PROPERTY(Latte::ViewPart::EventsSink *sink READ sink NOTIFY sinkChanged)
     Q_PROPERTY(Latte::ViewPart::VisibilityManager *visibility READ visibility NOTIFY visibilityChanged)
     Q_PROPERTY(Latte::ViewPart::WindowsTracker *windowsTracker READ windowsTracker NOTIFY windowsTrackerChanged)
 
@@ -148,8 +154,6 @@ public:
 
     bool onPrimary() const;
     void setOnPrimary(bool flag);
-
-    int currentThickness() const;
 
     bool behaveAsPlasmaPanel() const;
     void setBehaveAsPlasmaPanel(bool behavior);
@@ -191,8 +195,8 @@ public:
     int normalThickness() const;
     void setNormalThickness(int thickness);
 
-    int normalHighestThickness() const;
-    void setNormalHighestThickness(int thickness);
+    int maxNormalThickness() const;
+    void setMaxNormalThickness(int thickness);
 
     int headThicknessGap() const;
     void setHeadThicknessGap(int thickness);
@@ -229,13 +233,17 @@ public:
     QQuickItem *colorizer() const;
     void setColorizer(QQuickItem *colorizer);
 
+    QVariantList containmentActions() const;
+
     QQuickView *configView();
 
     ViewPart::Effects *effects() const;   
     ViewPart::ContextMenu *contextMenu() const;
     ViewPart::ContainmentInterface *extendedInterface() const;
     ViewPart::Indicator *indicator() const;
+    ViewPart::Parabolic *parabolic() const;
     ViewPart::Positioner *positioner() const;
+    ViewPart::EventsSink *sink() const;
     ViewPart::VisibilityManager *visibility() const;
     ViewPart::WindowsTracker *windowsTracker() const;
 
@@ -261,9 +269,8 @@ public:
 
 public slots:
     Q_INVOKABLE void copyView();
+    Q_INVOKABLE void exportTemplate();
     Q_INVOKABLE void removeView();
-
-    Q_INVOKABLE QVariantList containmentActions();
 
     Q_INVOKABLE void moveToLayout(QString layoutName);
 
@@ -275,6 +282,7 @@ public slots:
 
 protected slots:
     void showConfigurationInterface(Plasma::Applet *applet) override;
+    void showWidgetExplorer(const QPointF &point);
 
 protected:
     bool event(QEvent *ev) override;
@@ -293,6 +301,7 @@ signals:
     void byPassWMChanged();
     void colorizerChanged();
     void configWindowGeometryChanged(); // is called from config windows
+    void containmentActionsChanged();
     void containsDragChanged();
     void contextMenuIsShownChanged();
     void dockLocationChanged();
@@ -316,13 +325,15 @@ signals:
     void maxLengthChanged();
     void maxThicknessChanged();
     void normalThicknessChanged();
-    void normalHighestThicknessChanged();
+    void maxNormalThicknessChanged();
     void offsetChanged();
     void onPrimaryChanged();
+    void parabolicChanged();
     void positionerChanged();
     void screenEdgeMarginChanged();
     void screenEdgeMarginEnabledChanged();
     void screenGeometryChanged();
+    void sinkChanged();
     void typeChanged();
     void visibilityChanged();
     void windowsTrackerChanged();
@@ -387,9 +398,9 @@ private:
     bool m_isTouchingTopViewAndIsBusy{false};
 
     int m_fontPixelSize{ -1};
-    int m_maxThickness{24};
-    int m_normalThickness{24};
-    int m_normalHighestThickness{24};
+    int m_maxThickness{256};
+    int m_normalThickness{256};
+    int m_maxNormalThickness{256};
     int m_headThicknessGap{0};
     int m_screenEdgeMargin{-1};
     float m_maxLength{1};
@@ -428,7 +439,9 @@ private:
     QPointer<ViewPart::Effects> m_effects;
     QPointer<ViewPart::Indicator> m_indicator;
     QPointer<ViewPart::ContainmentInterface> m_interface;
+    QPointer<ViewPart::Parabolic> m_parabolic;
     QPointer<ViewPart::Positioner> m_positioner;
+    QPointer<ViewPart::EventsSink> m_sink;
     QPointer<ViewPart::VisibilityManager> m_visibility;
     QPointer<ViewPart::WindowsTracker> m_windowsTracker;
 

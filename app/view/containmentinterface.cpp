@@ -35,6 +35,7 @@
 #include <PlasmaQuick/AppletQuickItem>
 
 // KDE
+#include <KDesktopFile>
 #include <KLocalizedString>
 #include <KPluginMetaData>
 
@@ -161,6 +162,22 @@ bool ContainmentInterface::isCapableToShowShortcutBadges()
     }
 
     return m_showShortcutsMethod.isValid();
+}
+
+bool ContainmentInterface::isApplication(const QUrl &url) const
+{
+    if (!url.isValid() || !url.isLocalFile()) {
+        return false;
+    }
+
+    const QString &localPath = url.toLocalFile();
+
+    if (!KDesktopFile::isDesktopFile(localPath)) {
+        return false;
+    }
+
+    KDesktopFile desktopFile(localPath);
+    return desktopFile.hasApplicationType();
 }
 
 int ContainmentInterface::applicationLauncherId() const
@@ -508,7 +525,18 @@ void ContainmentInterface::onAppletExpandedChanged()
     PlasmaQuick::AppletQuickItem *appletItem = static_cast<PlasmaQuick::AppletQuickItem *>(QObject::sender());
 
     if (appletItem) {
+        bool added{false};
+
         if (appletItem->isExpanded()) {
+            if (appletItem->switchWidth()>0 && appletItem->switchHeight()>0) {
+                added = ((appletItem->width()<=appletItem->switchWidth())
+                         && (appletItem->height()<=appletItem->switchHeight()));
+            } else {
+                added = true;
+            }
+        }
+
+        if (added) {
             addExpandedApplet(appletItem);
         } else {
             removeExpandedApplet(appletItem);
@@ -635,6 +663,72 @@ void ContainmentInterface::onAppletAdded(Plasma::Applet *applet)
 
 }
 
+void ContainmentInterface::moveAppletsInJustifyAlignment(QQuickItem *start, QQuickItem *main, QQuickItem *end)
+{
+    if (!start || !main || !end) {
+        return;
+    }
+
+    QList<QQuickItem *> appletlist;
+
+    appletlist << start->childItems();
+    appletlist << main->childItems();
+    appletlist << end->childItems();
+
+    bool firstSplitterFound{false};
+    bool secondSplitterFound{false};
+    int splitter1{-1};
+    int splitter2{-1};
+
+    for(int i=0; i<appletlist.count(); ++i) {
+        bool issplitter = appletlist[i]->property("isInternalViewSplitter").toBool();
+
+        if (!firstSplitterFound) {
+            appletlist[i]->setParentItem(start);
+            if (issplitter) {
+                firstSplitterFound = true;
+                splitter1 = i;
+            }
+        } else if (firstSplitterFound && !secondSplitterFound) {
+            if (issplitter) {
+                secondSplitterFound = true;
+                splitter2 = i;
+                appletlist[i]->setParentItem(end);
+            } else {
+                appletlist[i]->setParentItem(main);
+            }
+        } else if (firstSplitterFound && secondSplitterFound) {
+            appletlist[i]->setParentItem(end);
+        }
+    }
+
+    for(int i=0; i<appletlist.count()-1; ++i) {
+        QQuickItem *before = appletlist[i];
+        QQuickItem *after = appletlist[i+1];
+
+        if (before->parentItem() == after->parentItem()) {
+            before->stackBefore(after);
+        }
+    }
+
+    //! Confirm Last item of End Layout
+    if (end->childItems().count() > 0) {
+        QQuickItem *lastItem = end->childItems()[end->childItems().count()-1];
+
+        int correctpos{-1};
+
+        for(int i=0; i<appletlist.count()-1; ++i) {
+            if (lastItem == appletlist[i]) {
+                correctpos = i;
+                break;
+            }
+        }
+
+        if (correctpos>=0) {
+            lastItem->stackBefore(appletlist[correctpos+1]);
+        }
+    }
+}
 
 }
 }

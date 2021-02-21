@@ -28,11 +28,15 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.private.containment 0.1 as LatteContainment
 
-import "./abilities" as AbilitiesTypes
 import "../debugger" as Debugger
 
 Item{
     id: layoutsContainer
+    //! WorkAround: Do not use "visible" because when it becomes "false" the contained applets can hide/show their elements.
+    //! That approach can create a conflict with Latte Tasks that after showing the view they reshow windows
+    //! that were already shown before hiding.
+    //! visible: !(latteView && latteView.visibility.isHidden)
+    opacity: !(latteView && latteView.visibility.isHidden) ? 1 : 0
 
     readonly property bool isHidden: root.inStartup || (latteView && latteView.visibility && latteView.visibility.isHidden)
 
@@ -42,27 +46,21 @@ Item{
     readonly property alias mainLayout: _mainLayout
     readonly property alias endLayout: _endLayout
 
-    readonly property AbilitiesTypes.AbilityLayouts applets: AbilitiesTypes.AbilityLayouts{
-        startLayout: _startLayout
-        mainLayout: _mainLayout
-        endLayout: _endLayout
-    }
-
     signal contentsLengthChanged();
 
     Binding {
         target: layoutsContainer
         property: "x"
-        when: !visibilityManager.inLocationAnimation
+        when: !visibilityManager.inRelocationAnimation
         value: {
             if (root.behaveAsPlasmaPanel) {
                 return 0;
             }
 
-            if ( latteView && root.isHorizontal && root.panelAlignment === LatteCore.Types.Justify ){
+            if ( latteView && root.isHorizontal && root.myView.alignment === LatteCore.Types.Justify ){
                 return ((latteView.width/2) - (root.maxLength/2) + background.offset);
             } else {
-                if ((visibilityManager.inSlidingIn || visibilityManager.inSlidingOut) && root.isVertical){
+                if ((root.myView.inSlidingIn || root.myView.inSlidingOut) && root.isVertical){
                     return;
                 }
 
@@ -86,16 +84,16 @@ Item{
     Binding{
         target: layoutsContainer
         property: "y"
-        when: !visibilityManager.inLocationAnimation
+        when: !visibilityManager.inRelocationAnimation
         value: {
             if (root.behaveAsPlasmaPanel) {
                 return 0;
             }
 
-            if ( latteView && root.isVertical && root.panelAlignment === LatteCore.Types.Justify ) {
+            if ( latteView && root.isVertical && root.myView.alignment === LatteCore.Types.Justify ) {
                 return ((latteView.height/2) - (root.maxLength/2) + background.offset);
             } else {
-                if ((visibilityManager.inSlidingIn || visibilityManager.inSlidingOut) && root.isHorizontal){
+                if ((root.myView.inSlidingIn || root.myView.inSlidingOut) && root.isHorizontal){
                     return;
                 }
 
@@ -116,8 +114,8 @@ Item{
         }
     }
 
-    width: root.isHorizontal && root.panelAlignment === LatteCore.Types.Justify ? root.maxLength : parent.width
-    height: root.isVertical && root.panelAlignment === LatteCore.Types.Justify ? root.maxLength : parent.height
+    width: root.isHorizontal && root.myView.alignment === LatteCore.Types.Justify ? root.maxLength : parent.width
+    height: root.isVertical && root.myView.alignment === LatteCore.Types.Justify ? root.maxLength : parent.height
     z:10
 
     property bool animationSent: false
@@ -134,13 +132,13 @@ Item{
             return 0;
         }
 
-        if (root.panelAlignment === LatteCore.Types.Left) {
+        if (root.myView.alignment === LatteCore.Types.Left) {
             return background.shadows.left;
-        } else if (root.panelAlignment === LatteCore.Types.Right) {
+        } else if (root.myView.alignment === LatteCore.Types.Right) {
             return background.shadows.right;
-        } else if (root.panelAlignment === LatteCore.Types.Top) {
+        } else if (root.myView.alignment === LatteCore.Types.Top) {
             return background.shadows.top;
-        } else if (root.panelAlignment === LatteCore.Types.Bottom) {
+        } else if (root.myView.alignment === LatteCore.Types.Bottom) {
             return background.shadows.bottom;
         }
 
@@ -153,13 +151,13 @@ Item{
             return 0;
         }
 
-        if (root.panelAlignment === LatteCore.Types.Left) {
+        if (root.myView.alignment === LatteCore.Types.Left) {
             return background.shadows.right;
-        } else if (root.panelAlignment === LatteCore.Types.Right) {
+        } else if (root.myView.alignment === LatteCore.Types.Right) {
             return background.shadows.left;
-        } else if (root.panelAlignment === LatteCore.Types.Top) {
+        } else if (root.myView.alignment === LatteCore.Types.Top) {
             return background.shadows.bottom;
-        } else if (root.panelAlignment === LatteCore.Types.Bottom) {
+        } else if (root.myView.alignment === LatteCore.Types.Bottom) {
             return background.shadows.top;
         }
 
@@ -168,13 +166,13 @@ Item{
     }
 
     readonly property int backgroundTailLength: {
-        if (root.panelAlignment === LatteCore.Types.Left) {
+        if (root.myView.alignment === LatteCore.Types.Left) {
             return backgroundShadowTailLength + background.paddings.left;
-        } else if (root.panelAlignment === LatteCore.Types.Right) {
+        } else if (root.myView.alignment === LatteCore.Types.Right) {
             return backgroundShadowTailLength + background.paddings.right;
-        } else if (root.panelAlignment === LatteCore.Types.Top) {
+        } else if (root.myView.alignment === LatteCore.Types.Top) {
             return backgroundShadowTailLength + background.paddings.top;
-        } else if (root.panelAlignment === LatteCore.Types.Bottom) {
+        } else if (root.myView.alignment === LatteCore.Types.Bottom) {
             return backgroundShadowTailLength + background.paddings.bottom;
         }
 
@@ -183,13 +181,13 @@ Item{
     }
 
     readonly property int backgroundHeadLength: {
-        if (root.panelAlignment === LatteCore.Types.Left) {
+        if (root.myView.alignment === LatteCore.Types.Left) {
             return backgroundShadowHeadLength + background.paddings.right;
-        } else if (root.panelAlignment === LatteCore.Types.Right) {
+        } else if (root.myView.alignment === LatteCore.Types.Right) {
             return backgroundShadowHeadLength + background.paddings.left;
-        } else if (root.panelAlignment === LatteCore.Types.Top) {
+        } else if (root.myView.alignment === LatteCore.Types.Top) {
             return backgroundShadowHeadLength + background.paddings.bottom;
-        } else if (root.panelAlignment === LatteCore.Types.Bottom) {
+        } else if (root.myView.alignment === LatteCore.Types.Bottom) {
             return backgroundShadowHeadLength + background.paddings.top;
         }
 
@@ -276,49 +274,44 @@ Item{
         z:10 //be on top of start and end layouts
         beginIndex: 100
         offset: {
-            if (inJustifyCenterOffset!==0) {
-                return inJustifyCenterOffset;
-            }
-
             if (!centered) {
                 //! it is used for Top/Bottom/Left/Right alignments when they show both background length shadows
                 return background.offset + backgroundTailLength;
             }
 
-            return (root.panelAlignment === LatteCore.Types.Justify) ? 0 : background.offset
+            return (root.myView.alignment === LatteCore.Types.Justify) ? 0 : background.offset
         }
 
-        readonly property bool centered: (root.panelAlignment === LatteCore.Types.Center) || (root.panelAlignment === LatteCore.Types.Justify)
+        readonly property bool centered: (root.myView.alignment === LatteCore.Types.Center) || (root.myView.alignment === LatteCore.Types.Justify)
         readonly property bool reversed: Qt.application.layoutDirection === Qt.RightToLeft
 
         //! do not update during dragging/moving applets inConfigureAppletsMode
         readonly property bool offsetUpdateIsBlocked: ((root.dragOverlay && root.dragOverlay.pressed) || layouter.appletsInParentChange)
         property bool isCoveredFromBothSideLayouts: false
-        property int inJustifyCenterOffset: 0
 
         alignment: {
             if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
                 if (centered) return LatteCore.Types.LeftEdgeCenterAlign;
-                if (root.panelAlignment === LatteCore.Types.Top) return LatteCore.Types.LeftEdgeTopAlign;
-                if (root.panelAlignment === LatteCore.Types.Bottom) return LatteCore.Types.LeftEdgeBottomAlign;
+                if (root.myView.alignment === LatteCore.Types.Top) return LatteCore.Types.LeftEdgeTopAlign;
+                if (root.myView.alignment === LatteCore.Types.Bottom) return LatteCore.Types.LeftEdgeBottomAlign;
             }
 
             if (plasmoid.location === PlasmaCore.Types.RightEdge) {
                 if (centered) return LatteCore.Types.RightEdgeCenterAlign;
-                if (root.panelAlignment === LatteCore.Types.Top) return LatteCore.Types.RightEdgeTopAlign;
-                if (root.panelAlignment === LatteCore.Types.Bottom) return LatteCore.Types.RightEdgeBottomAlign;
+                if (root.myView.alignment === LatteCore.Types.Top) return LatteCore.Types.RightEdgeTopAlign;
+                if (root.myView.alignment === LatteCore.Types.Bottom) return LatteCore.Types.RightEdgeBottomAlign;
             }
 
             if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
                 if (centered) return LatteCore.Types.BottomEdgeCenterAlign;
 
-                if ((root.panelAlignment === LatteCore.Types.Left && !reversed)
-                        || (root.panelAlignment === LatteCore.Types.Right && reversed)) {
+                if ((root.myView.alignment === LatteCore.Types.Left && !reversed)
+                        || (root.myView.alignment === LatteCore.Types.Right && reversed)) {
                     return LatteCore.Types.BottomEdgeLeftAlign;
                 }
 
-                if ((root.panelAlignment === LatteCore.Types.Right && !reversed)
-                        || (root.panelAlignment === LatteCore.Types.Left && reversed)) {
+                if ((root.myView.alignment === LatteCore.Types.Right && !reversed)
+                        || (root.myView.alignment === LatteCore.Types.Left && reversed)) {
                     return LatteCore.Types.BottomEdgeRightAlign;
                 }
             }
@@ -326,13 +319,13 @@ Item{
             if (plasmoid.location === PlasmaCore.Types.TopEdge) {
                 if (centered) return LatteCore.Types.TopEdgeCenterAlign;
 
-                if ((root.panelAlignment === LatteCore.Types.Left && !reversed)
-                        || (root.panelAlignment === LatteCore.Types.Right && reversed)) {
+                if ((root.myView.alignment === LatteCore.Types.Left && !reversed)
+                        || (root.myView.alignment === LatteCore.Types.Right && reversed)) {
                     return LatteCore.Types.TopEdgeLeftAlign;
                 }
 
-                if ((root.panelAlignment === LatteCore.Types.Right && !reversed)
-                        || (root.panelAlignment === LatteCore.Types.Left && reversed)) {
+                if ((root.myView.alignment === LatteCore.Types.Right && !reversed)
+                        || (root.myView.alignment === LatteCore.Types.Left && reversed)) {
                     return LatteCore.Types.TopEdgeRightAlign;
                 }
             }
@@ -361,39 +354,6 @@ Item{
 
                 //! start and end layouts length exceed the maximum length
                 return (startLayout.length + endLayout.length) > (root.maxLength);
-            }
-        }
-
-        Binding{
-            target: _mainLayout
-            property:"inJustifyCenterOffset"
-            when: !_mainLayout.offsetUpdateIsBlocked && layouter.inNormalFillCalculationsState
-            value: {
-                if (root.panelAlignment !== LatteCore.Types.Justify) {
-                    return 0;
-                }
-
-                var layoutMaxLength = root.maxLength / 2;
-                var sideLayoutMaxLength = layoutMaxLength - mainLayout.length/2;
-
-                if (_mainLayout.isCoveredFromBothSideLayouts && root.inConfigureAppletsMode) {
-                    return sideLayoutMaxLength;
-                }
-
-                if (startLayout.length > sideLayoutMaxLength) {
-                    return (startLayout.length - sideLayoutMaxLength);
-                } else if (endLayout.length > sideLayoutMaxLength) {
-                    return -(endLayout.length - sideLayoutMaxLength);
-                }
-
-                return 0;
-            }
-        }
-
-        Behavior on inJustifyCenterOffset {
-            NumberAnimation {
-                duration: 0.8 * animations.duration.proposed
-                easing.type: Easing.OutCubic
             }
         }
     }
@@ -476,7 +436,7 @@ Item{
             readonly property int layoutLength: root.isHorizontal ? debugLayout.grid.width : debugLayout.grid.height
 
             readonly property string tagText: {
-                return "normal:" + debugLayout.shownApplets + " / fill:" + debugLayout.fillApplets + " / reg_len:" + debugLayout.sizeWithNoFillApplets + " / tot_len:"+layoutLength + " / off:" + _mainLayout.inJustifyCenterOffset;
+                return "normal:" + debugLayout.shownApplets + " / fill:" + debugLayout.fillApplets + " / reg_len:" + debugLayout.sizeWithNoFillApplets + " / tot_len:"+layoutLength;
             }
         }
     }

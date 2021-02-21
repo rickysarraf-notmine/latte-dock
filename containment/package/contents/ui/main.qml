@@ -28,6 +28,8 @@ import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.kquickcontrolsaddons 2.0
 import org.kde.plasma.plasmoid 2.0
 
+import org.kde.latte.abilities.host 0.1 as AbilityHost
+
 import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.components 1.0 as LatteComponents
 import org.kde.latte.private.app 0.1 as LatteApp
@@ -37,7 +39,6 @@ import "abilities" as Ability
 import "applet" as Applet
 import "colorizer" as Colorizer
 import "editmode" as EditMode
-import "indicators" as Indicators
 import "layouts" as Layouts
 import "./background" as Background
 import "./debugger" as Debugger
@@ -64,23 +65,8 @@ Item {
     readonly property int version: LatteCore.Environment.makeVersion(0,9,75)
     readonly property bool kirigamiLibraryIsFound: LatteCore.Environment.frameworksVersion >= LatteCore.Environment.makeVersion(5,69,0)
 
-    property bool addLaunchersMessage: false
-    property bool addLaunchersInTaskManager: plasmoid.configuration.addLaunchersInTaskManager
-                                             && latteView
-                                             && (latteView.extendedInterface.latteTasksModel.count === 1)
-                                             && (latteView.extendedInterface.plasmaTasksModel.count === 0)
-
     property bool backgroundOnlyOnMaximized: plasmoid.configuration.backgroundOnlyOnMaximized
-    property bool behaveAsPlasmaPanel: {
-        if (!LatteCore.WindowSystem.compositingActive) {
-            //! In NOCOMPOSITING mode VIEWS are ALWAYS using mask techniques because
-            //! this is what works much better. In the future that might change.
-            return false;
-        }
-
-        return viewType === LatteCore.Types.PanelView;
-    }
-
+    readonly property bool behaveAsPlasmaPanel: viewType === LatteCore.Types.PanelView
     readonly property bool behaveAsDockWithMask: !behaveAsPlasmaPanel
 
     readonly property bool viewIsAvailable: latteView && latteView.visibility && latteView.effects
@@ -112,7 +98,7 @@ Item {
         var staticLayout = (plasmoid.configuration.minLength === plasmoid.configuration.maxLength);
 
         if ((plasmoid.configuration.alignment === LatteCore.Types.Justify || staticLayout)
-                && visibilityManager.panelIsBiggerFromIconSize
+                && background.isGreaterThanItemThickness
                 && (parabolic.factor.maxZoom === 1.0)) {
             return LatteCore.Types.PanelView;
         }
@@ -122,20 +108,15 @@ Item {
 
     property bool blurEnabled: plasmoid.configuration.blurEnabled && (!forceTransparentPanel || forcePanelForBusyBackground)
 
-    readonly property bool ignoreRegularFilesDragging: !root.editMode
-                                                       && (dragInfo.computationsAreValid || foreDropArea.dragInfo.computationsAreValid)
-                                                       && !root.dragInfo.isPlasmoid
-                                                       && !root.dragInfo.onlyLaunchers
-    readonly property Item dragInfo: Item {
-        property bool entered: backDropArea.dragInfo.entered || foreDropArea.dragInfo.entered
-        property bool isTask: backDropArea.dragInfo.isTask || foreDropArea.dragInfo.isTask
-        property bool isPlasmoid: backDropArea.dragInfo.isPlasmoid || foreDropArea.dragInfo.isPlasmoid
-        property bool isSeparator: backDropArea.dragInfo.isSeparator || foreDropArea.dragInfo.isSeparator
-        property bool isLatteTasks: backDropArea.dragInfo.isLatteTasks || foreDropArea.dragInfo.isLatteTasks
-        property bool onlyLaunchers: backDropArea.dragInfo.onlyLaunchers || foreDropArea.dragInfo.onlyLaunchers
+    readonly property bool inDraggingOverAppletOrOutOfContainment: latteView && latteView.containsDrag && !backDropArea.containsDrag
 
-        //  onIsPlasmoidChanged: console.log("isPlasmoid :: " + backDropArea.dragInfo.isPlasmoid + " _ " + foreDropArea.dragInfo.isPlasmoid );
-        //  onEnteredChanged: console.log("entered :: " + backDropArea.dragInfo.entered + " _ " + foreDropArea.dragInfo.entered );
+    readonly property Item dragInfo: Item {
+        property bool entered: backDropArea.dragInfo.entered
+        property bool isTask: backDropArea.dragInfo.isTask
+        property bool isPlasmoid: backDropArea.dragInfo.isPlasmoid
+        property bool isSeparator: backDropArea.dragInfo.isSeparator
+        property bool isLatteTasks: backDropArea.dragInfo.isLatteTasks
+        property bool onlyLaunchers: backDropArea.dragInfo.onlyLaunchers
     }
 
     property bool containsOnlyPlasmaTasks: latteView ? latteView.extendedInterface.hasPlasmaTasks && !latteView.extendedInterface.hasLatteTasks : false
@@ -198,6 +179,11 @@ Item {
 
     property bool hideLengthScreenGaps: false /*set through binding*/
 
+    property bool mirrorScreenGap: screenEdgeMarginEnabled
+                                   && plasmoid.configuration.floatingGapIsMirrored
+                                   && latteView.visibility.mode === LatteCore.Types.AlwaysVisible
+
+
 
     property int themeColors: plasmoid.configuration.themeColors
     property int windowColors: plasmoid.configuration.windowColors
@@ -212,22 +198,16 @@ Item {
 
     readonly property bool inConfigureAppletsMode: root.editMode && plasmoid.configuration.inConfigureAppletsMode
 
-    property bool dockIsShownCompletely: !(dockIsHidden || inSlidingIn || inSlidingOut)
     property bool closeActiveWindowEnabled: plasmoid.configuration.closeActiveWindowEnabled
     property bool dragActiveWindowEnabled: plasmoid.configuration.dragActiveWindowEnabled
     property bool immutable: plasmoid.immutable
     property bool inFullJustify: (plasmoid.configuration.alignment === LatteCore.Types.Justify) && (maxLengthPerCentage===100)
-    property bool inSlidingIn: visibilityManager ? visibilityManager.inSlidingIn : false
-    property bool inSlidingOut: visibilityManager ? visibilityManager.inSlidingOut : false
     property bool inStartup: true
-    property bool isHalfShown: false //is used to disable the zoom hovering effect at sliding in-out the dock
     property bool isHorizontal: plasmoid.formFactor === PlasmaCore.Types.Horizontal
-    property bool isReady: !(dockIsHidden || inSlidingIn || inSlidingOut)
     property bool isVertical: !isHorizontal
 
     property bool mouseWheelActions: plasmoid.configuration.mouseWheelActions
     property bool onlyAddingStarup: true //is used for the initialization phase in startup where there aren't removals, this variable provides a way to grow icon size
-    property bool shrinkThickMargins: plasmoid.configuration.shrinkThickMargins
 
     //FIXME: possibly this is going to be the default behavior, this user choice
     //has been dropped from the Dock Configuration Window
@@ -244,12 +224,11 @@ Item {
     readonly property int minAppletLengthInConfigure: 16
     readonly property int maxJustifySplitterSize: 64
 
-    property int latteAppletPos: -1
     property real minLengthPerCentage: plasmoid.configuration.minLength
     property real maxLengthPerCentage: hideLengthScreenGaps ? 100 : plasmoid.configuration.maxLength
 
     property int minLength: {
-        if (root.panelAlignment === LatteCore.Types.Justify) {
+        if (myView.alignment === LatteCore.Types.Justify) {
             return maxLength;
         }
 
@@ -271,8 +250,7 @@ Item {
     property int scrollAction: plasmoid.configuration.scrollAction
 
     property bool panelOutline: plasmoid.configuration.panelOutline
-    property int panelEdgeSpacing: Math.max(background.lengthMargins, 1.5*appShadowSize)
-    property int panelTransparency: plasmoid.configuration.panelTransparency //user set
+    property int panelEdgeSpacing: Math.max(background.lengthMargins, 1.5*myView.itemShadow.size)
 
     property bool backgroundShadowsInRegularStateEnabled: LatteCore.WindowSystem.compositingActive
                                                           && userShowPanelBackground
@@ -296,7 +274,7 @@ Item {
 
         var transparencyCheck = (blurEnabled || (!blurEnabled && background.currentOpacity>20));
 
-        //! Draw shadows for isBusy state only when current panelTransparency is greater than 10%
+        //! Draw shadows for isBusy state only when current background opacity is greater than 10%
         if (plasmoid.configuration.panelShadows && root.forcePanelForBusyBackground && transparencyCheck) {
             return true;
         }
@@ -313,25 +291,6 @@ Item {
 
         return false;
     }
-
-    property int appShadowOpacity: (plasmoid.configuration.shadowOpacity/100) * 255
-    property int appShadowSize: enableShadows ? (0.5*metrics.iconSize) * (plasmoid.configuration.shadowSize/100) : 0
-    property int appShadowSizeOriginal: enableShadows ? (0.5*metrics.maxIconSize) * (plasmoid.configuration.shadowSize/100) : 0
-
-    property string appChosenShadowColor: {
-        if (plasmoid.configuration.shadowColorType === LatteContainment.Types.ThemeColorShadow) {
-            var strC = String(theme.textColor);
-            return strC.indexOf("#") === 0 ? strC.substr(1) : strC;
-        } else if (plasmoid.configuration.shadowColorType === LatteContainment.Types.UserColorShadow) {
-            return plasmoid.configuration.shadowColor;
-        }
-
-        // default shadow color
-        return "080808";
-    }
-
-    property string appShadowColor: "#" + decimalToHex(appShadowOpacity) + appChosenShadowColor
-    property string appShadowColorSolid: "#" + appChosenShadowColor
 
     property int offset: {
         if (behaveAsPlasmaPanel) {
@@ -355,31 +314,29 @@ Item {
         }
     }
 
-    property bool screenEdgeMarginEnabled: plasmoid.configuration.screenEdgeMargin >= 0 && !plasmoid.configuration.shrinkThickMargins
+    property bool screenEdgeMarginEnabled: plasmoid.configuration.screenEdgeMargin >= 0
 
     property int widthMargins: root.isVertical ? metrics.totals.thicknessEdges : metrics.totals.lengthEdges
     property int heightMargins: root.isHorizontal ? metrics.totals.thicknessEdges : metrics.totals.lengthEdges
-
-    property int panelAlignment: plasmoid.configuration.alignment
-
-    readonly property string plasmoidName: "org.kde.latte.plasmoid"
 
     property var iconsArray: [16, 22, 32, 48, 64, 96, 128, 256]
 
     property Item dragOverlay: _dragOverlay
     property Item toolBox
-    property Item latteAppletContainer
-    property Item latteApplet
 
     readonly property alias animations: _animations
     readonly property alias autosize: _autosize
     readonly property alias background: _background
     readonly property alias debug: _debug
+    readonly property alias environment: _environment
     readonly property alias indexer: _indexer
-    readonly property alias indicatorsManager: indicators
+    readonly property alias indicators: _indicators
     readonly property alias layouter: _layouter
+    readonly property alias launchers: _launchers
     readonly property alias metrics: _metrics
+    readonly property alias myView: _myView
     readonly property alias parabolic: _parabolic
+    readonly property alias thinTooltip: _thinTooltip
     readonly property alias userRequests: _userRequests
 
     readonly property alias maskManager: visibilityManager
@@ -391,7 +348,6 @@ Item {
     readonly property alias themeExtended: _interfaces.themeExtended
     readonly property alias universalSettings: _interfaces.universalSettings
 
-    readonly property QtObject viewLayout: latteView && latteView.layout ? latteView.layout : null
     readonly property QtObject selectedWindowsTracker: {
         if (latteView && latteView.windowsTracker) {
             switch(plasmoid.configuration.activeWindowFilter) {
@@ -404,28 +360,6 @@ Item {
 
         return null;
     }
-
-    // TO BE DELETED, if not needed: property int counter:0;
-
-    ///BEGIN properties provided to Latte Plasmoid
-    //shadows for applets, it should be removed as the appleitems don't need it any more
-    property bool badges3DStyle: universalSettings ? universalSettings.badges3DStyle : true
-    property bool enableShadows: plasmoid.configuration.appletShadowsEnabled
-    property bool dockIsHidden: latteView && latteView.visibility ? latteView.visibility.isHidden : true
-
-    property bool titleTooltips: {
-        if (behaveAsPlasmaPanel) {
-            return false;
-        }
-
-        return plasmoid.configuration.titleTooltips;
-    }
-
-    property int tasksCount: latteApplet ? latteApplet.tasksCount : 0
-
-    property rect screenGeometry: latteView ? latteView.screenGeometry : plasmoid.screenGeometry
-    ///END properties from latteApplet
-
 
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
 
@@ -516,23 +450,26 @@ Item {
 
     //! It is used only when the user chooses different alignment types
     //! and not during startup
-    onPanelAlignmentChanged: {
-        if (!root.editMode) {
-            return;
-        }
-
-        if (root.editMode){
-            if (panelAlignment===LatteCore.Types.Justify) {
-                addInternalViewSplitters();
-                splitMainLayoutToLayouts();
-            } else {
-                joinLayoutsToMainLayout();
-                root.destroyInternalViewSplitters();
+    Connections {
+        target: myView
+        onAlignmentChanged: {
+            if (!root.editMode) {
+                return;
             }
-        }
 
-        LayoutManager.save();
-        updateIndexes();
+            if (root.editMode){
+                if (root.myView.alignment===LatteCore.Types.Justify) {
+                    root.addInternalViewSplittersInMainLayout();
+                    root.moveAppletsBasedOnJustifyAlignment();
+                } else {
+                    root.joinLayoutsToMainLayout();
+                    root.destroyInternalViewSplitters();
+                }
+            }
+
+            LayoutManager.save();
+            root.updateIndexes();
+        }
     }
 
     onLatteViewChanged: {
@@ -584,12 +521,6 @@ Item {
     onToolBoxChanged: {
         if (toolBox) {
             toolBox.visible = false;
-        }
-    }
-
-    onIsReadyChanged: {
-        if (isReady && !titleTooltipDialog.visible && titleTooltipDialog.activeItemHovered){
-            titleTooltipDialog.show(titleTooltipDialog.activeItem, titleTooltipDialog.activeItemText);
         }
     }
 
@@ -688,8 +619,6 @@ Item {
     Plasmoid.onImmutableChanged: {
         plasmoid.action("configure").visible = !plasmoid.immutable;
         plasmoid.action("configure").enabled = !plasmoid.immutable;
-
-        visibilityManager.updateMaskArea();
     }
     //////////////END OF CONNECTIONS
 
@@ -771,25 +700,37 @@ Item {
         updateIndexes();
     }
 
-    function addInternalViewSplitters(){
+    function addInternalViewSplittersInMainLayout(){
         if (internalViewSplittersCount() === 0) {
-            addInternalViewSplitter(plasmoid.configuration.splitterPosition);
-            addInternalViewSplitter(plasmoid.configuration.splitterPosition2);
+            addInternalViewSplitterInMain(plasmoid.configuration.splitterPosition);
+            addInternalViewSplitterInMain(plasmoid.configuration.splitterPosition2);
         }
     }
 
-    function addInternalViewSplitter(pos){
+    function addInternalViewSplitterInStart(pos){
+        addInternalViewSplitterInLayout(layoutsContainer.startLayout, pos);
+    }
+
+    function addInternalViewSplitterInMain(pos){
+        addInternalViewSplitterInLayout(layoutsContainer.mainLayout, pos);
+    }
+
+    function addInternalViewSplitterInEnd(pos){
+        addInternalViewSplitterInLayout(layoutsContainer.endLayout, pos);
+    }
+
+    function addInternalViewSplitterInLayout(area, pos){
         var splittersCount = internalViewSplittersCount();
         if(splittersCount<2){
-            var container = appletContainerComponent.createObject(root);
+            var splitter = appletContainerComponent.createObject(root);
 
-            container.internalSplitterId = splittersCount+1;
-            container.visible = true;
+            splitter.internalSplitterId = splittersCount+1;
+            splitter.visible = true;
 
             if(pos>=0 ){
-                LayoutManager.insertAtIndex(layoutsContainer.mainLayout, container, pos);
+                LayoutManager.insertAtIndex(area, splitter, pos);
             } else {
-                LayoutManager.insertAtIndex(layoutsContainer.mainLayout, container, Math.floor(layouter.mainLayout.count / 2));
+                LayoutManager.insertAtIndex(area, splitter, Math.floor(area.count / 2));
             }
         }
     }
@@ -845,21 +786,6 @@ Item {
         if (!expands) {
             lastSpacer.parent = layoutsContainer.mainLayout
         }
-    }
-
-    function containmentActions(){
-        return latteView.containmentActions();
-    }
-
-    function decimalToHex(d, padding) {
-        var hex = Number(d).toString(16);
-        padding = typeof (padding) === "undefined" || padding === null ? padding = 2 : padding;
-
-        while (hex.length < padding) {
-            hex = "0" + hex;
-        }
-
-        return hex;
     }
 
     function internalViewSplittersCount(){
@@ -943,18 +869,6 @@ Item {
         return false;
     }
 
-    function mouseInHoverableArea() {
-        return (latteView.visibility.containsMouse && !rootMouseArea.containsMouse && mouseInCanBeHoveredApplet());
-    }
-
-    function hideTooltipLabel(debug){
-        titleTooltipDialog.hide(debug);
-    }
-
-    function showTooltipLabel(taskItem, text){
-        titleTooltipDialog.show(taskItem, text);
-    }
-
     function sizeIsFromAutomaticMode(size){
 
         for(var i=iconsArray.length-1; i>=0; --i){
@@ -966,108 +880,16 @@ Item {
         return false;
     }
 
-    function slotPreviewsShown(){
-        if (latteView) {
-            latteView.extendedInterface.deactivateApplets();
-        }
-    }
-
-    function layoutManagerMoveAppletsBasedOnJustifyAlignment() {
-        if (plasmoid.configuration.alignment !== 10) {
-            return;
-        }
+    function moveAppletsBasedOnJustifyAlignment() {
         layouter.appletsInParentChange = true;
 
-        var splitter = -1;
-        var startChildrenLength = layoutsContainer.startLayout.children.length;
-
-        //! Check if there is a splitter inside start layout after the user was dragging its applets
-        for (var i=0; i<startChildrenLength; ++i) {
-            var item = layoutsContainer.startLayout.children[i];
-            if(item.isInternalViewSplitter) {
-                splitter = i;
-                break;
-            }
+        if (latteView) {
+            latteView.extendedInterface.moveAppletsInJustifyAlignment(layoutsContainer.startLayout,
+                                                                      layoutsContainer.mainLayout,
+                                                                      layoutsContainer.endLayout);
         }
-
-        //! If a splitter was found inside the startlayout move the head applets after splitter as tail
-        //! applets of mainlayout
-        if (splitter>=0) {
-            for (var i=startChildrenLength-1; i>=splitter; --i){
-                var item = layoutsContainer.startLayout.children[i];
-                LayoutManager.insertAtIndex(layoutsContainer.mainLayout, item, 0);
-            }
-        }
-
-        var splitter2 = -1;
-        var endChildrenLength = layoutsContainer.endLayout.children.length;
-
-        //! Check if there is a splitter inside endlayout after the user was dragging its applets
-        for (var i=0; i<endChildrenLength; ++i) {
-            var item = layoutsContainer.endLayout.children[i];
-            if(item.isInternalViewSplitter) {
-                splitter2 = i;
-                break;
-            }
-        }
-
-        //! If a splitter was found inside the endlayout move the tail applets until splitter as head
-        //! applets of mainlayout
-        if (splitter2>=0) {
-            for (var i=0; i<=splitter2; ++i){
-                var item = layoutsContainer.endLayout.children[0];
-                item.parent = layoutsContainer.mainLayout;
-            }
-        }
-
-        //! Validate applets positioning and move applets out of splitters to start/endlayouts accordingly
-        splitMainLayoutToLayouts();
 
         layouter.appletsInParentChange = false;
-    }
-
-    function splitMainLayoutToLayouts() {
-        if (internalViewSplittersCount() === 2) {
-            layouter.appletsInParentChange = true;
-
-            console.log("LAYOUTS: Moving applets from MAIN to THREE Layouts mode...");
-            var splitter = -1;
-            var splitter2 = -1;
-
-            var totalChildren = layoutsContainer.mainLayout.children.length;
-            for (var i=0; i<totalChildren; ++i) {
-                var item = layoutsContainer.mainLayout.children[i];
-
-                if(item.isInternalViewSplitter && splitter === -1) {
-                    splitter = i;
-                } else if (item.isInternalViewSplitter && splitter>=0 && splitter2 === -1) {
-                    splitter2 = i;
-                }
-            }
-
-            // console.log("update layouts 1:"+splitter + " - "+splitter2);
-
-            if (splitter > 0) {
-                for (var i=0; i<splitter; ++i){
-                    var item = layoutsContainer.mainLayout.children[0];
-                    item.parent = layoutsContainer.startLayout;
-                }
-            }
-
-            if (splitter2 > 0) {
-                splitter2 = splitter2 - splitter;
-                // console.log("update layouts 2:"+splitter + " - "+splitter2);
-
-                totalChildren = layoutsContainer.mainLayout.children.length;
-
-                for (var i=totalChildren-1; i>=splitter2+1; --i){
-                    var item = layoutsContainer.mainLayout.children[i];
-                    LayoutManager.insertAtIndex(layoutsContainer.endLayout, item, 0);
-                }
-            }
-
-            layouter.appletsInParentChange = false;
-        }
     }
 
     function joinLayoutsToMainLayout() {
@@ -1105,167 +927,25 @@ Item {
     }
     //END functions
 
-
-    ////BEGIN interfaces
-
-    Connections {
-        target: LatteCore.WindowSystem
-
-        onCompositingActiveChanged: {
-            visibilityManager.updateMaskArea();
-        }
-    }
-
-    ////END interfaces
-
-    /////BEGIN: Title Tooltip///////////
-    PlasmaCore.Dialog{
-        id: titleTooltipDialog
-
-        type: PlasmaCore.Dialog.Tooltip
-        flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
-
-        location: plasmoid.location
-        mainItem: RowLayout{
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            PlasmaComponents.Label{
-                id:titleLbl
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                Layout.topMargin: 2
-                Layout.bottomMargin: 2
-                text: titleTooltipDialog.title
-            }
-        }
-
-        visible: false
-
-        property string title: ""
-
-        property bool activeItemHovered: false
-        property Item activeItem: null
-        property Item activeItemTooltipParent: null
-        property string activeItemText: ""
-
-
-        Component.onCompleted: {
-            parabolic.sglClearZoom.connect(titleTooltipDialog.hide);
-        }
-
-        Component.onDestruction: {
-            parabolic.sglClearZoom.disconnect(titleTooltipDialog.hide);
-        }
-
-        function hide(debug){
-            if (!root.titleTooltips)
-                return;
-
-            activeItemHovered = false;
-            hideTitleTooltipTimer.start();
-        }
-
-        function show(taskItem, text){
-            if (!root.titleTooltips || (latteApplet && latteApplet.contextMenu)){
-                return;
-            }
-
-            activeItemHovered = true;
-
-            if (activeItem !== taskItem) {
-                activeItem = taskItem;
-                activeItemTooltipParent = taskItem.tooltipVisualParent;
-                activeItemText = text;
-            }
-
-            if (isReady) {
-                showTitleTooltipTimer.start();
-            }
-
-        }
-
-        function update() {
-            activeItemHovered = true
-            title = activeItemText;
-            visualParent = activeItemTooltipParent;
-            if (latteApplet && latteApplet.windowPreviewIsShown) {
-                latteApplet.hidePreview();
-            }
-
-            visible = true;
-        }
-    }
-
-    Timer {
-        id: showTitleTooltipTimer
-        interval: 100
-        onTriggered: {
-            if (latteView && latteView.visibility && latteView.visibility.containsMouse) {
-                titleTooltipDialog.update();
-            }
-
-            if (titleTooltipDialog.visible) {
-                titleTooltipCheckerToNotShowTimer.start();
-            }
-
-            if (debug.timersEnabled) {
-                console.log("containment timer: showTitleTooltipTimer called...");
-            }
-        }
-    }
-
-    Timer {
-        id: hideTitleTooltipTimer
-        interval: 200
-        onTriggered: {
-            if (!titleTooltipDialog.activeItemHovered) {
-                titleTooltipDialog.visible = false;
-            }
-
-            if (debug.timersEnabled) {
-                console.log("containment timer: hideTitleTooltipTimer called...");
-            }
-
-        }
-    }
-
-    //! Timer to fix #811, rare cases that both a window preview and context menu are
-    //! shown
-    Timer {
-        id: titleTooltipCheckerToNotShowTimer
-        interval: 250
-
-        onTriggered: {
-            if (titleTooltipDialog.visible && latteApplet && (latteApplet.contextMenu || latteApplet.windowPreviewIsShown)) {
-                titleTooltipDialog.visible = false;
-            }
-        }
-    }
-    /////END: Title Tooltip///////////
-
     ///////////////BEGIN components
     Component {
         id: appletContainerComponent
         Applet.AppletItem{
             animations: _animations
             debug: _debug
+            environment: _environment
             indexer: _indexer
+            indicators: _indicators
+            launchers: _launchers
             layouter: _layouter
+            layouts: layoutsContainer
             metrics: _metrics
+            myView: _myView
             parabolic: _parabolic
             shortcuts: _shortcuts
+            thinTooltip: _thinTooltip
             userRequests: _userRequests
         }
-    }
-
-    Indicators.Manager{
-        id: indicators
-    }
-
-    Item {
-        id: graphicsSystem
-        readonly property bool isAccelerated: (GraphicsInfo.api !== GraphicsInfo.Software)
-                                              && (GraphicsInfo.api !== GraphicsInfo.Unknown)
     }
 
     Upgrader {
@@ -1280,12 +960,6 @@ Item {
 
 
     ///////////////BEGIN UI elements
-
-    //it is used to check if the mouse is outside the layoutsContainer borders,
-    //so in that case the onLeave event behavior should be trigerred
-    RootMouseArea{
-        id: rootMouseArea
-    }
 
     Loader{
         active: debug.windowEnabled
@@ -1324,15 +998,12 @@ Item {
 
     VisibilityManager{
         id: visibilityManager
-        applets: layoutsContainer.applets
+        layouts: layoutsContainer
     }
 
     DragDropArea {
         id: backDropArea
         anchors.fill: parent
-        readonly property bool higherPriority: latteView && latteView.containsDrag
-                                               && ((root.dragInfo.isPlasmoid && root.dragInfo.isSeparator)
-                                                   || (foreDropArea.dragInfo.computationsAreValid && !root.dragInfo.isPlasmoid && !root.dragInfo.onlyLaunchers))
 
         Item{
             anchors.fill: layoutsContainer
@@ -1344,19 +1015,6 @@ Item {
 
         Layouts.LayoutsContainer {
             id: layoutsContainer
-        }
-
-        DragDropArea {
-            id: foreDropArea
-            anchors.fill: parent
-            visible: !backDropArea.higherPriority
-            isForeground: true
-
-            /* Rectangle {
-                anchors.fill: parent
-                color: "blue"
-                opacity: 0.5
-            }*/
         }
     }
 
@@ -1476,9 +1134,24 @@ Item {
         id: _debug
     }
 
+    AbilityHost.Environment{
+        id: _environment
+    }
+
     Ability.Indexer {
         id: _indexer
         layouts: layoutsContainer
+    }
+
+    Ability.Indicators{
+        id: _indicators
+        view: latteView
+    }
+
+    Ability.Launchers {
+        id: _launchers
+        layouts: layoutsContainer
+        layoutName: latteView && latteView.layout ? latteView.layout.name : ""
     }
 
     Ability.Layouter {
@@ -1493,21 +1166,33 @@ Item {
         animations: _animations
         autosize: _autosize
         background: _background
-        indicators: indicatorsManager
+        indicators: _indicators
         parabolic: _parabolic
+    }
+
+    Ability.MyView {
+        id: _myView
+        layouts: layoutsContainer
     }
 
     Ability.ParabolicEffect {
         id: _parabolic
         animations: _animations
-        applets: layoutsContainer.applets
         debug: _debug
+        layouts: layoutsContainer
         view: latteView
     }
 
     Ability.PositionShortcuts {
         id: _shortcuts
         layouts: layoutsContainer
+    }
+
+    Ability.ThinTooltip {
+        id: _thinTooltip
+        debug: _debug
+        layouts: layoutsContainer
+        view: latteView
     }
 
     Ability.UserRequests {
@@ -1554,8 +1239,9 @@ Item {
         sourceComponent: Rectangle{
             x: latteView.localGeometry.x
             y: latteView.localGeometry.y
-            width: latteView.localGeometry.width
-            height: latteView.localGeometry.height
+            //! when view is resized there is a chance that geometry is faulty stacked in old values
+            width: Math.min(latteView.localGeometry.width, root.width) //! fixes updating
+            height: Math.min(latteView.localGeometry.height, root.height) //! fixes updating
 
             color: "blue"
             border.width: 2
@@ -1571,14 +1257,15 @@ Item {
         sourceComponent: Rectangle{
             x: latteView.effects.inputMask.x
             y: latteView.effects.inputMask.y
-            width: latteView.effects.inputMask.width
-            height: latteView.effects.inputMask.height
+            //! when view is resized there is a chance that geometry is faulty stacked in old values
+            width: Math.min(latteView.effects.inputMask.width, root.width) //! fixes updating
+            height: Math.min(latteView.effects.inputMask.height, root.height) //! fixes updating
 
             color: "purple"
-            border.width: 2
-            border.color: "purple"
+            border.width: 1
+            border.color: "black"
 
-            opacity: 0.35
+            opacity: 0.20
         }
     }
 }

@@ -768,16 +768,6 @@ void GenericLayout::renameLayout(QString newName)
     }
 }
 
-void GenericLayout::addNewView()
-{
-    if (!m_corona) {
-        return;
-    }
-
-    m_corona->addViewForLayout(name());
-    emit viewEdgeChanged();
-}
-
 void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimary, int explicitScreen, Layout::ViewsMap *occupied)
 {
     qDebug() << "Layout :::: " << m_layoutName << " ::: addView was called... m_containments :: " << m_containments.size();
@@ -819,12 +809,12 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
 
     Plasma::Types::Location edge = containment->location();
 
-    QString connector = m_corona->screenPool()->hasId(id) ? m_corona->screenPool()->connector(id) : "";
+    QString connector = m_corona->screenPool()->hasScreenId(id) ? m_corona->screenPool()->connector(id) : "";
 
     qDebug() << "Adding view - containment id:" << containment->id() << " ,screen :" << id << " - " << connector
              << " ,onprimary:" << onPrimary << " - "  << " edge:" << edge << " ,screenName:" << qGuiApp->primaryScreen()->name() << " ,forceOnPrimary:" << forceOnPrimary;
 
-    if (occupied && m_corona->screenPool()->hasId(id) && (*occupied).contains(connector) && (*occupied)[connector].contains(edge)) {
+    if (occupied && m_corona->screenPool()->hasScreenId(id) && (*occupied).contains(connector) && (*occupied)[connector].contains(edge)) {
         qDebug() << "Rejected : adding view because the edge is already occupied by a higher priority view ! : " << (*occupied)[connector][edge];
         return;
     }
@@ -833,7 +823,7 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
         qDebug() << "Add view - connector : " << connector;
         bool found{false};
 
-        if (m_corona->screenPool()->hasId(id)) {
+        if (m_corona->screenPool()->hasScreenId(id)) {
             for (const auto scr : qGuiApp->screens()) {
                 if (scr && scr->name() == connector) {
                     found = true;
@@ -980,6 +970,7 @@ bool GenericLayout::initToCorona(Latte::Corona *corona)
     //! signals
     connect(this, &GenericLayout::activitiesChanged, this, &GenericLayout::updateLastUsedActivity);
     connect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, &GenericLayout::updateLastUsedActivity);
+    connect(m_corona->activitiesConsumer(), &KActivities::Consumer::runningActivitiesChanged, this, &GenericLayout::updateLastUsedActivity);
 
     connect(m_corona, &Plasma::Corona::containmentAdded, this, &GenericLayout::addContainment);
 
@@ -1292,7 +1283,7 @@ Layout::ViewsMap GenericLayout::validViewsMap(Layout::ViewsMap *occupiedMap)
             if (!onPrimary) {
                 QString expScreenName = m_corona->screenPool()->connector(screenId);
 
-                if (m_corona->screenPool()->screenExists(screenId) && !map[expScreenName].contains(location)) {
+                if (m_corona->screenPool()->isScreenActive(screenId) && !map[expScreenName].contains(location)) {
                     explicitMap[expScreenName][location] << containment->id();
                 }
             }
@@ -1544,7 +1535,7 @@ QString GenericLayout::reportHtml(const ScreenPool *screenPool)
             screenStr = "<font color='green'>" + screenStr + "</font>";
         }
         if (!viewsData[i].onPrimary) {
-            if (!screenPool->hasId(viewsData[i].screenId)) {
+            if (!screenPool->hasScreenId(viewsData[i].screenId)) {
                 screenStr = "<font color='red'><i>[" + QString::number(viewsData[i].screenId) + "]</i></font>";
 
                 unknownScreens << QString("[" + QString::number(viewsData[i].screenId) + "]");
@@ -1672,6 +1663,24 @@ void GenericLayout::copyView(Plasma::Containment *containment)
     setBlockAutomaticLatteViewCreation(true);
 
     Layouts::ViewDelayedCreationData result = Layouts::Storage::self()->copyView(this, containment);
+    if (result.containment) {
+        addView(result.containment, result.forceOnPrimary, result.explicitScreen);
+
+        if (result.reactToScreenChange) {
+            result.containment->reactToScreenChange();
+        }
+    }
+
+    setBlockAutomaticLatteViewCreation(false);
+    emit viewEdgeChanged();
+}
+
+void GenericLayout::newView(const QString &templateFile)
+{
+    //! Don't create LatteView when the containment is created because we must update its screen settings first
+    setBlockAutomaticLatteViewCreation(true);
+
+    Layouts::ViewDelayedCreationData result = Layouts::Storage::self()->newView(this, templateFile);
     if (result.containment) {
         addView(result.containment, result.forceOnPrimary, result.explicitScreen);
 

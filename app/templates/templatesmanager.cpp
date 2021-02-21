@@ -23,11 +23,16 @@
 #include "../layout/abstractlayout.h"
 #include "../layout/centrallayout.h"
 #include "../layouts/importer.h"
+#include "../layouts/manager.h"
+#include "../layouts/storage.h"
+#include "../tools/commontools.h"
+#include "../view/view.h"
 
 // Qt
 #include <QDir>
 
 // KDE
+#include <KDirWatch>
 #include <KLocalizedString>
 
 namespace Latte {
@@ -37,6 +42,10 @@ Manager::Manager(Latte::Corona *corona)
     : QObject(corona),
       m_corona(corona)
 {
+    KDirWatch::self()->addDir(Latte::configPath() + "/latte/templates", KDirWatch::WatchFiles);
+    connect(KDirWatch::self(), &KDirWatch::created, this, &Manager::onCustomTemplatesCountChanged);
+    connect(KDirWatch::self(), &KDirWatch::deleted, this, &Manager::onCustomTemplatesCountChanged);
+    connect(KDirWatch::self(), &KDirWatch::dirty, this, &Manager::onCustomTemplatesCountChanged);
 }
 
 Manager::~Manager()
@@ -45,15 +54,39 @@ Manager::~Manager()
 
 void Manager::init()
 {
-    QDir systemTemplatesDir(m_corona->kPackage().filePath("templates"));
+    connect(this, &Manager::viewTemplatesChanged, m_corona->layoutsManager(), &Latte::Layouts::Manager::viewTemplatesChanged);
+
+    initLayoutTemplates();
+    initViewTemplates();
+}
+
+void Manager::initLayoutTemplates()
+{
+    m_layoutTemplates.clear();
+    initLayoutTemplates(m_corona->kPackage().filePath("templates"));
+    initLayoutTemplates(Latte::configPath() + "/latte/templates");
+    emit layoutTemplatesChanged();
+}
+
+void Manager::initViewTemplates()
+{
+    m_viewTemplates.clear();
+    initViewTemplates(m_corona->kPackage().filePath("templates"));
+    initViewTemplates(Latte::configPath() + "/latte/templates");
+    emit viewTemplatesChanged();
+}
+
+void Manager::initLayoutTemplates(const QString &path)
+{
+    QDir templatesDir(path);
     QStringList filter;
     filter.append(QString("*.layout.latte"));
-    QStringList systemLayoutTemplates = systemTemplatesDir.entryList(filter, QDir::Files | QDir::Hidden | QDir::NoSymLinks);
+    QStringList templates = templatesDir.entryList(filter, QDir::Files | QDir::Hidden | QDir::NoSymLinks);
 
-    for (int i=0; i<systemLayoutTemplates.count(); ++i) {
-        QString systemTemplatePath = systemTemplatesDir.path() + "/" + systemLayoutTemplates[i];
-        if (!m_layoutTemplates.containsId(systemTemplatePath)) {
-            CentralLayout layouttemplate(this, systemTemplatePath);
+    for (int i=0; i<templates.count(); ++i) {
+        QString templatePath = templatesDir.path() + "/" + templates[i];
+        if (!m_layoutTemplates.containsId(templatePath)) {
+            CentralLayout layouttemplate(this, templatePath);
 
             Data::Layout tdata = layouttemplate.data();
             tdata.isTemplate = true;
@@ -68,6 +101,26 @@ void Manager::init()
     }
 }
 
+void Manager::initViewTemplates(const QString &path)
+{
+    QDir templatesDir(path);
+    QStringList filter;
+    filter.append(QString("*.view.latte"));
+    QStringList templates = templatesDir.entryList(filter, QDir::Files | QDir::Hidden | QDir::NoSymLinks);
+
+    for (int i=0; i<templates.count(); ++i) {
+        QString templatePath = templatesDir.path() + "/" + templates[i];
+
+        if (!m_viewTemplates.containsId(templatePath)) {
+            Data::Generic vdata;
+            vdata.id = templatePath;
+            vdata.name = QFileInfo(templatePath).baseName();
+
+            m_viewTemplates << vdata;
+        }
+    }
+}
+
 Data::Layout Manager::layoutTemplateForName(const QString &layoutName)
 {
     if (m_layoutTemplates.containsName(layoutName)) {
@@ -78,7 +131,7 @@ Data::Layout Manager::layoutTemplateForName(const QString &layoutName)
     return Data::Layout();
 }
 
-Data::LayoutsTable Manager::systemLayoutTemplates()
+Data::LayoutsTable Manager::layoutTemplates()
 {
     Data::LayoutsTable templates;
 
@@ -96,6 +149,11 @@ Data::LayoutsTable Manager::systemLayoutTemplates()
     }
 
     return templates;
+}
+
+Data::GenericTable<Data::Generic> Manager::viewTemplates()
+{
+    return m_viewTemplates;
 }
 
 QString Manager::newLayout(QString layoutName, QString layoutTemplate)
@@ -121,6 +179,27 @@ QString Manager::newLayout(QString layoutName, QString layoutTemplate)
     return newLayoutPath;
 }
 
+bool Manager::exportTemplate(const QString &originFile, const QString &destinationFile, const Data::AppletsTable &approvedApplets)
+{
+    return Latte::Layouts::Storage::self()->exportTemplate(originFile, destinationFile, approvedApplets);
+}
+
+bool Manager::exportTemplate(const Latte::View *view, const QString &destinationFile, const Data::AppletsTable &approvedApplets)
+{
+    return Latte::Layouts::Storage::self()->exportTemplate(view->layout(), view->containment(), destinationFile, approvedApplets);
+}
+
+void Manager::onCustomTemplatesCountChanged(const QString &file)
+{
+    if (file.startsWith(Latte::configPath() + "/latte/templates")) {
+        if (file.endsWith(".layout.latte")) {
+            initLayoutTemplates();
+        } else if (file.endsWith(".view.latte")) {
+            initViewTemplates();
+        }
+    }
+}
+
 void Manager::importSystemLayouts()
 {
     for (int i=0; i<m_layoutTemplates.rowCount(); ++i) {
@@ -133,6 +212,99 @@ void Manager::importSystemLayouts()
             }
         }
     }
+}
+
+QString Manager::proposedTemplateAbsolutePath(QString templateFilename)
+{
+    QString tempfilename = templateFilename;
+
+    if (tempfilename.endsWith(".layout.latte")) {
+        QString clearedname = QFileInfo(tempfilename).baseName();
+        tempfilename = uniqueLayoutTemplateName(clearedname) + ".layout.latte";
+    } else if (tempfilename.endsWith(".view.latte")) {
+        QString clearedname = QFileInfo(tempfilename).baseName();
+        tempfilename = uniqueViewTemplateName(clearedname) + ".view.latte";
+    }
+
+    return QString(Latte::configPath() + "/latte/templates/" + tempfilename);
+}
+
+bool Manager::hasCustomLayoutTemplate(const QString &templateName) const
+{
+    for (int i=0; i<m_layoutTemplates.rowCount(); ++i) {
+        if (m_layoutTemplates[i].name == templateName && !m_layoutTemplates[i].isSystemTemplate()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool Manager::hasLayoutTemplate(const QString &templateName) const
+{
+    return m_layoutTemplates.containsName(templateName);
+}
+
+bool Manager::hasViewTemplate(const QString &templateName) const
+{
+    return m_viewTemplates.containsName(templateName);
+}
+
+void Manager::installCustomLayoutTemplate(const QString &templateFilePath)
+{
+    if (!templateFilePath.endsWith(".layout.latte")) {
+        return;
+    }
+
+    QString layoutName = QFileInfo(templateFilePath).baseName();
+
+    QString destinationFilePath = Latte::configPath() + "/latte/templates/" + layoutName + ".layout.latte";
+
+    if (hasCustomLayoutTemplate(layoutName)) {
+        QFile(destinationFilePath).remove();
+    }
+
+    QFile(templateFilePath).copy(destinationFilePath);
+}
+
+QString Manager::uniqueLayoutTemplateName(QString name) const
+{
+    int pos_ = name.lastIndexOf(QRegExp(QString(" - [0-9]+")));
+
+    if (hasLayoutTemplate(name) && pos_ > 0) {
+        name = name.left(pos_);
+    }
+
+    int i = 2;
+
+    QString namePart = name;
+
+    while (hasLayoutTemplate(name)) {
+        name = namePart + " - " + QString::number(i);
+        i++;
+    }
+
+    return name;
+}
+
+QString Manager::uniqueViewTemplateName(QString name) const
+{
+    int pos_ = name.lastIndexOf(QRegExp(QString(" - [0-9]+")));
+
+    if (hasViewTemplate(name) && pos_ > 0) {
+        name = name.left(pos_);
+    }
+
+    int i = 2;
+
+    QString namePart = name;
+
+    while (hasViewTemplate(name)) {
+        name = namePart + " - " + QString::number(i);
+        i++;
+    }
+
+    return name;
 }
 
 

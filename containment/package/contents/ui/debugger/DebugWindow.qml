@@ -175,13 +175,13 @@ Window{
             }
 
             Text{
-                text: "Absolute Geometry"+space
+                text: "Input "+space
             }
 
             Text{
                 text: {
-                    if (latteView && latteView.absoluteGeometry) {
-                        return latteView.absoluteGeometry.x + ", " + latteView.absoluteGeometry.y + "  " + latteView.absoluteGeometry.width + "x" + latteView.absoluteGeometry.height;
+                    if (latteView && latteView.effects && latteView.effects.inputMask) {
+                        return latteView.effects.inputMask.x +", "+ latteView.effects.inputMask.y+"  "+latteView.effects.inputMask.width+"x"+latteView.effects.inputMask.height;
                     } else {
                         return "_,_ _x_";
                     }
@@ -201,6 +201,21 @@ Window{
                     }
                 }
             }
+
+            Text{
+                text: "Absolute Geometry"+space
+            }
+
+            Text{
+                text: {
+                    if (latteView && latteView.absoluteGeometry) {
+                        return latteView.absoluteGeometry.x + ", " + latteView.absoluteGeometry.y + "  " + latteView.absoluteGeometry.width + "x" + latteView.absoluteGeometry.height;
+                    } else {
+                        return "_,_ _x_";
+                    }
+                }
+            }
+
 
             Text{
                 text: "Draw Effects"+space
@@ -539,11 +554,11 @@ Window{
             }
 
             Text{
-                text: "Background Transparency"+space
+                text: "Background Opacity"+space
             }
 
             Text{
-                text: root.panelTransparency + "%"
+                text: (root.myView.backgroundOpacity * 100) + "%"
             }
 
             Text{
@@ -596,7 +611,7 @@ Window{
             }
 
             Text{
-                text: visibilityManager.panelIsBiggerFromIconSize
+                text: background.isGreaterThanItemThickness
             }
 
             Text{
@@ -642,19 +657,11 @@ Window{
             }
 
             Text{
-                text: "Task Hovered"+space
-            }
-
-            Text{
-                text: "--"//root.latteAppletHoveredIndex
-            }
-
-            Text{
                 text: "In Normal State"+space
             }
 
             Text{
-                text: visibilityManager.normalState
+                text: visibilityManager.inNormalState
             }
 
             Text{
@@ -806,7 +813,7 @@ Window{
             }
 
             Text{
-                text: layoutsContainer.applets.require.windowsTrackingCount
+                text: visibilityManager.appletsTrackingWindowsCount
             }
 
             Text{

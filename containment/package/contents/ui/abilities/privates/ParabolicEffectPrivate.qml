@@ -24,23 +24,34 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 
 import org.kde.latte.core 0.2 as LatteCore
 
-import org.kde.latte.abilities.containers 0.1 as ContainerAbility
+import org.kde.latte.abilities.host 0.1 as AbilityHost
 
-ContainerAbility.ParabolicEffect {
+AbilityHost.ParabolicEffect {
     id: parabolic
 
     property Item animations: null
-    property Item applets: null
     property Item debug: null
+    property Item layouts: null
     property QtObject view: null
 
     readonly property bool horizontal: plasmoid.formFactor === PlasmaCore.Types.Horizontal
 
+    property bool restoreZoomIsBlockedFromApplet: false
+    property int lastParabolicItemIndex: -1
+
     Connections {
         target: parabolic
-        onSglClearZoom: parabolic._privates.lastIndex = -1;
         onRestoreZoomIsBlockedChanged: {
             if (!parabolic.restoreZoomIsBlocked) {
+                parabolic.startRestoreZoomTimer();
+            } else {
+                parabolic.stopRestoreZoomTimer();
+            }
+
+        }
+
+        onCurrentParabolicItemChanged: {
+            if (!currentParabolicItem) {
                 parabolic.startRestoreZoomTimer();
             } else {
                 parabolic.stopRestoreZoomTimer();
@@ -67,6 +78,40 @@ ContainerAbility.ParabolicEffect {
         }
     }
 
+    //! do not update during dragging/moving applets inConfigureAppletsMode
+    readonly property bool isBindingUpdateEnabled: !(root.dragOverlay && root.dragOverlay.pressed)
+
+    Binding{
+        target: parabolic
+        property: "restoreZoomIsBlockedFromApplet"
+        when: isBindingUpdateEnabled
+        value: {
+            var grid;
+
+            for (var l=0; l<=2; ++l) {
+                if (l===0) {
+                    grid = layouts.startLayout;
+                } else if (l===1) {
+                    grid = layouts.mainLayout;
+                } else if (l===2) {
+                    grid = layouts.endLayout;
+                }
+
+                for (var i=0; i<grid.children.length; ++i){
+                    var appletItem = grid.children[i];
+                    if (appletItem
+                            && appletItem.communicator
+                            && appletItem.communicator.parabolicEffectIsSupported
+                            && appletItem.communicator.bridge.parabolic.client.local.restoreZoomIsBlocked) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
     function startRestoreZoomTimer(){
         if (restoreZoomIsBlocked) {
             return;
@@ -76,21 +121,32 @@ ContainerAbility.ParabolicEffect {
     }
 
     function stopRestoreZoomTimer(){
-        restoreZoomTimer.stop();
+        if (restoreZoomTimer.running) {
+            restoreZoomTimer.stop();
+        }
     }
 
     function setDirectRenderingEnabled(value) {
         _privates.directRenderingEnabled = value;
     }
 
-    function applyParabolicEffect(index, currentMousePosition, center) {
-        if (parabolic._privates.lastIndex === -1) {
-            setDirectRenderingEnabled(false);
+    function setCurrentParabolicItem(item) {
+        view.parabolic.currentItem = item;
+    }
+
+    function setCurrentParabolicItemIndex(index) {
+        if (!directRenderingEnabled
+                && lastParabolicItemIndex > -1
+                && index > -1
+                && Math.abs(lastParabolicItemIndex-index) >=2 ) {
+            //! rapid movement
+            setDirectRenderingEnabled(true);
         }
 
-        //! last item requested calculations
-        parabolic._privates.lastIndex = index;
+        lastParabolicItemIndex = index;
+    }
 
+    function applyParabolicEffect(index, currentMousePosition, center) {
         var rDistance = Math.abs(currentMousePosition  - center);
 
         //check if the mouse goes right or down according to the center
@@ -138,13 +194,15 @@ ContainerAbility.ParabolicEffect {
     //! Timer to check if the mouse is still outside the latteView in order to restore applets scales to 1.0
     Timer{
         id: restoreZoomTimer
-        interval: 90
+        interval: 50
 
         onTriggered: {
-            if (parabolic.restoreZoomIsBlocked) {
-                return
+            if (parabolic.restoreZoomIsBlocked || currentParabolicItem) {
+                return;
             }
 
+            parabolic.lastParabolicItemIndex = -1;
+            parabolic.setDirectRenderingEnabled(false);
             parabolic.sglClearZoom();
 
             if (debug.timersEnabled) {
