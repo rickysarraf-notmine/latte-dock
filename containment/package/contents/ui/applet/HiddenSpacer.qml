@@ -30,12 +30,11 @@ Item{
     height: root.isHorizontal ? wrapper.height : nHiddenSize
 
     ///check also if this is the first/last plasmoid in anylayout
-    visible: (rightSpacer ? appletItem.lastAppletInContainer : appletItem.firstAppletInContainer) || separatorSpace>0
+    visible: (isRightSpacer ? appletItem.lastAppletInContainer : appletItem.firstAppletInContainer) || separatorSpace>0
 
-    property bool neighbourSeparator: rightSpacer ? appletItem.headAppletIsSeparator : appletItem.tailAppletIsSeparator
+    property bool hasNeighbourSeparator: isRightSpacer ? appletItem.headAppletIsSeparator : appletItem.tailAppletIsSeparator
 
-    property int separatorSpace: neighbourSeparator && !appletItem.isSeparator && appletItem.parabolic.isEnabled
-                                 && !appletItem.latteApplet ? ((LatteCore.Environment.separatorLength/2)+appletItem.metrics.margin.length) : subtrackedMargins
+    property int separatorSpace: hasNeighbourSeparator && appletItem.parabolic.isEnabled ? LatteCore.Environment.separatorLength / 2 : 0
 
     property real nHiddenSize: {
         if (isSeparator || !communicator.requires.lengthMarginsEnabled) {
@@ -45,25 +44,7 @@ Item{
         return (nScale > 0) ? (appletItem.spacersMaxSize * nScale) + separatorSpace : separatorSpace
     }
 
-    property bool rightSpacer: false
-
-    readonly property bool atEdgeForcingFittsLaw: !isSeparator && !parabolicEffectMarginsEnabled && atScreenEdge
-    readonly property int subtrackedMargins: {
-        if (atEdgeForcingFittsLaw && !appletItem.isAutoFillApplet) {
-            var inJustifyStart = (root.inFullJustify && firstChildOfStartLayout && rightSpacer);
-            var inJustifyEnd = (root.inFullJustify && lastChildOfEndLayout && !rightSpacer);
-
-            var singleApplet = firstChildOfMainLayout && lastChildOfMainLayout;
-            var inSideStart = ((root.panelAlignment === LatteCore.Types.Left || root.panelAlignment === LatteCore.Types.Top) && firstChildOfMainLayout && rightSpacer);
-            var inSideEnd = ((root.panelAlignment === LatteCore.Types.Right || root.panelAlignment === LatteCore.Types.Bottom) && lastChildOfMainLayout && !rightSpacer);
-
-            if (inJustifyStart || inJustifyEnd || inSideStart || inSideEnd) {
-                return (wrapper.edgeLengthMarginsDisabled ? appletItem.metrics.margin.length + appletItem.lengthAppletPadding : appletItem.metrics.margin.length);
-            }
-        }
-
-        return 0;
-    }
+    property bool isRightSpacer: false
 
     property real nScale: 0
 

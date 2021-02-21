@@ -20,17 +20,17 @@
 
 import QtQuick 2.7
 import QtQuick.Layouts 1.0
+import QtGraphicalEffects 1.0
 
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.kquickcontrolsaddons 2.0
 
-import QtGraphicalEffects 1.0
+import org.kde.latte.core 0.2 as LatteCore
 
 MouseArea {
     id: configurationArea
-
     z: 1000
 
     width: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? root.width : thickness
@@ -40,7 +40,6 @@ MouseArea {
     hoverEnabled: root.inConfigureAppletsMode
 
     focus: true
-
     cursorShape: {
         if (currentApplet && tooltip.visible && currentApplet.latteStyleApplet) {
             return root.isHorizontal ? Qt.SizeHorCursor : Qt.SizeVerCursor;
@@ -76,7 +75,7 @@ MouseArea {
 
     function hoveredItem(x, y) {
         //! main layout
-        var relevantLayout = mapFromItem(layoutsContainer.mainLayout,0,0);
+        var relevantLayout = mapFromItem(layoutsContainer.mainLayout, 0, 0);
         var item = layoutsContainer.mainLayout.childAt(x-relevantLayout.x, y-relevantLayout.y);
 
         if (!item) {
@@ -86,6 +85,7 @@ MouseArea {
         }
 
         if (!item) {
+            // end layout
             relevantLayout = mapFromItem(layoutsContainer.endLayout,0,0);
             item = layoutsContainer.endLayout.childAt(x-relevantLayout.x, y-relevantLayout.y);
         }
@@ -110,9 +110,11 @@ MouseArea {
 
     onPositionChanged: {
         if (pressed) {
-            var padding = units.gridUnit * 3;
+            //! is this really needed ????
+            /*var padding = units.gridUnit * 3;
             if (currentApplet && (mouse.x < -padding || mouse.y < -padding ||
                                   mouse.x > width + padding || mouse.y > height + padding)) {
+
                 var newCont = plasmoid.containmentAt(mouse.x, mouse.y);
 
                 if (newCont && newCont != plasmoid) {
@@ -121,7 +123,7 @@ MouseArea {
                     root.dragOverlay.currentApplet = null;
                     return;
                 }
-            }
+            }*/
 
             if(currentApplet){
                 if (plasmoid.formFactor === PlasmaCore.Types.Vertical) {
@@ -136,11 +138,20 @@ MouseArea {
             lastX = mouse.x;
             lastY = mouse.y;
 
-            var item =  hoveredItem(mouse.x, mouse.y);
+            var mousesink = {x: mouse.x, y: mouse.y};
+
+            //! ignore thicknes moving at all cases
+            if (plasmoid.formFactor === PlasmaCore.Types.Horizontal) {
+                mousesink.y = configurationArea.height / 2;
+            } else {
+                mousesink.x = configurationArea.width / 2;
+            }
+
+            var item = hoveredItem(mousesink.x, mousesink.y);
 
             if (item && item !== placeHolder) {
                 placeHolder.parent = configurationArea;
-                var posInItem = mapToItem(item, mouse.x, mouse.y);
+                var posInItem = mapToItem(item, mousesink.x, mousesink.y);
 
                 if ((plasmoid.formFactor === PlasmaCore.Types.Vertical && posInItem.y < item.height/2) ||
                         (plasmoid.formFactor !== PlasmaCore.Types.Vertical && posInItem.x < item.width/2)) {
@@ -217,12 +228,16 @@ MouseArea {
         handle.height = currentApplet.height;
         root.layoutManagerInsertBefore(currentApplet, placeHolder);
         currentApplet.parent = root;
-        currentApplet.x = lastX-appletX;
-        currentApplet.y = lastY-appletY;
+        currentApplet.x = root.isHorizontal ? lastX - currentApplet.width/2 : lastX-appletX;
+        currentApplet.y = root.isVertical ? lastY - currentApplet.height/2 : lastY-appletY;
         currentApplet.z = 900;
     }
 
     onReleased: {
+        if (!handle.visible) {
+            tooltip.visible = false;
+        }
+
         if (!root.dragOverlay.currentApplet) {
             return;
         }
@@ -249,7 +264,11 @@ MouseArea {
         //     handle.width = currentApplet.width;
         //    handle.height = currentApplet.height;
         root.layoutManagerSave();
-        root.layoutManagerMoveAppletsBasedOnJustifyAlignment();
+
+        if (root.myView.alignment === LatteCore.Types.Justify) {
+            root.moveAppletsBasedOnJustifyAlignment();
+        }
+
         root.layouter.appletsInParentChange = false;
         layouter.updateSizeForAppletsInFill();
     }
@@ -267,13 +286,42 @@ MouseArea {
             currentApplet.latteStyleApplet.decreaseLength();
     }
 
+    Connections {
+        target: currentApplet
+        onWidthChanged: {
+            if (configurationArea.pressed && root.isHorizontal) {
+                currentApplet.x = configurationArea.lastX - currentApplet.width/2;
+            }
+        }
+
+        onHeightChanged: {
+            if (configurationArea.pressed && root.isVertical) {
+                currentApplet.y = configurationArea.lastY - currentApplet.height/2;
+            }
+        }
+    }
+
     Item {
         id: placeHolder
-        visible: configurationArea.containsMouse
+        visible: configurationArea.pressed
         Layout.fillWidth: currentApplet ? currentApplet.Layout.fillWidth : false
         Layout.fillHeight: currentApplet ? currentApplet.Layout.fillHeight : false
 
         readonly property bool isPlaceHolder: true
+    }
+
+    Binding {
+        target: placeHolder
+        property: "width"
+        when: currentApplet
+        value: currentApplet ? currentApplet.width : 0
+    }
+
+    Binding {
+        target: placeHolder
+        property: "width"
+        when: currentApplet
+        value: currentApplet ? currentApplet.height : 0
     }
 
     //Because of the animations for the applets the handler can not catch up to
@@ -360,12 +408,12 @@ MouseArea {
                 height: width
                 anchors.centerIn: parent
                 opacity: 0.9
-                layer.enabled: graphicsSystem.isAccelerated
+                layer.enabled: root.environment.isGraphicsSystemAccelerated
                 layer.effect: DropShadow {
-                    radius: root.appShadowSize
+                    radius: root.myView.itemShadow.size
                     fast: true
                     samples: 2 * radius
-                    color: root.appShadowColor
+                    color: root.myView.itemShadow.shadowColor
 
                     verticalOffset: 2
                 }
@@ -456,11 +504,13 @@ MouseArea {
             if (visualParent && currentApplet
                     && (currentApplet.applet || currentApplet.isSeparator || currentApplet.isInternalViewSplitter)) {
 
-                configureButton.visible = !currentApplet.isInternalViewSplitter && (currentApplet.applet.pluginName !== root.plasmoidName)
-                        && currentApplet.applet.action("configure") && currentApplet.applet.action("configure").enabled;
+                configureButton.visible = !currentApplet.isInternalViewSplitter
+                        && (currentApplet.applet.pluginName !== "org.kde.latte.plasmoid")
+                        && currentApplet.applet.action("configure")
+                        && currentApplet.applet.action("configure").enabled;
                 closeButton.visible = !currentApplet.isInternalViewSplitter && currentApplet.applet.action("remove") && currentApplet.applet.action("remove").enabled;
                 lockButton.visible = !currentApplet.isInternalViewSplitter
-                        && (currentApplet.applet.pluginName !== root.plasmoidName)
+                        && !currentApplet.communicator.indexerIsSupported
                         && !currentApplet.isSeparator;
 
                 colorizingButton.visible = root.colorizerEnabled && !currentApplet.appletBlocksColorizing && !currentApplet.isInternalViewSplitter;
