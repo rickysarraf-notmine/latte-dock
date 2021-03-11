@@ -43,8 +43,6 @@ PlasmaComponents.ContextMenu {
     property var modelIndex
     readonly property var atm: TaskManager.AbstractTasksModel
 
-    readonly property var containmentActions: appletAbilities.myView.isReady ? appletAbilities.myView.containmentActions : []
-
     placement: {
         if (root.location === PlasmaCore.Types.LeftEdge) {
             return PlasmaCore.Types.RightPosedTopAlignedPopup;
@@ -84,8 +82,9 @@ PlasmaComponents.ContextMenu {
         return tasksModel.data(modelIndex, modelProp)
     }
 
-    function show() {       
+    function show() {
         loadDynamicLaunchActions(visualParent.m.LauncherUrlWithoutIcon);
+        loadMyViewActions();
         // backend.ungrabMouse(visualParent);
         openRelative();
 
@@ -301,6 +300,23 @@ PlasmaComponents.ContextMenu {
         }
     }
 
+    function loadMyViewActions() {
+        if (!appletAbilities.myView.isReady) {
+            return;
+        }
+
+        var actionsCount = appletAbilities.myView.containmentActions.length;
+
+        for (var i=0; i<actionsCount; ++i) {
+            var item = newMenuItem(menu);
+            item.action = appletAbilities.myView.containmentActions[i];
+            item.visible = Qt.binding(function() {
+                return this.action.visible;
+            });
+            menu.addMenuItem(item, myViewActions);
+        }
+    }
+
     ///REMOVE
     function updateOnAllActivitiesLauncher(){
         //isOnAllActivitiesLauncher = ActivitiesTools.isOnAllActivities(visualParent.m.LauncherUrlWithoutIcon);
@@ -323,7 +339,7 @@ PlasmaComponents.ContextMenu {
     }
 
 
-    Component.onDestruction: {        
+    Component.onDestruction: {
         if (!changingLayout) {
             root.contextMenu = null;
             backend.ungrabMouse(visualParent);
@@ -819,13 +835,8 @@ PlasmaComponents.ContextMenu {
 
     //////END OF NEW ARCHITECTURE
 
-    /*PlasmaComponents.MenuItem {
-        separator: true
-        visible: root.inEditMode
-    }*/
-
     PlasmaComponents.MenuItem {
-        id: addInternalSeparatorItem       
+        id: addInternalSeparatorItem
         enabled: !visualParent.tailItemIsSeparator || !visualParent.headItemIsSeparator
         visible: visualParent.hasShownLauncher
         icon: "add"
@@ -871,46 +882,9 @@ PlasmaComponents.ContextMenu {
     }
 
     PlasmaComponents.MenuItem {
-        //text: i18n("Configure")
-        //section: true
-        separator: true
-        visible: preferenceMenuItem.visible
-    }
-
-    /* PlasmaComponents.MenuItem {
-        separator: true
-        visible: root.inEditMode
-    }*/
-
-    PlasmaComponents.MenuItem {
-        id: layoutsMenuItem
-
-        action: appletAbilities.myView.isReady ?  containmentActions[1] : plasmoid.action("configure")
-        enabled: visible
-        visible: appletAbilities.myView.isReady && containmentActions[1].visible
-    }
-
-    PlasmaComponents.MenuItem {
-        id: preferenceMenuItem
-
-        action: appletAbilities.myView.isReady ?  containmentActions[2] : plasmoid.action("configure")
-        visible: appletAbilities.myView.isReady
-    }
-
-    PlasmaComponents.MenuItem {
-        id: quitApplicationItem
-        action: appletAbilities.myView.isReady ? containmentActions[3] : plasmoid.action("configure")
-        visible: appletAbilities.myView.isReady
-    }
-
-    PlasmaComponents.MenuItem {
-        separator: true
-        visible: preferenceMenuItem.visible
-    }
-
-    PlasmaComponents.MenuItem {
         id: alternativesMenuItem
-        visible: root.inEditMode && !visualParent.isSeparator
+        visible: (appletAbilities.myView.isReady && appletAbilities.myView.inEditMode)
+                 || (!appletAbilities.myView.isReady && plasmoid.userConfiguring /*normal plasmoid in the desktop*/)
         text: plasmoid.action("alternatives").text
         icon: plasmoid.action("alternatives").icon
 
@@ -918,32 +892,31 @@ PlasmaComponents.ContextMenu {
     }
 
     PlasmaComponents.MenuItem {
-        id: addWidgets
-
-        action: appletAbilities.myView.isReady ? containmentActions[5] : plasmoid.action("configure");
-        visible:  appletAbilities.myView.isReady
+        id: myViewActions
+        separator: true
+        visible: false
     }
-
-    PlasmaComponents.MenuItem {
-        id: configureItem
-
-        action: appletAbilities.myView.isReady ? containmentActions[6] : plasmoid.action("configure")
-    }
-
-    //! BEGIN: Plasmoid actions when it isnt inside a Latte dock
-    PlasmaComponents.MenuItem {
-        id: configurePlasmoid
-        visible: !appletAbilities.myView.isReady && !plasmoid.immutable
-
-        text: plasmoid.action("configure").text
-        icon: plasmoid.action("configure").icon
-
-        onClicked: plasmoid.action("configure").trigger();
-    }
-    //! END: Plasmoid actions when it isnt inside a Latte dock
 
     PlasmaComponents.MenuItem {
         separator: true
+        visible: removePlasmoidInMyViewEditMode.visible
+    }
+
+    PlasmaComponents.MenuItem {
+        id: removePlasmoidInMyViewEditMode
+        //! Workaround: this is preferred compared to:
+        //!   action:plasmoid.action("remove")
+        //! which shows the action always and not dependent of myView.inEditMode flag
+        text: plasmoid.action("remove").text
+        icon: plasmoid.action("remove").icon
+        visible: appletAbilities.myView.isReady && appletAbilities.myView.inEditMode
+
+        onClicked: plasmoid.action("remove").trigger();
+    }
+
+    PlasmaComponents.MenuItem {
+        section: true
+        text: i18n("Window")
         visible: closeWindowItem.visible
     }
 
@@ -966,20 +939,5 @@ PlasmaComponents.ContextMenu {
                 tasksModel.requestClose(menu.modelIndex);
             }
         }
-    }
-
-    PlasmaComponents.MenuItem {
-        separator: true
-        visible: removePlasmoid.visible
-    }
-
-    PlasmaComponents.MenuItem {
-        id: removePlasmoid
-        visible: (root.latteInEditMode) || (!root.latteBridge && !plasmoid.immutable /*normal plasmoid in the desktop*/)
-
-        text: plasmoid.action("remove").text
-        icon: plasmoid.action("remove").icon
-
-        onClicked: plasmoid.action("remove").trigger();
     }
 }

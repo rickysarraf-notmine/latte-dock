@@ -861,12 +861,12 @@ PlasmaComponents.Page {
                     LatteComponents.CheckBox {
                         Layout.maximumWidth: dialog.optionsWidth
                         text: i18n("Always use floating gap for user interaction")
-                        tooltip: i18n("Floating gap is always used from applets and any relevant user interaction when \nthat option is enabled. Default option is auto selecting that behavior.")
-                        partiallyCheckedEnabled: true
+                        tooltip: i18n("Floating gap is always used for applets and window interaction")
                         value: plasmoid.configuration.floatingInternalGapIsForced
+                        enabled: plasmoid.configuration.zoomLevel === 0
 
                         onClicked: {
-                            plasmoid.configuration.floatingInternalGapIsForced = checkedState;
+                            plasmoid.configuration.floatingInternalGapIsForced = !plasmoid.configuration.floatingInternalGapIsForced;
                         }
                     }
 
@@ -878,6 +878,18 @@ PlasmaComponents.Page {
 
                         onClicked: {
                             plasmoid.configuration.hideFloatingGapForMaximized = !plasmoid.configuration.hideFloatingGapForMaximized;
+                        }
+                    }
+
+                    LatteComponents.CheckBox {
+                        Layout.maximumWidth: dialog.optionsWidth
+                        enabled: plasmoid.configuration.hideFloatingGapForMaximized
+                        text: i18n("Delay floating gap hiding until mouse leaves")
+                        tooltip: i18n("to avoid clicking on adjacent items accidentally in some cases")
+                        value: plasmoid.configuration.floatingGapHidingWaitsMouse
+
+                        onClicked: {
+                            plasmoid.configuration.floatingGapHidingWaitsMouse = !plasmoid.configuration.floatingGapHidingWaitsMouse;
                         }
                     }
 

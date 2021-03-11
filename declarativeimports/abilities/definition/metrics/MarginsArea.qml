@@ -1,5 +1,5 @@
 /*
-*  Copyright 2020 Michail Vourlakos <mvourlakos@gmail.com>
+*  Copyright 2021 Michail Vourlakos <mvourlakos@gmail.com>
 *
 *  This file is part of Latte-Dock
 *
@@ -19,10 +19,8 @@
 
 import QtQuick 2.0
 
-BridgeItem {
-    id: indexerBridge
-
-    property bool inMarginsArea: false
-    property bool tailAppletIsSeparator: false
-    property bool headAppletIsSeparator: false
+Item {
+    property int marginThickness: 8
+    readonly property int iconSize: _metrics.totals.thickness - thicknessEdges
+    readonly property int thicknessEdges: 2*marginThickness
 }

@@ -69,6 +69,11 @@ class Theme: public QObject
 
     Q_PROPERTY(int outlineWidth READ outlineWidth NOTIFY outlineWidthChanged)
 
+    Q_PROPERTY(int marginsAreaTop READ marginsAreaTop NOTIFY marginsAreaChanged)
+    Q_PROPERTY(int marginsAreaLeft READ marginsAreaLeft NOTIFY marginsAreaChanged)
+    Q_PROPERTY(int marginsAreaBottom READ marginsAreaBottom NOTIFY marginsAreaChanged)
+    Q_PROPERTY(int marginsAreaRight READ marginsAreaRight NOTIFY marginsAreaChanged)
+
     Q_PROPERTY(Latte::PlasmaExtended::PanelBackground *backgroundTopEdge READ backgroundTopEdge NOTIFY backgroundsChanged)
     Q_PROPERTY(Latte::PlasmaExtended::PanelBackground *backgroundLeftEdge READ backgroundLeftEdge NOTIFY backgroundsChanged)
     Q_PROPERTY(Latte::PlasmaExtended::PanelBackground *backgroundBottomEdge READ backgroundBottomEdge NOTIFY backgroundsChanged)
@@ -89,6 +94,11 @@ public:
     int outlineWidth() const;
     void setOutlineWidth(int width);
 
+    int marginsAreaTop() const;
+    int marginsAreaLeft() const;
+    int marginsAreaBottom() const;
+    int marginsAreaRight() const;
+
     PanelBackground *backgroundTopEdge() const;
     PanelBackground *backgroundLeftEdge() const;
     PanelBackground *backgroundBottomEdge() const;
@@ -107,6 +117,7 @@ signals:
     void compositingChanged();
     void hasShadowChanged();
     void outlineWidthChanged();
+    void marginsAreaChanged();
     void themeChanged();
 
 private slots:
@@ -123,6 +134,7 @@ private:
     void updateHasShadow();
     void updateDefaultScheme();
     void updateDefaultSchemeValues();
+    void updateMarginsAreaValues();
     void updateReversedScheme();
     void updateReversedSchemeValues();
 
@@ -134,6 +146,11 @@ private:
     bool m_compositing{true};
 
     int m_outlineWidth{1};
+
+    int m_marginsAreaTop{0};
+    int m_marginsAreaLeft{0};
+    int m_marginsAreaBottom{0};
+    int m_marginsAreaRight{0};
 
     QString m_themePath;
     QString m_themeWidgetsPath;

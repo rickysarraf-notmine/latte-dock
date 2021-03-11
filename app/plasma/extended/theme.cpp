@@ -91,6 +91,7 @@ void Theme::load()
 {
     loadThemePaths();
     updateBackgrounds();
+    updateMarginsAreaValues();
 }
 
 Theme::~Theme()
@@ -130,6 +131,27 @@ void Theme::setOutlineWidth(int width)
     m_outlineWidth = width;
     emit outlineWidthChanged();
 }
+
+int Theme::marginsAreaTop() const
+{
+    return m_marginsAreaTop;
+}
+
+int Theme::marginsAreaLeft() const
+{
+    return m_marginsAreaLeft;
+}
+
+int Theme::marginsAreaBottom() const
+{
+    return m_marginsAreaBottom;
+}
+
+int Theme::marginsAreaRight() const
+{
+    return m_marginsAreaRight;
+}
+
 
 PanelBackground *Theme::backgroundTopEdge() const
 {
@@ -483,6 +505,44 @@ const CornerRegions &Theme::cornersMask(const int &radius)
 
     m_cornerRegions[radius] = corners;
     return m_cornerRegions[radius];
+}
+
+void Theme::updateMarginsAreaValues()
+{
+    m_marginsAreaTop = 0;
+    m_marginsAreaLeft = 0;
+    m_marginsAreaBottom = 0;
+    m_marginsAreaRight = 0;
+
+    Plasma::Svg *svg = new Plasma::Svg(this);
+    svg->setImagePath(QStringLiteral("widgets/panel-background"));
+
+    bool hasThickSeparatorMargins = svg->hasElement("thick-center");
+
+    if (hasThickSeparatorMargins) {
+        int topMargin = svg->hasElement("hint-top-margin") ? svg->elementSize("hint-top-margin").height() : 0;
+        int leftMargin = svg->hasElement("hint-left-margin") ? svg->elementSize("hint-left-margin").width() : 0;
+        int bottomMargin = svg->hasElement("hint-bottom-margin") ? svg->elementSize("hint-bottom-margin").height() : 0;
+        int rightMargin = svg->hasElement("hint-right-margin") ? svg->elementSize("hint-right-margin").width() : 0;
+
+        int thickTopMargin = svg->hasElement("thick-hint-top-margin") ? svg->elementSize("thick-hint-top-margin").height() : 0;
+        int thickLeftMargin = svg->hasElement("thick-hint-left-margin") ? svg->elementSize("thick-hint-left-margin").width() : 0;
+        int thickBottomMargin = svg->hasElement("thick-hint-bottom-margin") ? svg->elementSize("thick-hint-bottom-margin").height() : 0;
+        int thickRightMargin = svg->hasElement("thick-hint-right-margin") ? svg->elementSize("thick-hint-right-margin").width() : 0;
+
+        m_marginsAreaTop = qMax(0, thickTopMargin - topMargin);
+        m_marginsAreaLeft = qMax(0, thickLeftMargin - leftMargin);
+        m_marginsAreaBottom = qMax(0, thickBottomMargin - bottomMargin);
+        m_marginsAreaRight = qMax(0, thickRightMargin - rightMargin);
+    }
+
+    qDebug() << "PLASMA THEME MARGINS AREA ::" <<
+                m_marginsAreaTop << m_marginsAreaLeft <<
+                m_marginsAreaBottom << m_marginsAreaRight;
+
+    svg->deleteLater();
+
+    emit marginsAreaChanged();
 }
 
 void Theme::loadConfig()

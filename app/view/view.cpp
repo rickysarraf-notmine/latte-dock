@@ -272,6 +272,11 @@ View::~View()
 
 void View::init(Plasma::Containment *plasma_containment)
 {
+    connect(this, &QQuickWindow::xChanged, this, &View::geometryChanged);
+    connect(this, &QQuickWindow::yChanged, this, &View::geometryChanged);
+    connect(this, &QQuickWindow::widthChanged, this, &View::geometryChanged);
+    connect(this, &QQuickWindow::heightChanged, this, &View::geometryChanged);
+
     connect(this, &QQuickWindow::xChanged, this, &View::xChanged);
     connect(this, &QQuickWindow::xChanged, this, &View::updateAbsoluteGeometry);
     connect(this, &QQuickWindow::yChanged, this, &View::yChanged);
@@ -449,9 +454,9 @@ void View::reconsiderScreen()
     m_positioner->reconsiderScreen();
 }
 
-void View::copyView()
+void View::duplicateView()
 {
-    m_layout->copyView(containment());
+    m_layout->duplicateView(containment());
 }
 
 void View::exportTemplate()
@@ -462,10 +467,10 @@ void View::exportTemplate()
 
 void View::removeView()
 {
-    if (m_layout && m_layout->viewsCount() > 1) {
+    if (m_layout) {
         m_inDelete = true;
 
-        QAction *removeAct = this->containment()->actions()->action(QStringLiteral("remove"));
+        QAction *removeAct = action("remove");
 
         if (removeAct) {
             removeAct->trigger();
@@ -1497,6 +1502,15 @@ void View::releaseGrab()
     QCoreApplication::instance()->sendEvent(this, &e);
 }
 
+QAction *View::action(const QString &name)
+{
+    if (!containment()) {
+        return nullptr;
+    }
+
+    return this->containment()->actions()->action(name);
+}
+
 QVariantList View::containmentActions() const
 {
     QVariantList actions;
@@ -1505,11 +1519,6 @@ QVariantList View::containmentActions() const
         return actions;
     }
 
-    /*if (containment()->corona()->immutability() != Plasma::Types::Mutable) {
-        return actions;
-    }*/
-    //FIXME: the trigger string it should be better to be supported this way
-    //const QString trigger = Plasma::ContainmentActions::eventToString(event);
     const QString trigger = "RightButton;NoModifier";
     Plasma::ContainmentActions *plugin = this->containment()->containmentActions().value(trigger);
 

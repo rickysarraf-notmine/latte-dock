@@ -146,7 +146,7 @@ DragDrop.DropArea {
             return;
         }
 
-        root.layoutManager().insertAtCoordinates2(dndSpacer, event.x, event.y)
+        fastLayoutManager.insertAtCoordinates(dndSpacer, event.x, event.y);
         dndSpacer.opacity = 1;
     }
 
@@ -164,7 +164,7 @@ DragDrop.DropArea {
             return;
         }
 
-        root.layoutManager().insertAtCoordinates2(dndSpacer, event.x, event.y)
+        fastLayoutManager.insertAtCoordinates(dndSpacer, event.x, event.y);
         dndSpacer.opacity = 1;
     }
 
@@ -201,8 +201,8 @@ DragDrop.DropArea {
 
         dndSpacer.opacity = 0;
 
-        if (dragInfo.isPlasmoid && root.myView.alignment === LatteCore.Types.Justify) {
-            root.moveAppletsBasedOnJustifyAlignment();
-        }
+       // if (dragInfo.isPlasmoid && root.myView.alignment === LatteCore.Types.Justify) {
+       //     fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
+       // }
     }
 }

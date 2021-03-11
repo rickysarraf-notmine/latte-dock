@@ -52,6 +52,7 @@ MouseArea {
     property bool isResizingRight: false
     property Item currentApplet
     property Item previousCurrentApplet
+    readonly property alias draggedPlaceHolder: placeHolder
 
     property Item currentHoveredLayout: {
         if (placeHolder.parent !== configurationArea) {
@@ -110,21 +111,6 @@ MouseArea {
 
     onPositionChanged: {
         if (pressed) {
-            //! is this really needed ????
-            /*var padding = units.gridUnit * 3;
-            if (currentApplet && (mouse.x < -padding || mouse.y < -padding ||
-                                  mouse.x > width + padding || mouse.y > height + padding)) {
-
-                var newCont = plasmoid.containmentAt(mouse.x, mouse.y);
-
-                if (newCont && newCont != plasmoid) {
-                    var newPos = newCont.mapFromApplet(plasmoid, mouse.x, mouse.y);
-                    newCont.addApplet(currentApplet.applet, newPos.x, newPos.y);
-                    root.dragOverlay.currentApplet = null;
-                    return;
-                }
-            }*/
-
             if(currentApplet){
                 if (plasmoid.formFactor === PlasmaCore.Types.Vertical) {
                     currentApplet.y += (mouse.y - lastY);
@@ -155,16 +141,16 @@ MouseArea {
 
                 if ((plasmoid.formFactor === PlasmaCore.Types.Vertical && posInItem.y < item.height/2) ||
                         (plasmoid.formFactor !== PlasmaCore.Types.Vertical && posInItem.x < item.width/2)) {
-                    root.layoutManagerInsertBefore(item, placeHolder);
+                    fastLayoutManager.insertBefore(item, placeHolder);
                 } else {
-                    root.layoutManagerInsertAfter(item, placeHolder);
+                    fastLayoutManager.insertAfter(item, placeHolder);
                 }
             }
 
         } else {
             var item = hoveredItem(mouse.x, mouse.y);
 
-            if (root.dragOverlay && item && item !== lastSpacer) {
+            if (root.dragOverlay) {
                 root.dragOverlay.currentApplet = item;
             } else {
                 currentApplet = null;
@@ -212,8 +198,6 @@ MouseArea {
             return;
         }
 
-        root.layouter.appletsInParentChange = true;
-
         var relevantApplet = mapFromItem(currentApplet, 0, 0);
         var rootArea = mapFromItem(root, 0, 0);
 
@@ -222,11 +206,11 @@ MouseArea {
 
         lastX = mouse.x;
         lastY = mouse.y;
-        placeHolder.width = currentApplet.width;
-        placeHolder.height = currentApplet.height;
-        handle.width = currentApplet.width;
-        handle.height = currentApplet.height;
-        root.layoutManagerInsertBefore(currentApplet, placeHolder);
+        placeHolder.width = root.isVertical ? currentApplet.width : Math.min(root.maxLength / 2, currentApplet.width);
+        placeHolder.height = !root.isVertical? currentApplet.height : Math.min(root.maxLength / 2, currentApplet.height);
+        handle.width = placeHolder.width;
+        handle.height = placeHolder.height;
+        fastLayoutManager.insertBefore(currentApplet, placeHolder);
         currentApplet.parent = root;
         currentApplet.x = root.isHorizontal ? lastX - currentApplet.width/2 : lastX-appletX;
         currentApplet.y = root.isVertical ? lastY - currentApplet.height/2 : lastY-appletY;
@@ -253,7 +237,7 @@ MouseArea {
         configurationArea.isResizingLeft = false;
         configurationArea.isResizingRight = false;
 
-        root.layoutManagerInsertBefore(placeHolder, currentApplet);
+        fastLayoutManager.insertBefore(placeHolder, currentApplet);
         placeHolder.parent = configurationArea;
         currentApplet.z = 1;
 
@@ -263,13 +247,12 @@ MouseArea {
         handle.y = relevantLayout.y + currentApplet.y;
         //     handle.width = currentApplet.width;
         //    handle.height = currentApplet.height;
-        root.layoutManagerSave();
 
         if (root.myView.alignment === LatteCore.Types.Justify) {
-            root.moveAppletsBasedOnJustifyAlignment();
+            fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
         }
 
-        root.layouter.appletsInParentChange = false;
+        fastLayoutManager.save();
         layouter.updateSizeForAppletsInFill();
     }
 
@@ -304,24 +287,9 @@ MouseArea {
     Item {
         id: placeHolder
         visible: configurationArea.pressed
-        Layout.fillWidth: currentApplet ? currentApplet.Layout.fillWidth : false
-        Layout.fillHeight: currentApplet ? currentApplet.Layout.fillHeight : false
 
         readonly property bool isPlaceHolder: true
-    }
-
-    Binding {
-        target: placeHolder
-        property: "width"
-        when: currentApplet
-        value: currentApplet ? currentApplet.width : 0
-    }
-
-    Binding {
-        target: placeHolder
-        property: "width"
-        when: currentApplet
-        value: currentApplet ? currentApplet.height : 0
+        readonly property int length: root.isVertical ? height : width
     }
 
     //Because of the animations for the applets the handler can not catch up to
@@ -568,7 +536,6 @@ MouseArea {
 
                             onCheckedChanged: {
                                 currentApplet.userBlocksColorizing = !checked;
-                                root.layoutManagerSaveOptions();
                             }
                         }
 
@@ -580,7 +547,6 @@ MouseArea {
 
                             onCheckedChanged: {
                                 currentApplet.lockZoom = checked;
-                                root.layoutManagerSaveOptions();
                             }
                         }
 

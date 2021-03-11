@@ -158,13 +158,21 @@ public:
     void quitApplication();
     void switchToLayout(QString layout);
     void showSettingsWindow(int page);
-    void setContextMenuView(int id);
-    QStringList contextMenuData();
+
+    QStringList contextMenuData(const uint &containmentId);
+    QStringList viewTemplatesData();
 
 public slots:
     void aboutApplication();
     void activateLauncherMenu();
     void loadDefaultLayout() override;
+
+    void addView(const uint &containmentId, const QString &templateId);
+    void duplicateView(const uint &containmentId);
+    void exportViewTemplate(const uint &containmentId);
+    void moveViewToLayout(const uint &containmentId, const QString &layoutName);
+    void removeView(const uint &containmentId);
+
     void setBackgroundFromBroadcast(QString activity, QString screenName, QString filename);
     void setBroadcastedBackgroundsEnabled(QString activity, QString screenName, bool enabled);
     void showAlternativesForApplet(Plasma::Applet *applet);
@@ -219,8 +227,6 @@ private:
 
     //!it can be used on startup to change memory usage from command line
     int m_userSetMemoryUsage{ -1};
-
-    int m_contextMenuViewId{-1};
 
     QString m_layoutNameOnStartUp;
     QString m_importFullConfigurationFile;

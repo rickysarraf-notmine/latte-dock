@@ -94,8 +94,6 @@ Item {
         return PlasmaCore.Types.BottomEdge;
     }
 
-    property int tasksStarting: 0
-
     ///Don't use Math.floor it adds one pixel in animations and creates glitches
     property int widthMargins: root.vertical ? appletAbilities.metrics.totals.thicknessEdges : appletAbilities.metrics.totals.lengthEdges
     property int heightMargins: !root.vertical ? appletAbilities.metrics.totals.thicknessEdges : appletAbilities.metrics.totals.lengthEdges
@@ -190,6 +188,7 @@ Item {
     //! This way moving from Tasks to Applets and vice versa is pretty stable when hovering with parabolic effect.
     property real tasksHeight:  mouseHandler.height
     property real tasksWidth: mouseHandler.width
+    property real tasksLength: root.vertical ? mouseHandler.height : mouseHandler.width
 
     readonly property int alignment: appletAbilities.containment.alignment
 
@@ -538,9 +537,6 @@ Item {
 
             groupingAppIdBlacklist = plasmoid.configuration.groupingAppIdBlacklist;
             groupingLauncherUrlBlacklist = plasmoid.configuration.groupingLauncherUrlBlacklist;
-
-            icList.model = tasksModel;
-            tasksStarting = count;
 
             ///Plasma 5.9 enforce grouping at all cases
             if (LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,9,0)) {
@@ -937,9 +933,6 @@ Item {
             contentWidth: icList.width
             contentHeight: icList.height
 
-            property int thickness:0 // through Binding to avoid binding loops
-            property int length:0 // through Binding to avoid binding loops
-
             //onCurrentPosChanged: console.log("CP :: "+ currentPos + " icW:"+icList.width + " rw: "+root.width + " w:" +width);
 
             layer.enabled: contentsExceed && root.scrollingEnabled
@@ -967,13 +960,7 @@ Item {
                 target: scrollableList
                 property: "length"
                 when: !appletAbilities.myView.inRelocationHiding
-                value: {
-                    if (root.vertical) {
-                        return Math.min(root.height, icList.height)
-                    }
-
-                    return Math.min(root.width, icList.width);
-                }
+                value: root.vertical ? Math.min(root.height, root.tasksLength) : Math.min(root.width, root.tasksLength)
             }
 
             TasksLayout.ScrollPositioner {
@@ -981,6 +968,7 @@ Item {
 
                 ListView {
                     id:icList
+                    model: tasksModel
                     delegate: Task.TaskItem{
                         abilities: appletAbilities
                     }
@@ -1062,6 +1050,7 @@ Item {
             radius: appletAbilities.metrics.iconSize/10
             backgroundOpacity: mouseHandler.isDroppingOnlyLaunchers || appletAbilities.launchers.isShowingAddLaunchersMessage ? 0.75 : 0
             duration: appletAbilities.animations.speedFactor.current
+            iconSize: appletAbilities.metrics.iconSize
             z: 99
 
             title: i18n("Tasks Area")

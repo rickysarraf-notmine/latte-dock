@@ -52,10 +52,18 @@ Item {
     property bool animationsEnabled: true
     property bool indexerIsSupported: communicator.indexerIsSupported
     property bool parabolicEffectIsSupported: true
-    property bool canShowAppletNumberBadge: !indexerIsSupported && !isSeparator && !isHidden
-                                            && !isSpacer && !isInternalViewSplitter
+    property bool canShowAppletNumberBadge: !indexerIsSupported
+                                            && !isSeparator
+                                            && !isMarginsAreaSeparator
+                                            && !isHidden
+                                            && !isSpacer
+                                            && !isInternalViewSplitter
 
-    readonly property bool canFillThickness: applet && applet.hasOwnProperty("constraintHints") && (applet.constraintHints & PlasmaCore.Types.CanFillArea);
+    readonly property bool canFillScreenEdge: communicator.requires.screenEdgeMarginSupported || communicator.indexerIsSupported
+    readonly property bool canFillThickness: applet && applet.hasOwnProperty("constraintHints")
+                                             && ((applet.constraintHints & PlasmaCore.Types.CanFillArea) === PlasmaCore.Types.CanFillArea);
+    readonly property bool isMarginsAreaSeparator: applet && applet.hasOwnProperty("constraintHints")
+                                                   && ((applet.constraintHints & PlasmaCore.Types.MarginAreasSeparator) === PlasmaCore.Types.MarginAreasSeparator);
 
     readonly property color highlightColor: theme.buttonFocusColor
 
@@ -64,16 +72,16 @@ Item {
     property bool isAutoFillApplet:  isRequestingFill
 
     property bool isRequestingFill: {
-        if (!applet || !applet.Layout)
-            return false;
-
-        if (((root.isHorizontal && applet.Layout.fillWidth===true)
-             || (root.isVertical && applet.Layout.fillHeight===true))
-                && (!isHidden)) {
-            return true;
-        } else {
+        if (!applet || !applet.Layout) {
             return false;
         }
+
+        if ((root.isHorizontal && applet.Layout.fillWidth===true)
+             || (root.isVertical && applet.Layout.fillHeight===true)) {
+            return !isHidden;
+        }
+
+        return false;
     }
 
     property int maxAutoFillLength: -1 //it is used in calculations for fillWidth,fillHeight applets
@@ -184,6 +192,7 @@ Item {
                                                    || (root.behaveAsDockWithMask && !parabolicEffectIsSupported)
                                                    || (root.behaveAsDockWithMask && parabolicEffectIsSupported && lockZoom)
 
+    readonly property bool isIndicatorDrawn: indicatorBackLayer.level.isDrawn
     readonly property bool isSquare: parabolicEffectIsSupported
     readonly property bool screenEdgeMarginSupported: communicator.requires.screenEdgeMarginSupported || communicator.indexerIsSupported
 
@@ -255,29 +264,40 @@ Item {
         return (indexer.separators.indexOf(head)>=0);
     }
 
+    readonly property bool inMarginsArea: {
+        if (isMarginsAreaSeparator || appletItem.indexer.marginsAreaSeparators.length === 0) {
+            return false;
+        }
+
+        var tailMarginsAreaSeparatorsCount = 0;
+
+        for(var i=0; i<appletItem.indexer.marginsAreaSeparators.length; ++i) {
+            if (appletItem.indexer.marginsAreaSeparators[i] < index) {
+                tailMarginsAreaSeparatorsCount++;
+            }
+        }
+
+        //! even number of margins area separators before this applet means that this applet
+        //! is inside margins area
+        return (tailMarginsAreaSeparatorsCount % 2 === 1);
+    }
+
     //! local margins
     readonly property bool parabolicEffectMarginsEnabled: appletItem.parabolic.factor.zoom>1 && !originalAppletBehavior && !communicator.parabolicEffectIsSupported
 
-    property int lengthAppletPadding: metrics.fraction.lengthAppletPadding === -1 || parabolicEffectMarginsEnabled ?
-                                          metrics.padding.length : metrics.padding.lengthApplet
+    property int lengthAppletPadding:{
+        if (!isIndicatorDrawn) {
+            return 0;
+        }
+
+        return metrics.fraction.lengthAppletPadding === -1 || parabolicEffectMarginsEnabled ? metrics.padding.length : metrics.padding.lengthApplet;
+    }
 
     property int lengthAppletFullMargin: 0
     property int lengthAppletFullMargins: 2 * lengthAppletFullMargin
 
-    property int internalWidthMargins: {
-        if (root.isVertical) {
-            return metrics.totals.thicknessEdges;
-        }
-        return 2 * lengthAppletPadding;
-    }
-
-    property int internalHeightMargins: {
-        if (root.isHorizontal) {
-            return root.metrics.totals.thicknessEdges;
-        }
-
-        return 2 * lengthAppletPadding;
-    }
+    property int internalWidthMargins: root.isVertical ? metrics.totals.thicknessEdges : 2 * lengthAppletPadding
+    property int internalHeightMargins: root.isHorizontal ? root.metrics.totals.thicknessEdges : 2 * lengthAppletPadding
 
     readonly property string pluginName: isInternalViewSplitter ? "org.kde.latte.splitter" : (applet ? applet.pluginName : "")
 
@@ -560,6 +580,9 @@ Item {
     }
 
     onIsAutoFillAppletChanged: updateParabolicEffectIsSupported();
+
+    onLockZoomChanged: fastLayoutManager.saveOptions();
+    onUserBlocksColorizingChanged: fastLayoutManager.saveOptions();
 
     Component.onCompleted: {
         checkIndex();
@@ -871,11 +894,12 @@ Item {
         height: root.isHorizontal ? appletItem.metrics.mask.thickness.zoomedForItems : appletItem.height
         //! must be enabled even for applets that are hidden in order to forward
         //! parabolic effect messages properly to surrounding plasma applets
-        active: isParabolicEnabled || isThinTooltipEnabled
+        active: isParabolicEnabled || isThinTooltipEnabled || hasParabolicMessagesEnabled
 
         //! in hidden state applets must pass on parabolic messages to neighbours
-        readonly property bool isParabolicEnabled: (appletItem.parabolic.isEnabled && !lockZoom) || isHidden
-        readonly property bool isThinTooltipEnabled: appletItem.thinTooltip.isEnabled &&  !isHidden
+        readonly property bool isParabolicEnabled: appletItem.parabolic.isEnabled && !lockZoom
+        readonly property bool isThinTooltipEnabled: appletItem.thinTooltip.isEnabled && !isHidden
+        readonly property bool hasParabolicMessagesEnabled: appletItem.parabolic.isEnabled && (!lockZoom || isSeparator || isMarginsAreaSeparator || isHidden)
 
         sourceComponent: ParabolicArea{}
 
