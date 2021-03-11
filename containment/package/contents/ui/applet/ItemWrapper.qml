@@ -41,24 +41,28 @@ Item{
             if (!root.inConfigureAppletsMode) {
                 return 0;
             } else {
-                return appletItem.inConfigureAppletsDragging && (root.dragOverlay.currentApplet === appletItem || !root.dragOverlay.currentApplet.isInternalViewSplitter)?
+                return appletItem.inConfigureAppletsDragging && root.dragOverlay.currentApplet.isInternalViewSplitter ?
                             appletMinimumLength : internalSplitterComputedLength;
             }
         }
 
-        if (isSeparator && appletItem.parabolic.isEnabled) {
+        if ((isSeparator && appletItem.parabolic.isEnabled)
+                || (isMarginsAreaSeparator && (!root.inConfigureAppletsMode || appletItem.parabolic.isEnabled))) {
             return -1;
         }
 
         if (appletItem.isAutoFillApplet) {
+            if (appletItem.inConfigureAppletsDragging && root.dragOverlay.currentApplet === appletItem) {
+                return root.dragOverlay.draggedPlaceHolder.length;
+            }
+
             //! dont miss 1pixel gap when the two internal splitters are met inConfigure and Justify mode
             //! a good example is a big vertical right sidebar to observe that gap
-            if (appletItem.layouter.maxMetricsInHigherPriority) {
+            if (appletItem.layouter.maxMetricsInHigherPriority) {                
                 return isInternalViewSplitter ? appletItem.maxAutoFillLength + 1 : appletItem.maxAutoFillLength;
             }
 
             var result = Math.max(appletItem.minAutoFillLength,Math.min(appletPreferredLength,appletItem.maxAutoFillLength));
-
             return isInternalViewSplitter? result + 1 : result;
         }
 
@@ -92,6 +96,10 @@ Item{
     property real appletMaximumWidth: applet && applet.Layout ?  applet.Layout.maximumWidth : -1
     property real appletMaximumHeight: applet && applet.Layout ?  applet.Layout.maximumHeight : -1
 
+    readonly property int proposedItemThickness: appletItem.inMarginsArea && !appletItem.canFillThickness ?
+                                                     Math.max(16,appletItem.metrics.marginsArea.iconSize) :
+                                                     appletItem.metrics.iconSize
+
     readonly property real appletLength: root.isHorizontal ? appletWidth : appletHeight
     readonly property real appletThickness: root.isHorizontal ? appletHeight : appletWidth
 
@@ -124,17 +132,26 @@ Item{
 
     property int iconSize: appletItem.metrics.iconSize
 
-    property int marginsThickness: appletItem.canFillThickness ? 0 : appletItem.metrics.totals.thicknessEdges
+    property int marginsThickness: {
+        if (appletItem.inMarginsArea) {
+            return appletItem.metrics.marginsArea.thicknessEdges;
+        }
+
+        return appletItem.metrics.totals.thicknessEdges;
+    }
+
     property int marginsLength: 0   //Fitt's Law, through Binding to avoid Binding loops
 
     property int localLengthMargins: isSeparator
+                                     || appletItem.isMarginsAreaSeparator
                                      || !communicator.requires.lengthMarginsEnabled
                                      || communicator.indexerIsSupported
                                      || isInternalViewSplitter
-                                        ? 0 : appletItem.lengthAppletFullMargins
+                                     ? 0 : appletItem.lengthAppletFullMargins
 
     property real scaledLength: zoomScaleLength * (layoutLength + marginsLength)
     property real scaledThickness: zoomScaleThickness * (layoutThickness + marginsThickness)
+
     property real zoomScaleLength: disableLengthScale ? 1 : zoomScale
     property real zoomScaleThickness: disableThicknessScale ? 1 : zoomScale
 
@@ -272,15 +289,15 @@ Item{
         when: latteView && (wrapper.zoomScale === 1 || communicator.parabolicEffectIsSupported)
         value: {
             if (appletItem.isInternalViewSplitter){
-                return !root.inConfigureAppletsMode ? 0 : appletItem.metrics.iconSize;
+                return !root.inConfigureAppletsMode ? 0 : proposedItemThickness;
             }
 
             // avoid binding loops on startup
             if (communicator.parabolicEffectIsSupported && !communicator.inStartup) {
-                return appletPreferredThickness;
+                return Math.min(appletPreferredThickness, appletItem.metrics.totals.thickness);
             }
 
-            return appletItem.metrics.iconSize;
+            return proposedItemThickness;
         }
     }
 
@@ -290,8 +307,8 @@ Item{
         when: latteView && !appletItem.isAutoFillApplet && (wrapper.zoomScale === 1)
         value: {
             if (applet && ( appletMaximumLength < appletItem.metrics.iconSize
-                                  || appletPreferredLength > appletItem.metrics.iconSize
-                                  || appletItem.originalAppletBehavior)) {
+                           || appletPreferredLength > appletItem.metrics.iconSize
+                           || appletItem.originalAppletBehavior)) {
 
                 //this way improves performance, probably because during animation the preferred sizes update a lot
                 if (appletMaximumLength>0 && appletMaximumLength < appletItem.metrics.iconSize){
@@ -445,9 +462,28 @@ Item{
         property int _length:0 // through Binding to avoid binding loops
         property int _thickness:0 // through Binding to avoid binding loops
 
-        readonly property int appliedEdgeMargin: appletItem.screenEdgeMarginSupported ? 0 : appletItem.metrics.margin.screenEdge
-        readonly property int tailThicknessMargin: appletItem.screenEdgeMarginSupported ? 0 : appliedEdgeMargin + (wrapper.zoomScaleThickness * metrics.margin.thickness)
-        readonly property int headThicknessMargin: appletItem.canFillThickness || appletItem.screenEdgeMarginSupported ? 0 : appletItem.metrics.margin.thickness
+        readonly property int appliedEdgeMargin: appletItem.canFillScreenEdge ? 0 : appletItem.metrics.margin.screenEdge
+        readonly property int tailThicknessMargin: {
+            if (appletItem.canFillScreenEdge) {
+                return 0;
+            } else if (appletItem.canFillThickness) {
+                return appliedEdgeMargin;
+            } else if (appletItem.inMarginsArea) {
+                return appliedEdgeMargin + (wrapper.zoomScaleThickness * appletItem.metrics.marginsArea.marginThickness);
+            }
+
+            return appliedEdgeMargin + (wrapper.zoomScaleThickness * appletItem.metrics.margin.thickness);
+        }
+
+        readonly property int headThicknessMargin: {
+            if (appletItem.canFillThickness || appletItem.canFillScreenEdge) {
+                return 0;
+            } else if (appletItem.inMarginsArea) {
+                return appletItem.metrics.marginsArea.marginThickness;
+            }
+
+            return appletItem.metrics.margin.thickness
+        }
 
         Binding {
             target: _wrapperContainer
@@ -458,8 +494,9 @@ Item{
                     return wrapper.layoutThickness;
                 }
 
-                var wrapperContainerThickness =  appletItem.screenEdgeMarginSupported ? appletItem.metrics.totals.thickness : wrapper.zoomScaleThickness * metrics.iconSize;
-                return appletItem.screenEdgeMarginSupported ? wrapperContainerThickness + appletItem.metrics.margin.screenEdge : wrapperContainerThickness;
+                var canfillthickness = (appletItem.canFillScreenEdge || appletItem.canFillThickness);
+                var wrapperContainerThickness =  canfillthickness ? appletItem.metrics.totals.thickness : wrapper.zoomScaleThickness * wrapper.proposedItemThickness;
+                return appletItem.canFillScreenEdge ? wrapperContainerThickness + appletItem.metrics.margin.screenEdge : wrapperContainerThickness;
             }
         }
 
@@ -469,7 +506,7 @@ Item{
             when: !visibilityManager.inRelocationHiding
             value: {
                 if (appletItem.isAutoFillApplet && (appletItem.maxAutoFillLength>-1)){
-                    return wrapper.length - appletItem.lengthAppletFullMargins;
+                    return wrapper.length;
                 }
 
                 return wrapper.zoomScaleLength * wrapper.layoutLength;
@@ -496,12 +533,14 @@ Item{
             property color backgroundColor: "transparent"
             property color glowColor: "transparent"
 
-            readonly property bool isIconItemVisible: communicator.appletIconItem && communicator.appletIconItem.visible
+            readonly property bool roundToIconSizeDisabled: communicator.appletIconItem && appletItem.parabolic.isEnabled
 
-            onIsIconItemVisibleChanged: {
-                if (isIconItemVisible) {
-                    communicator.appletIconItem.roundToIconSize = false;
+            onRoundToIconSizeDisabledChanged: {
+                if (!communicator.appletIconItem) {
+                    return;
                 }
+
+                communicator.appletIconItem.roundToIconSize = !roundToIconSizeDisabled;
             }
 
             sourceComponent: LatteCore.IconItem{

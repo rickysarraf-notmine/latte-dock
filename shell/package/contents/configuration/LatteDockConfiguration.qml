@@ -59,10 +59,16 @@ Loader {
         //!    we use 100px. or 50px. in order to give space for othe views to be shown and to have also
         //!    some space around the settings window
         property int maxHeight: plasmoid.formFactor === PlasmaCore.Types.Horizontal ?
-                                    viewConfig.availableScreenGeometry.height - (latteView.editThickness - latteView.maxNormalThickness) - units.largeSpacing :
+                                    viewConfig.availableScreenGeometry.height - canvasHeadThickness - units.largeSpacing :
                                     viewConfig.availableScreenGeometry.height - 2 * units.largeSpacing
 
         property int maxWidth: 0.6 * latteView.screenGeometry.width
+
+        property int canvasThickness: plasmoid.formFactor === PlasmaCore.Types.Vertical ? latteView.positioner.canvasGeometry.width : latteView.positioner.canvasGeometry.height
+        property int canvasHeadThickness: {
+            var edgeMargin = latteView.behaveAsPlasmaPanel && latteView.screenEdgeMarginEnabled ? latteView.screenEdgeMargin : 0;
+            return Math.max(0,canvasThickness - latteView.maxNormalThickness - Math.max(0,edgeMargin))
+        }
 
         //! propose size based on font size
         property int proposedWidth: 0.82 * proposedHeight + units.smallSpacing * 2
@@ -512,9 +518,10 @@ Loader {
                     implicitHeight: removeView.implicitHeight
 
                     buttonEnabled: true
-                    buttonText: i18n("New Dock")
+                    buttonIsTriggeringMenu: true
+                    buttonText: i18n("Add...")
                     buttonIconSource: "list-add"
-                    buttonToolTip: i18n("Add a new dock")
+                    buttonToolTip: i18n("Add new docks and panels from various templates")
 
                     comboBoxEnabled: true
                     comboBoxBlankSpaceForEmptyIcons: true
@@ -522,6 +529,7 @@ Loader {
                     comboBoxEnabledRole: "enabled"
                     comboBoxTextRole: "name"
                     comboBoxIconRole: "icon"
+                    comboBoxIsSeparatorRole: "isSeparator"
                     comboBoxMinimumPopUpWidth: actionsModel.count > 1 ? dialog.width / 2 : 150
 
                     property var centralLayoutsNames: []
@@ -542,15 +550,10 @@ Loader {
                         onActivated: {
                             var item = actionsModel.get(index);
 
-                            if (item && item.actionId === "new:") {
+                            if (item && item.actionId === "add:") {
                                 latteView.layout.newView(item.templateId);
-                            } else  if (item && item.actionId === "export:") {
-                                latteView.exportTemplate();
-                            } else  if (item && item.actionId === "copy:") {
-                                latteView.copyView();
-                            } else if (item && item.actionId === "move:") {
-                                var layouts = actionsComboBtn.centralLayoutsNames;
-                                latteView.positioner.hideDockDuringMovingToLayout(layouts[index-1]);
+                            } else if (item && item.actionId === "duplicate:") {
+                                latteView.duplicateView();
                             }
 
                             actionsComboBtn.comboBox.currentIndex = -1;
@@ -566,23 +569,17 @@ Loader {
                     }
 
                     Connections{
-                        target: actionsComboBtn.button
-                        onClicked: latteView.layout.newView(layoutsManager.viewTemplateIds()[0])
-                    }
-
-                    Connections{
-                        target: latteView
-                        onTypeChanged: actionsComboBtn.updateCopyText();
-                        onLayoutChanged: actionsComboBtn.updateModel();
-                    }
-
-                    Connections{
                         target: viewConfig
                         onIsReadyChanged: {
                             if (viewConfig.isReady) {
                                 actionsComboBtn.updateModel();
                             }
                         }
+                    }
+
+                    Connections{
+                        target: latteView
+                        onTypeChanged: actionsComboBtn.updateDuplicateText();
                     }
 
                     Connections {
@@ -593,52 +590,26 @@ Loader {
                     function updateModel() {
                         actionsModel.clear();
 
-                        var tempCentralLayouts = layoutsManager.centralLayoutsNames();
+                        var duplicate = {actionId: 'duplicate:', enabled: true, name: '', icon: 'edit-copy'};
+                        actionsModel.append(duplicate);
+                        updateDuplicateText();
 
-                        if (tempCentralLayouts.length > 0) {
-                            var curIndex = tempCentralLayouts.indexOf(latteView.layout.name);
-                            if (curIndex >=0) {
-                                tempCentralLayouts.splice(curIndex,1);
-                            }
-
-                            centralLayoutsNames = tempCentralLayouts;
-                            var iconArrow = Qt.application.layoutDirection === Qt.RightToLeft ? 'arrow-left' : 'arrow-right';
-
-                            for(var i=0; i<centralLayoutsNames.length; ++i) {
-                                var layout = {
-                                    actionId: 'move:',
-                                    enabled: true,
-                                    name: i18n("Move to %0").arg(centralLayoutsNames[i]),
-                                    icon: iconArrow
-                                };
-                                actionsModel.append(layout);
-                            }
-                        }
-
-                        var exporttemplate = {actionId: 'export:', enabled: true, name: i18n("Export as Template"), icon: 'document-export'};
-                        actionsModel.append(exporttemplate);
-
-                        var copy = {actionId: 'copy:', enabled: true, name: '', icon: 'edit-copy'};
-                        actionsModel.append(copy);
-                        updateCopyText();
+                        var separator = {isSeparator: true};
+                        actionsModel.append(separator);
 
                         var viewTemplateIds = layoutsManager.viewTemplateIds();
+                        var viewTemplateNames = layoutsManager.viewTemplateNames();
 
-                        if (viewTemplateIds.length > 1) {
-                            var viewTemplateNames = layoutsManager.viewTemplateNames();
-
-                            for(var i=viewTemplateIds.length-1; i>=1; --i) {
-                                //! add view templates on reverse
-                                var viewtemplate = {
-                                    actionId: 'new:',
-                                    enabled: true,
-                                    templateId: viewTemplateIds[i],
-                                    name: i18n("New %0").arg(viewTemplateNames[i]),
-                                    icon: 'list-add'
-                                };
-                                actionsModel.append(viewtemplate);
-                            }
-
+                        for(var i=viewTemplateIds.length-1; i>=0; --i) {
+                            //! add view templates on reverse
+                            var viewtemplate = {
+                                actionId: 'add:',
+                                enabled: true,
+                                templateId: viewTemplateIds[i],
+                                name: viewTemplateNames[i],
+                                icon: 'list-add'
+                            };
+                            actionsModel.append(viewtemplate);
                         }
 
                         actionsComboBtn.comboBox.currentIndex = -1;
@@ -649,16 +620,17 @@ Loader {
                         actionsComboBtn.comboBox.currentIndex = -1;
                     }
 
-                    function updateCopyText() {
+                    function updateDuplicateText() {
                         for (var i=0; i<actionsModel.count; ++i) {
                             var item = actionsModel.get(i);
-                            if (item.actionId === "copy:") {
-                                var copyText = latteView.type === LatteCore.Types.DockView ? i18n("Copy Dock") : i18n("Copy Panel")
-                                item.name = copyText;
+                            if (item.actionId === "duplicate:") {
+                                var duplicateText = latteView.type === LatteCore.Types.DockView ? i18n("Duplicate Dock") : i18n("Duplicate Panel")
+                                item.name = duplicateText;
                                 break;
                             }
                         }
                     }
+
                 }
 
                 PlasmaComponents.Button {

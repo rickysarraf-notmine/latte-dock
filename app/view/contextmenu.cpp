@@ -453,6 +453,8 @@ void ContextMenu::addAppletActions(QMenu *desktopMenu, Plasma::Applet *applet, Q
         return;
     }
 
+    desktopMenu->addSection(applet->pluginMetaData().name());
+
     for (QAction *action : applet->contextualActions()) {
         if (action) {
             desktopMenu->addAction(action);

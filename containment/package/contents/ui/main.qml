@@ -42,7 +42,6 @@ import "editmode" as EditMode
 import "layouts" as Layouts
 import "./background" as Background
 import "./debugger" as Debugger
-import "../code/LayoutManager.js" as LayoutManager
 
 Item {
     id: root
@@ -131,17 +130,13 @@ Item {
                                         || latteView.windowsTracker.currentScreen.activeWindowTouchingEdge
                                         || hasExpandedApplet)
 
-    property bool floatingInternalGapIsForced: {
-        if (plasmoid.configuration.floatingInternalGapIsForced === Qt.UnChecked) {
-            return false;
-        } else if (plasmoid.configuration.floatingInternalGapIsForced === Qt.Checked) {
-            return true;
-        }  else if (plasmoid.configuration.floatingInternalGapIsForced === Qt.PartiallyChecked /*Auto*/) {
-            return viewTypeInQuestion === LatteCore.Types.PanelView ? false : true;
-        }
+    property bool floatingInternalGapIsForced: plasmoid.configuration.floatingInternalGapIsForced
 
-        return true;
-    }
+    property bool hasFloatingGapInputEventsDisabled: root.screenEdgeMarginEnabled
+                                                     && !latteView.byPassWM
+                                                     && !root.inConfigureAppletsMode
+                                                     && !parabolic.isEnabled
+                                                     && (root.behaveAsPlasmaPanel || (root.behaveAsDockWithMask && !root.floatingInternalGapIsForced))
 
     property bool forceSolidPanel: (latteView && latteView.visibility
                                     && LatteCore.WindowSystem.compositingActive
@@ -172,11 +167,7 @@ Item {
                                                           && latteView.windowsTracker.currentScreen.isTouchingBusyVerticalView
                                                           && plasmoid.configuration.backgroundOnlyOnMaximized)
 
-    property bool hideThickScreenGap: screenEdgeMarginEnabled
-                                      && plasmoid.configuration.hideFloatingGapForMaximized
-                                      && latteView && latteView.windowsTracker
-                                      && latteView.windowsTracker.currentScreen.existsWindowMaximized
-
+    property bool hideThickScreenGap: false /*set through binding*/
     property bool hideLengthScreenGaps: false /*set through binding*/
 
     property bool mirrorScreenGap: screenEdgeMarginEnabled
@@ -373,7 +364,7 @@ Item {
 
         for (var i=tempLength-1; i>=0; --i) {
             var applet = layoutsContainer.mainLayout.children[i];
-            if (applet && (applet === dndSpacer || applet === lastSpacer ||  applet.isInternalViewSplitter))
+            if (applet && (applet === dndSpacer ||  applet.isInternalViewSplitter))
                 count1--;
         }
 
@@ -382,7 +373,7 @@ Item {
 
         for (var i=tempLength-1; i>=0; --i) {
             var applet = layoutsContainer.endLayout.children[i];
-            if (applet && (applet === dndSpacer || applet === lastSpacer  || applet.isInternalViewSplitter))
+            if (applet && (applet === dndSpacer || applet.isInternalViewSplitter))
                 count2--;
         }
 
@@ -405,6 +396,17 @@ Item {
 
     //////////////START OF BINDINGS
 
+    //! Wait until the mouse leaves the view
+    Binding {
+        target: root
+        property: "hideThickScreenGap"
+        when: !(plasmoid.configuration.floatingGapHidingWaitsMouse && dockContainsMouse)
+        value: screenEdgeMarginEnabled
+               && plasmoid.configuration.hideFloatingGapForMaximized
+               && latteView && latteView.windowsTracker
+               && latteView.windowsTracker.currentScreen.existsWindowMaximized
+    }
+
     //! Binding is needed in order for hideLengthScreenGaps to be activated or not only after
     //! View sliding in/out has finished. This way the animation is smoother for behaveAsPlasmaPanels
     Binding{
@@ -413,6 +415,7 @@ Item {
         when: latteView && latteView.positioner && latteView.visibility
               && ((root.behaveAsPlasmaPanel && latteView.positioner.slideOffset === 0)
                   || root.behaveAsDockWithMask)
+              && !(plasmoid.configuration.floatingGapHidingWaitsMouse && dockContainsMouse)
         value: (hideThickScreenGap
                 && (latteView.visibility.mode === LatteCore.Types.AlwaysVisible
                     || latteView.visibility.mode === LatteCore.Types.WindowsGoBelow)
@@ -459,16 +462,20 @@ Item {
 
             if (root.editMode){
                 if (root.myView.alignment===LatteCore.Types.Justify) {
-                    root.addInternalViewSplittersInMainLayout();
-                    root.moveAppletsBasedOnJustifyAlignment();
+                    layouter.appletsInParentChange = true;
+                    fastLayoutManager.addJustifySplittersInMainLayout();
+                    console.log("LAYOUTS: Moving applets from MAIN to THREE Layouts mode...");
+                    fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
+                    layouter.appletsInParentChange = false;
                 } else {
-                    root.joinLayoutsToMainLayout();
-                    root.destroyInternalViewSplitters();
+                    layouter.appletsInParentChange = true;
+                    console.log("LAYOUTS: Moving applets from THREE to MAIN Layout mode...");
+                    fastLayoutManager.joinLayoutsToMainLayout();
+                    layouter.appletsInParentChange = false;
                 }
             }
 
-            LayoutManager.save();
-            root.updateIndexes();
+            fastLayoutManager.save();
         }
     }
 
@@ -539,18 +546,9 @@ Item {
     }
 
     Component.onCompleted: {
-        //  currentLayout.isLayoutHorizontal = isHorizontal
-        LayoutManager.plasmoid = plasmoid;
-        LayoutManager.root = root;
-        LayoutManager.layout = layoutsContainer.mainLayout;
-        LayoutManager.layoutS = layoutsContainer.startLayout;
-        LayoutManager.layoutE = layoutsContainer.endLayout;
-        LayoutManager.lastSpacer = lastSpacer;
-        LayoutManager.metrics = metrics;
-
         upgrader_v010_alignment();
 
-        LayoutManager.restore();
+        fastLayoutManager.restore();
         plasmoid.action("configure").visible = !plasmoid.immutable;
         plasmoid.action("configure").enabled = !plasmoid.immutable;
 
@@ -561,6 +559,7 @@ Item {
         console.debug("Destroying Latte Dock Containment ui...");
 
         layouter.appletsInParentChange = true;
+        fastLayoutManager.save();
 
         if (latteView) {
             if (latteView.positioner) {
@@ -580,33 +579,8 @@ Item {
         }
     }
 
-    Containment.onAppletAdded: {
-        addApplet(applet, x, y);
-        console.log(applet.pluginName);
-        LayoutManager.save();
-        updateIndexes();
-    }
-
-    Containment.onAppletRemoved: {
-        LayoutManager.removeApplet(applet);
-        var flexibleFound = false;
-        for (var i = 0; i < layoutsContainer.mainLayout.children.length; ++i) {
-            var applet = layoutsContainer.mainLayout.children[i].applet;
-            if (applet && ((root.isHorizontal && applet.Layout.fillWidth) ||
-                           (!root.isHorizontal && applet.Layout.fillHeight)) &&
-                    applet.visible) {
-                flexibleFound = true;
-                break
-            }
-        }
-        if (!flexibleFound) {
-            lastSpacer.parent = layoutsContainer.mainLayout;
-        }
-
-        LayoutManager.save();
-
-        updateIndexes();
-    }
+    Containment.onAppletAdded: fastLayoutManager.addAppletItem(applet, x, y);
+    Containment.onAppletRemoved: fastLayoutManager.removeAppletItem(applet);
 
     Plasmoid.onUserConfiguringChanged: {
         if (plasmoid.userConfiguring) {
@@ -623,116 +597,26 @@ Item {
     //////////////END OF CONNECTIONS
 
     //////////////START OF FUNCTIONS
-    function addApplet(applet, x, y) {
-        var container = appletContainerComponent.createObject(dndSpacer.parent)
-
-        container.applet = applet;
-        applet.parent = container.appletWrapper;
-
-        applet.anchors.fill = container.appletWrapper;
-
+    function createAppletItem(applet) {
+        var appletItem = appletItemComponent.createObject(dndSpacer.parent);
+        appletItem.applet = applet;
+        applet.parent = appletItem.appletWrapper;
+        applet.anchors.fill = appletItem.appletWrapper;
         applet.visible = true;
 
-
-        // don't show applet if it chooses to be hidden but still make it
-        // accessible in the panelcontroller
-        container.visible = Qt.binding(function() {
+        // don't show applet if it chooses to be hidden but still make it  accessible in the panelcontroller
+        appletItem.visible = Qt.binding(function() {
             return applet.status !== PlasmaCore.Types.HiddenStatus || (!plasmoid.immutable && root.inConfigureAppletsMode)
-        })
+        });
 
-        addContainerInLayout(container, applet, x, y);
+        return appletItem;
     }
 
-    function addContainerInLayout(container, applet, x, y){
-        // Is there a DND placeholder? Replace it!
-        if ( (dndSpacer.parent === layoutsContainer.mainLayout)
-                || (dndSpacer.parent === layoutsContainer.startLayout)
-                || (dndSpacer.parent===layoutsContainer.endLayout)) {
-            LayoutManager.insertBeforeForLayout(dndSpacer.parent, dndSpacer, container);
-            dndSpacer.parent = root;
-            return;
-            // If the provided position is valid, use it.
-        } else if (x >= 0 && y >= 0) {
-            var index = LayoutManager.insertAtCoordinates2(container, x , y);
-
-            // Fall through to determining an appropriate insert position.
-        } else {
-            var before = null;
-            container.animationsEnabled = false;
-
-            if (lastSpacer.parent === layoutsContainer.mainLayout) {
-                before = lastSpacer;
-            }
-
-            // Insert icons to the left of whatever is at the center (usually a Task Manager),
-            // if it exists.
-            // FIXME TODO: This is a real-world fix to produce a sensible initial position for
-            // launcher icons added by launcher menu applets. The basic approach has been used
-            // since Plasma 1. However, "add launcher to X" is a generic-enough concept and
-            // frequent-enough occurrence that we'd like to abstract it further in the future
-            // and get rid of the ugliness of parties external to the containment adding applets
-            // of a specific type, and the containment caring about the applet type. In a better
-            // system the containment would be informed of requested launchers, and determine by
-            // itself what it wants to do with that information.
-            if (applet.pluginName == "org.kde.plasma.icon") {
-                var middle = layoutsContainer.mainLayout.childAt(root.width / 2, root.height / 2);
-
-                if (middle) {
-                    before = middle;
-                }
-
-                // Otherwise if lastSpacer is here, enqueue before it.
-            }
-
-            if (before) {
-                LayoutManager.insertBefore(before, container);
-
-                // Fall through to adding at the end.
-            } else {
-                container.parent = layoutsContainer.mainLayout;
-            }
-        }
-
-        //Important, removes the first children of the layoutsContainer.mainLayout after the first
-        //applet has been added
-        lastSpacer.parent = root;
-
-        updateIndexes();
-    }
-
-    function addInternalViewSplittersInMainLayout(){
-        if (internalViewSplittersCount() === 0) {
-            addInternalViewSplitterInMain(plasmoid.configuration.splitterPosition);
-            addInternalViewSplitterInMain(plasmoid.configuration.splitterPosition2);
-        }
-    }
-
-    function addInternalViewSplitterInStart(pos){
-        addInternalViewSplitterInLayout(layoutsContainer.startLayout, pos);
-    }
-
-    function addInternalViewSplitterInMain(pos){
-        addInternalViewSplitterInLayout(layoutsContainer.mainLayout, pos);
-    }
-
-    function addInternalViewSplitterInEnd(pos){
-        addInternalViewSplitterInLayout(layoutsContainer.endLayout, pos);
-    }
-
-    function addInternalViewSplitterInLayout(area, pos){
-        var splittersCount = internalViewSplittersCount();
-        if(splittersCount<2){
-            var splitter = appletContainerComponent.createObject(root);
-
-            splitter.internalSplitterId = splittersCount+1;
-            splitter.visible = true;
-
-            if(pos>=0 ){
-                LayoutManager.insertAtIndex(area, splitter, pos);
-            } else {
-                LayoutManager.insertAtIndex(area, splitter, Math.floor(area.count / 2));
-            }
-        }
+    function createJustifySplitter() {
+        var splitter = appletItemComponent.createObject(root);
+        splitter.internalSplitterId = internalViewSplittersCount()+1;
+        splitter.visible = true;
+        return splitter;
     }
 
     //! it is used in order to check the right click position
@@ -763,31 +647,6 @@ Item {
         return false;
     }
 
-    function checkLastSpacer() {
-        lastSpacer.parent = root
-
-        var expands = false;
-
-        if (isHorizontal) {
-            for (var container in layoutsContainer.mainLayout.children) {
-                var item = layoutsContainer.mainLayout.children[container];
-                if (item.Layout && item.Layout.fillWidth) {
-                    expands = true;
-                }
-            }
-        } else {
-            for (var container in layoutsContainer.mainLayout.children) {
-                var item = layoutsContainer.mainLayout.children[container];
-                if (item.Layout && item.Layout.fillHeight) {
-                    expands = true;
-                }
-            }
-        }
-        if (!expands) {
-            lastSpacer.parent = layoutsContainer.mainLayout
-        }
-    }
-
     function internalViewSplittersCount(){
         var splitters = 0;
         for (var container in layoutsContainer.startLayout.children) {
@@ -812,26 +671,6 @@ Item {
         }
 
         return splitters;
-    }
-
-    function layoutManager() {
-        return LayoutManager;
-    }
-
-    function layoutManagerInsertBefore(place, item) {
-        LayoutManager.insertBefore(place, item);
-    }
-
-    function layoutManagerInsertAfter(place, item) {
-        LayoutManager.insertAfter(place, item);
-    }
-
-    function layoutManagerSave() {
-        LayoutManager.save();
-    }
-
-    function layoutManagerSaveOptions() {
-        LayoutManager.saveOptions();
     }
 
     function mouseInCanBeHoveredApplet(){
@@ -880,44 +719,6 @@ Item {
         return false;
     }
 
-    function moveAppletsBasedOnJustifyAlignment() {
-        layouter.appletsInParentChange = true;
-
-        if (latteView) {
-            latteView.extendedInterface.moveAppletsInJustifyAlignment(layoutsContainer.startLayout,
-                                                                      layoutsContainer.mainLayout,
-                                                                      layoutsContainer.endLayout);
-        }
-
-        layouter.appletsInParentChange = false;
-    }
-
-    function joinLayoutsToMainLayout() {
-        layouter.appletsInParentChange = true;
-
-        console.log("LAYOUTS: Moving applets from THREE to MAIN Layout mode...");
-        var totalChildren1 = layoutsContainer.mainLayout.children.length;
-        for (var i=totalChildren1-1; i>=0; --i) {
-            var item1 = layoutsContainer.mainLayout.children[0];
-            item1.parent = layoutsContainer.startLayout;
-        }
-
-        var totalChildren2 = layoutsContainer.endLayout.children.length;
-
-        for (var i=totalChildren2-1; i>=0; --i) {
-            var item2 = layoutsContainer.endLayout.children[0];
-            item2.parent = layoutsContainer.startLayout;
-        }
-
-        var totalChildrenL = layoutsContainer.startLayout.children.length;
-        for (var i=totalChildrenL-1; i>=0; --i) {
-            var itemL = layoutsContainer.startLayout.children[0];
-            itemL.parent = layoutsContainer.mainLayout;
-        }
-
-        layouter.appletsInParentChange = false;
-    }
-
     function upgrader_v010_alignment() {
         //! IMPORTANT, special case because it needs to be loaded on Component constructor
         if (!plasmoid.configuration.alignmentUpgraded) {
@@ -929,7 +730,7 @@ Item {
 
     ///////////////BEGIN components
     Component {
-        id: appletContainerComponent
+        id: appletItemComponent
         Applet.AppletItem{
             animations: _animations
             debug: _debug
@@ -958,28 +759,40 @@ Item {
         id: colorScopePalette
     }
 
+    LatteContainment.LayoutManager{
+        id:fastLayoutManager
+        plasmoidObj: plasmoid
+        rootItem: root
+        dndSpacerItem: dndSpacer
+        mainLayout: layoutsContainer.mainLayout
+        startLayout: layoutsContainer.startLayout
+        endLayout: layoutsContainer.endLayout
+        metrics: _metrics
+
+        onLockedZoomAppletsChanged: plasmoid.configuration.lockedZoomApplets = fastLayoutManager.lockedZoomApplets;
+        onUserBlocksColorizingAppletsChanged: plasmoid.configuration.userBlocksColorizingApplets = fastLayoutManager.userBlocksColorizingApplets;
+
+        onAppletOrderChanged: {
+            plasmoid.configuration.appletOrder = fastLayoutManager.appletOrder;
+            root.updateIndexes();
+        }
+
+        onSplitterPositionChanged: {
+            plasmoid.configuration.splitterPosition = fastLayoutManager.splitterPosition;
+            root.updateIndexes();
+        }
+
+        onSplitterPosition2Changed: {
+            plasmoid.configuration.splitterPosition2 = fastLayoutManager.splitterPosition2;
+            root.updateIndexes();
+        }
+    }
 
     ///////////////BEGIN UI elements
 
     Loader{
         active: debug.windowEnabled
         sourceComponent: Debugger.DebugWindow{}
-    }
-
-    Item {
-        id: lastSpacer
-        parent: layoutsContainer.mainLayout
-
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        z:10
-
-        Rectangle{
-            anchors.fill: parent
-            color: "transparent"
-            border.color: "yellow"
-            border.width: 1
-        }
     }
 
     Loader{
@@ -1043,8 +856,10 @@ Item {
 
         LatteComponents.AddItem{
             id: dndSpacerAddItem
-            width: root.isHorizontal ? parent.width : parent.width - metrics.margin.screenEdge
-            height: root.isHorizontal ? parent.height - metrics.margin.screenEdge: parent.height
+            width: metrics.iconSize
+            height: metrics.iconSize
+
+            property int thickMargin: metrics.margin.screenEdge + metrics.margin.thickness
 
             states:[
                 State{
@@ -1058,7 +873,7 @@ Item {
                     }
                     PropertyChanges{
                         target: dndSpacerAddItem;
-                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: metrics.margin.screenEdge;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: thickMargin;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -1073,7 +888,7 @@ Item {
                     }
                     PropertyChanges{
                         target: dndSpacerAddItem;
-                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: metrics.margin.screenEdge;    anchors.bottomMargin: 0;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: thickMargin;    anchors.bottomMargin: 0;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -1088,7 +903,7 @@ Item {
                     }
                     PropertyChanges{
                         target: dndSpacerAddItem;
-                        anchors.leftMargin: metrics.margin.screenEdge;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                        anchors.leftMargin: thickMargin;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -1108,6 +923,14 @@ Item {
                     }
                 }
             ]
+        }
+    }
+
+    Behavior on maxLengthPerCentage {
+        enabled: root.behaveAsDockWithMask && plasmoid.configuration.floatingGapHidingWaitsMouse && dockContainsMouse
+        NumberAnimation {
+            duration: animations.duration.short
+            easing.type: Easing.InQuad
         }
     }
 

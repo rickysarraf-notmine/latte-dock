@@ -36,6 +36,9 @@ AbilityDefinition.MyView {
     isShownFully: ref.myView.isShownFully
     isHidingBlocked: ref.myView.isHidingBlocked
 
+    inEditMode: ref.myView.inEditMode
+    inConfigureAppletsMode: ref.myView.inConfigureAppletsMode
+
     inSlidingIn: ref.myView.inSlidingIn
     inSlidingOut: ref.myView.inSlidingOut
     inRelocationAnimation: ref.myView.inRelocationAnimation
@@ -60,6 +63,8 @@ AbilityDefinition.MyView {
 
     readonly property AbilityDefinition.MyView local: AbilityDefinition.MyView {
         isShownFully: true
+        inEditMode: plasmoid.userConfiguring
+        inConfigureAppletsMode: plasmoid.userConfiguring
     }
 
     Item {
@@ -87,10 +92,10 @@ AbilityDefinition.MyView {
     }
 
     function inCurrentLayout() {
-        if (bridge && bridge.myView.isReady) {
-            return bridge.myView.inCurrentLayout();
-        } else {
-            return true;
-        }
+        return bridge && ref.myView.isReady ? ref.myView.inCurrentLayout() : true;
+    }
+
+    function action(name) {
+        return bridge && ref.myView.isReady ? ref.myView.action(name) : null;
     }
 }

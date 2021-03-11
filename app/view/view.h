@@ -268,7 +268,7 @@ public:
     void releaseConfigView();
 
 public slots:
-    Q_INVOKABLE void copyView();
+    Q_INVOKABLE void duplicateView();
     Q_INVOKABLE void exportTemplate();
     Q_INVOKABLE void removeView();
 
@@ -279,6 +279,7 @@ public slots:
     void updateAbsoluteGeometry(bool bypassChecks = false);
 
     Q_INVOKABLE bool isHighestPriorityView();
+    Q_INVOKABLE QAction *action(const QString &name);
 
 protected slots:
     void showConfigurationInterface(Plasma::Applet *applet) override;
@@ -310,6 +311,7 @@ signals:
     void extendedInterfaceChanged();
     void fontPixelSizeChanged();
     void forcedShown(); //[workaround] forced shown to avoid a KWin issue that hides windows when closing activities
+    void geometryChanged();
     void widthChanged();
     void headThicknessGapChanged();
     void heightChanged();

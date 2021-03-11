@@ -188,7 +188,7 @@ Item {
 
                         // console.log( " org.kde.latte s4_0 " + curApplet.pluginName + " : (" +minSize+","+prefSize+","+maxSize+") ");
 
-                        if (!isNeutral && maxSize===Infinity
+                        if (!isNeutral
                                 && ((inMaxAutoFillCalculations && curApplet.maxAutoFillLength>mostDemandingAppletSize)
                                     || (!inMaxAutoFillCalculations && curApplet.minAutoFillLength>mostDemandingAppletSize) )) {
                             mostDemandingApplet = curApplet;
@@ -209,7 +209,11 @@ Item {
                         mostDemandingApplet.minAutoFillLength = mostDemandingApplet.minAutoFillLength + sizePerApplet;
                     }
 
-                    // console.log(" org.kde.latte s4_1  "+ mostDemandingApplet.applet.pluginName + " assigned: "  + mostDemandingApplet.maxAutoFillLength + "\n");
+                    /*if (inMaxAutoFillCalculations) {
+                        console.log(" org.kde.latte s4_1  "+ mostDemandingApplet.applet.pluginName + " assigned max : "  + mostDemandingApplet.maxAutoFillLength + "\n");
+                    } else {
+                        console.log(" org.kde.latte s4_1  "+ mostDemandingApplet.applet.pluginName + " assigned min: "  + mostDemandingApplet.minAutoFillLength + "\n");
+                    }*/
                 } else if (neutralAppletsNo>0) {
                     //! if no demanding applets was found then the available space is splitted equally
                     //! between all neutralApplets
@@ -338,13 +342,10 @@ Item {
 
         // console.log(" S ::: " +startLayout.fillApplets + " _ " + sizePerAppletStart + " _ " + noStart);
 
-        if (mainLayout.fillApplets > 0) {
-            computeStep2ForLayout(mainLayout.grid, sizePerAppletMain, noMain, inMaxAutoFillCalculations); //default behavior
-        }
-
         if (startLayout.fillApplets > 0) {
             if (mainLayout.fillApplets > 0) {
-                //! adjust final fill applet size in mainlayouts final length
+                //! finally adjust ALL startLayout fill applets size in mainlayouts final length
+                noStart = startLayout.fillApplets;
                 sizePerAppletStart = ((max_length/2) - (mainLayout.grid.length/2) - startLayout.sizeWithNoFillApplets) / noStart;
             }
 
@@ -353,13 +354,28 @@ Item {
 
         if (endLayout.fillApplets > 0) {
             if (mainLayout.fillApplets > 0) {
-                //! adjust final fill applet size in mainlayouts final length
+                //! finally adjust ALL endLayout fill applets size in mainlayouts final length
+                noEnd = endLayout.fillApplets;
                 sizePerAppletEnd = ((max_length/2) - (mainLayout.grid.length/2) - endLayout.sizeWithNoFillApplets) / noEnd;
             }
 
             computeStep2ForLayout(endLayout.grid, sizePerAppletEnd, noEnd, inMaxAutoFillCalculations);
         }
 
+        if (mainLayout.fillApplets > 0) {
+            var halfRemained = (max_length/2) - (mainLayout.grid.length/2);
+            var freeSpaceAfterStart = halfRemained - startLayout.grid.length;
+            var freeSpaceBeforeEnd = halfRemained - endLayout.grid.length;
+
+            if (freeSpaceAfterStart > 0 && freeSpaceBeforeEnd>0) {
+                if (mainLayout.fillApplets > 0) {
+                    var minimumHalfAppletSizePossible = Math.min(freeSpaceAfterStart, freeSpaceBeforeEnd);
+                    sizePerAppletMain = Math.max(0, (minimumHalfAppletSizePossible * 2)/mainLayout.fillApplets);
+                }
+
+                computeStep2ForLayout(mainLayout.grid, sizePerAppletMain, noMain, inMaxAutoFillCalculations); //default behavior
+            }
+        }
     }
 
     function updateFillAppletsWithOneStep(inMaxAutoFillCalculations) {

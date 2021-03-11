@@ -18,12 +18,31 @@
 */
 
 import QtQuick 2.7
+
+import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-
 Item {
-    readonly property int thickness: appletItem.canFillThickness || appletItem.screenEdgeMarginSupported ? 1 : appletItem.metrics.margin.thickness
+    id: paddingsVisual
+
+    readonly property int thickness: {
+        if ((appletItem.canFillThickness && !appletItem.isMarginsAreaSeparator && !communicator.indexerIsSupported)
+                || (appletItem.canFillScreenEdge && !communicator.indexerIsSupported) ) {
+            return 1;
+        } else if (appletItem.isMarginsAreaSeparator) {
+            return appletItem.metrics.marginsArea.marginThickness + maxMarginAreaSeparatorGap;
+        } else if (appletItem.inMarginsArea) {
+            return appletItem.metrics.marginsArea.marginThickness;
+        }
+
+        return appletItem.metrics.margin.thickness;
+    }
     readonly property int length: root.isHorizontal ? wrapper.width : wrapper.height
+
+    readonly property int parentThickness: root.isHorizontal ? wrapper.height : wrapper.width
+    readonly property int maxMarginAreaSeparatorCenteredRectLength: Math.max(0.6 * paddingsVisual.length, 4)
+    readonly property int marginAreaSeparatorFreeThickness: ((parentThickness - 2*appletItem.metrics.marginsArea.marginThickness - maxMarginAreaSeparatorCenteredRectLength - 10) / 2)
+    readonly property int maxMarginAreaSeparatorGap: Math.max(3, 0.5 * marginAreaSeparatorFreeThickness)
 
     property color color: "blue"
 
@@ -127,6 +146,66 @@ Item {
 
                 AnchorChanges{
                     target: headPadding
+                    anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                    anchors.right: undefined; anchors.left: parent.left; anchors.top: undefined; anchors.bottom: undefined;
+                }
+            }
+        ]
+    }
+
+    Loader {
+        id: marginsAreaSeparatorVisual
+        active: appletItem.isMarginsAreaSeparator && root.inConfigureAppletsMode
+        sourceComponent: Item {
+            width: plasmoid.formFactor === PlasmaCore.Types.Vertical ? appletItem.metrics.totals.thickness : paddingsVisual.length
+            height: plasmoid.formFactor === PlasmaCore.Types.Vertical ? paddingsVisual.length : appletItem.metrics.totals.thickness
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: paddingsVisual.maxMarginAreaSeparatorCenteredRectLength
+                height: width
+                radius: 2
+                color: paddingsVisual.color
+            }
+        }
+
+        states:[
+            State{
+                name: "bottom"
+                when: plasmoid.location === PlasmaCore.Types.BottomEdge
+
+                AnchorChanges{
+                    target: marginsAreaSeparatorVisual
+                    anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                    anchors.right: undefined; anchors.left: undefined; anchors.top: parent.top; anchors.bottom: undefined;
+                }
+            },
+            State{
+                name: "top"
+                when: plasmoid.location === PlasmaCore.Types.TopEdge
+
+                AnchorChanges{
+                    target: marginsAreaSeparatorVisual
+                    anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
+                    anchors.right: undefined; anchors.left: undefined; anchors.top: undefined; anchors.bottom: parent.bottom;
+                }
+            },
+            State{
+                name: "left"
+                when: plasmoid.location === PlasmaCore.Types.LeftEdge
+
+                AnchorChanges{
+                    target: marginsAreaSeparatorVisual
+                    anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
+                    anchors.right: parent.right; anchors.left: undefined; anchors.top: undefined; anchors.bottom: undefined;
+                }
+            },
+            State{
+                name: "right"
+                when: plasmoid.location === PlasmaCore.Types.RightEdge
+
+                AnchorChanges{
+                    target: marginsAreaSeparatorVisual
                     anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
                     anchors.right: undefined; anchors.left: parent.left; anchors.top: undefined; anchors.bottom: undefined;
                 }

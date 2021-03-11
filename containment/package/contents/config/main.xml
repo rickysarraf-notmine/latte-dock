@@ -55,13 +55,17 @@
       <default>0</default>
       <label>this is a percentage value</label>
     </entry>
-    <entry name="floatingInternalGapIsForced" type="Int">
-      <default>1</default>
-      <label>floating internal gap is forced and provided to applets and any other view specific user interaction. "1" stands for Partially Checked (Auto)</label>
+    <entry name="floatingInternalGapIsForced" type="Bool">
+      <default>true</default>
+      <label>floating internal gap is forced and provided to applets and any other view specific user interaction</label>
     </entry>   
     <entry name="hideFloatingGapForMaximized" type="Bool">
         <default>false</default>
         <label>floating gap is disabled when there are maximized windows</label>
+    </entry>
+    <entry name="floatingGapHidingWaitsMouse" type="Bool">
+        <default>false</default>
+        <label>delay floating gap hiding until mouse leaves</label>
     </entry>
     <entry name="floatingGapIsMirrored" type="Bool">
       <default>false</default>
