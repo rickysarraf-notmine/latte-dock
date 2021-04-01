@@ -39,13 +39,15 @@ Layout::Layout(Layout &&o)
       textColor(o.textColor),
       lastUsedActivity(o.lastUsedActivity),
       isActive(o.isActive),
+      isConsideredActive(o.isConsideredActive),
       isBroken(o.isBroken),
       isLocked(o.isLocked),
       isShownInMenu(o.isShownInMenu),
       isTemplate(o.isTemplate),
       hasDisabledBorders(o.hasDisabledBorders),
       activities(o.activities),
-      backgroundStyle(o.backgroundStyle)
+      backgroundStyle(o.backgroundStyle),
+      views(o.views)
 {
 }
 
@@ -57,13 +59,15 @@ Layout::Layout(const Layout &o)
       textColor(o.textColor),
       lastUsedActivity(o.lastUsedActivity),
       isActive(o.isActive),
+      isConsideredActive(o.isConsideredActive),
       isBroken(o.isBroken),
       isLocked(o.isLocked),
       isShownInMenu(o.isShownInMenu),
       isTemplate(o.isTemplate),
       hasDisabledBorders(o.hasDisabledBorders),
       activities(o.activities),
-      backgroundStyle(o.backgroundStyle)
+      backgroundStyle(o.backgroundStyle),
+      views(o.views)
 {
 }
 
@@ -77,6 +81,7 @@ Layout &Layout::operator=(Layout &&rhs)
     textColor = rhs.textColor;
     lastUsedActivity = rhs.lastUsedActivity;
     isActive = rhs.isActive;
+    isConsideredActive = rhs.isConsideredActive;
     isBroken = rhs.isBroken;
     isLocked = rhs.isLocked;
     isShownInMenu = rhs.isShownInMenu;
@@ -84,6 +89,7 @@ Layout &Layout::operator=(Layout &&rhs)
     hasDisabledBorders = rhs.hasDisabledBorders;
     activities = rhs.activities;
     backgroundStyle = rhs.backgroundStyle;
+    views = rhs.views;
 
     return (*this);
 }
@@ -98,6 +104,7 @@ Layout &Layout::operator=(const Layout &rhs)
     textColor = rhs.textColor;
     lastUsedActivity = rhs.lastUsedActivity;
     isActive = rhs.isActive;
+    isConsideredActive = rhs.isConsideredActive;
     isBroken = rhs.isBroken;
     isLocked = rhs.isLocked;
     isShownInMenu = rhs.isShownInMenu;
@@ -105,6 +112,7 @@ Layout &Layout::operator=(const Layout &rhs)
     hasDisabledBorders = rhs.hasDisabledBorders;
     activities = rhs.activities;
     backgroundStyle = rhs.backgroundStyle;
+    views = rhs.views;
 
     return (*this);
 }
@@ -119,13 +127,15 @@ bool Layout::operator==(const Layout &rhs) const
             && (textColor == rhs.textColor)
             && (isBroken == rhs.isBroken)
             //&& (lastUsedActivity == rhs.lastUsedActivity) /*Disabled because it can change too often*/
-            //&& (isActive == rhs.isActive) /*Disabled but this is not a data but a layout state*/
+            //&& (isActive == rhs.isActive) /*Disabled because this is not a data but a layout state*/
+            //&& (isConsideredActive == rhs.isConsideredActive) /*Disabled because this is not a data but a layout state*/
             && (isLocked == rhs.isLocked)
             && (isShownInMenu == rhs.isShownInMenu)
             && (isTemplate == rhs.isTemplate)
             && (hasDisabledBorders == rhs.hasDisabledBorders)
             && (activities == rhs.activities)
-            && (backgroundStyle == rhs.backgroundStyle);
+            && (backgroundStyle == rhs.backgroundStyle)
+            && (views == rhs.views);
 }
 
 bool Layout::operator!=(const Layout &rhs) const

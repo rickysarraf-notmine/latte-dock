@@ -25,7 +25,9 @@
 
 namespace Latte {
 
-bool isEnabled(const QStyleOptionViewItem &option)
+const int MARGIN = 1;
+
+bool isEnabled(const QStyleOption &option)
 {
     if (option.state & QStyle::State_Enabled) {
         return true;
@@ -34,7 +36,7 @@ bool isEnabled(const QStyleOptionViewItem &option)
     return false;
 }
 
-bool isActive(const QStyleOptionViewItem &option)
+bool isActive(const QStyleOption &option)
 {
     if (option.state & QStyle::State_Active) {
         return true;
@@ -43,7 +45,7 @@ bool isActive(const QStyleOptionViewItem &option)
     return false;
 }
 
-bool isSelected(const QStyleOptionViewItem &option)
+bool isSelected(const QStyleOption &option)
 {
     if (option.state & QStyle::State_Selected) {
         return true;
@@ -52,7 +54,7 @@ bool isSelected(const QStyleOptionViewItem &option)
     return false;
 }
 
-bool isHovered(const QStyleOptionViewItem &option)
+bool isHovered(const QStyleOption &option)
 {
     if (option.state & QStyle::State_MouseOver) {
         return true;
@@ -61,7 +63,7 @@ bool isHovered(const QStyleOptionViewItem &option)
     return false;
 }
 
-bool isFocused(const QStyleOptionViewItem &option)
+bool isFocused(const QStyleOption &option)
 {
     if (option.state & QStyle::State_HasFocus) {
         return true;
@@ -70,7 +72,7 @@ bool isFocused(const QStyleOptionViewItem &option)
     return false;
 }
 
-QPalette::ColorGroup colorGroup(const QStyleOptionViewItem &option)
+QPalette::ColorGroup colorGroup(const QStyleOption &option)
 {
     if (!isEnabled(option)) {
         return QPalette::Disabled;
@@ -98,6 +100,39 @@ QStringList subtracted(const QStringList &original, const QStringList &current)
     }
 
     return subtract;
+}
+
+void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const QRect &target, const Latte::Data::LayoutIcon &icon)
+{
+    bool active = Latte::isActive(option);
+    bool selected = Latte::isSelected(option);
+    bool focused = Latte::isFocused(option);
+
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    if (icon.isBackgroundFile) {
+        int backImageMargin = qMin(option.rect.height()/4, MARGIN+2);
+        QRect backTarget(target.x() + backImageMargin, target.y() + backImageMargin, target.width() - 2*backImageMargin, target.height() - 2*backImageMargin);
+
+        QPixmap backImage(icon.name);
+        backImage = backImage.copy(backTarget);
+
+        QPalette::ColorRole textColorRole = selected ? QPalette::HighlightedText : QPalette::Text;
+
+        QBrush imageBrush(backImage);
+        QPen pen; pen.setWidth(1);
+        pen.setColor(option.palette.color(Latte::colorGroup(option), textColorRole));
+
+        painter->setBrush(imageBrush);
+        painter->setPen(pen);
+
+        painter->drawEllipse(backTarget);
+    } else {
+        QIcon::Mode mode = ((active && (selected || focused)) ? QIcon::Selected : QIcon::Normal);
+
+        painter->drawPixmap(target, QIcon::fromTheme(icon.name).pixmap(target.height(), target.height(), mode));
+    }
+
 }
 
 }

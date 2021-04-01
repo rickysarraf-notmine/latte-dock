@@ -1,5 +1,5 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
+ * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
  *
  * This file is part of Latte-Dock
  *
@@ -18,8 +18,8 @@
  *
  */
 
-#ifndef DETAILSDIALOG_H
-#define DETAILSDIALOG_H
+#ifndef VIEWSDIALOG_H
+#define VIEWSDIALOG_H
 
 // local
 #include "../generic/genericdialog.h"
@@ -30,7 +30,7 @@
 #include <QObject>
 
 namespace Ui {
-class DetailsDialog;
+class ViewsDialog;
 }
 
 namespace Latte {
@@ -39,7 +39,7 @@ namespace Controller {
 class Layouts;
 }
 namespace Handler {
-class DetailsHandler;
+class ViewsHandler;
 }
 }
 }
@@ -48,17 +48,17 @@ namespace Latte {
 namespace Settings {
 namespace Dialog {
 
-class DetailsDialog : public GenericDialog
+class ViewsDialog : public GenericDialog
 {
     Q_OBJECT
 
 public:
-    DetailsDialog(SettingsDialog *parent, Controller::Layouts *controller);
-    ~DetailsDialog();
+    ViewsDialog(SettingsDialog *parent, Controller::Layouts *controller);
+    ~ViewsDialog();
 
     Latte::Corona *corona() const;
 
-    Ui::DetailsDialog *ui() const;
+    Ui::ViewsDialog *ui() const;
     Controller::Layouts *layoutsController() const;
 
 protected:
@@ -76,10 +76,10 @@ private slots:
 
 private:
     SettingsDialog *m_parentDlg{nullptr};
-    Ui::DetailsDialog *m_ui;
+    Ui::ViewsDialog *m_ui;
     Controller::Layouts *m_layoutsController{nullptr};
 
-    Handler::DetailsHandler *m_handler;
+    Handler::ViewsHandler *m_handler;
 
     //! properties
     QSize m_windowSize;

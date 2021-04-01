@@ -18,41 +18,41 @@
  *
  */
 
-#ifndef LAYOUTICONDATA_H
-#define LAYOUTICONDATA_H
+#ifndef VIEWSTABLEDATA_H
+#define VIEWSTABLEDATA_H
 
-//! local
-#include "genericdata.h"
+// local
+#include "generictable.h"
+#include "viewdata.h"
 
-//! Qt
-#include <QMetaType>
-#include <QString>
+// Qt
+#include <QList>
 
 namespace Latte {
 namespace Data {
 
-class LayoutIcon : public Generic
+class ViewsTable : public GenericTable<View>
 {
+
 public:
-    LayoutIcon();
-    LayoutIcon(LayoutIcon &&o);
-    LayoutIcon(const LayoutIcon &o);
+    ViewsTable();
+    ViewsTable(ViewsTable &&o);
+    ViewsTable(const ViewsTable &o);
 
-    //! Layout data
-    bool isBackgroundFile{true};
+    bool isInitialized{false};
 
-    bool isEmpty() const;
+    void print();
 
     //! Operators
-    LayoutIcon &operator=(const LayoutIcon &rhs);
-    LayoutIcon &operator=(LayoutIcon &&rhs);
-    bool operator==(const LayoutIcon &rhs) const;
-    bool operator!=(const LayoutIcon &rhs) const;
+    ViewsTable &operator=(const ViewsTable &rhs);
+    ViewsTable &operator=(ViewsTable &&rhs);
+    bool operator==(const ViewsTable &rhs) const;
+    bool operator!=(const ViewsTable &rhs) const;
 };
 
 }
 }
 
-Q_DECLARE_METATYPE(Latte::Data::LayoutIcon)
+Q_DECLARE_METATYPE(Latte::Data::ViewsTable)
 
 #endif

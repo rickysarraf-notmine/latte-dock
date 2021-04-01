@@ -1,5 +1,5 @@
 /*
-*  Copyright 2020 Michail Vourlakos <mvourlakos@gmail.com>
+*  Copyright 2021 Michail Vourlakos <mvourlakos@gmail.com>
 *
 *  This file is part of Latte-Dock
 *
@@ -17,34 +17,36 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef LAYOUTCMBITEMDELEGATE_H
-#define LAYOUTCMBITEMDELEGATE_H
+#ifndef LAYOUTSCOMBOBOX_H
+#define LAYOUTSCOMBOBOX_H
 
-// local
-#include "../../../data/layouticondata.h"
+//local
+#include "../../data/layouticondata.h"
 
-// Qt
-#include <QStyledItemDelegate>
-
-class QModelIndex;
-class QWidget;
+//Qt
+#include <QComboBox>
+#include <QPaintEvent>
 
 namespace Latte {
 namespace Settings {
-namespace Layout {
-namespace Delegate {
 
-class LayoutCmbItemDelegate : public QStyledItemDelegate
+class LayoutsComboBox : public QComboBox
 {
-    Q_OBJECT
+  Q_OBJECT
 public:
-    LayoutCmbItemDelegate(QObject *parent = 0);
+  LayoutsComboBox(QWidget *parent = nullptr);
 
-    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+  Latte::Data::LayoutIcon layoutIcon() const;
+  void setLayoutIcon(const Latte::Data::LayoutIcon &icon);
+
+protected:
+  void paintEvent(QPaintEvent *event) override;
+
+private:
+  Latte::Data::LayoutIcon m_layoutIcon;
+
 };
 
-}
-}
 }
 }
 

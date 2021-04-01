@@ -58,8 +58,15 @@ Layouts::Layouts(QObject *parent, Latte::Corona *corona)
         emit dataChanged(index(0, NAMECOLUMN), index(rowCount()-1, ACTIVITYCOLUMN), roles);
     });
 
+    connect(this, &Layouts::activitiesStatesChanged, this, &Layouts::onActivitiesStatesChanged);
+
+    connect(m_corona->universalSettings(), &Latte::UniversalSettings::singleModeLayoutNameChanged, this, &Layouts::updateActiveStates); //! sort properly when switching single layouts
     connect(m_corona->layoutsManager()->synchronizer(), &Latte::Layouts::Synchronizer::centralLayoutsChanged, this, &Layouts::updateActiveStates);
-    connect(m_corona->universalSettings(), &Latte::UniversalSettings::singleModeLayoutNameChanged, this, &Layouts::updateActiveStates);
+
+    connect(this, &Layouts::activitiesStatesChanged, this, &Layouts::updateConsideredActiveStates);
+    connect(this, &Layouts::inMultipleModeChanged, this, &Layouts::updateConsideredActiveStates);
+    connect(m_corona->layoutsManager()->synchronizer(), &Latte::Layouts::Synchronizer::centralLayoutsChanged, this, &Layouts::updateConsideredActiveStates);
+    connect(m_corona->universalSettings(), &Latte::UniversalSettings::singleModeLayoutNameChanged, this, &Layouts::updateConsideredActiveStates);
 }
 
 Layouts::~Layouts()
@@ -400,55 +407,43 @@ void Layouts::setIconsPath(QString iconsPath)
     m_iconsPath = iconsPath;
 }
 
-QList<Latte::Data::LayoutIcon> Layouts::iconsForCentralLayout(const int &row) const
+Latte::Data::LayoutIcon Layouts::iconForCentralLayout(const int &row) const
 {
-    QList<Latte::Data::LayoutIcon> icons;
+    Latte::Data::LayoutIcon _icon;
+
+    if (!m_layoutsTable[row].icon.isEmpty()) {
+        //! if there is specific icon set from the user for this layout we draw only that icon
+        _icon.name = m_layoutsTable[row].icon;
+        _icon.isBackgroundFile = false;
+        return _icon;
+    }
 
     if (inMultipleMode()) {
         if (m_layoutsTable[row].activities.contains(Latte::Data::Layout::ALLACTIVITIESID)) {
-            Latte::Data::LayoutIcon icon;
-            icon.name = m_activitiesTable[Latte::Data::Layout::ALLACTIVITIESID].icon;
-            icon.isBackgroundFile = false;
-            icons << icon;
+            _icon.name = m_activitiesTable[Latte::Data::Layout::ALLACTIVITIESID].icon;
+            _icon.isBackgroundFile = false;
+            return _icon;
         } else if (m_layoutsTable[row].activities.contains(Latte::Data::Layout::FREEACTIVITIESID)) {
-            Latte::Data::LayoutIcon icon;
-            icon.name = m_activitiesTable[Latte::Data::Layout::FREEACTIVITIESID].icon;
-            icon.isBackgroundFile = false;
-            icons << icon;
+            _icon.name = m_activitiesTable[Latte::Data::Layout::FREEACTIVITIESID].icon;
+            _icon.isBackgroundFile = false;
+            return _icon;
         } else {
             QStringList activitiesIds = m_layoutsTable[row].activities;
 
             for(int i=0; i<activitiesIds.count(); ++i) {
                 QString id = activitiesIds[i];
                 if (m_activitiesTable.containsId(id)) {
-                    Latte::Data::LayoutIcon icon;
-                    icon.name = m_activitiesTable[id].icon;
-                    icon.isBackgroundFile = false;
-                    icons << icon;
+                    _icon.name = m_activitiesTable[id].icon;
+                    _icon.isBackgroundFile = false;
+                    //! first activity icon found
+                    return _icon;
                 }
             }
         }
-    } else {
-        if (o_layoutsTable.containsId(m_layoutsTable[row].id) && o_layoutsTable[m_layoutsTable[row].id].name == m_corona->universalSettings()->singleModeLayoutName()) {
-            Latte::Data::LayoutIcon icon;
-            icon.name = m_activitiesTable[Latte::Data::Layout::ALLACTIVITIESID].icon;
-            icon.isBackgroundFile = false;
-            icons << icon;
-        }
     }
 
-    if (!m_layoutsTable[row].icon.isEmpty()) {
-        //! if there is specific icon set from the user for this layout we draw only that icon
-        icons.clear();
-        Latte::Data::LayoutIcon icon;
-        icon.name = m_layoutsTable[row].icon;
-        icon.isBackgroundFile = false;
-        icons << icon;
-        return icons;
-    }
-
-    //! background image
-    if (icons.count() == 0) {
+    //! fallback icon: background image
+    if (_icon.isEmpty()) {
         QString colorPath;
 
         if (m_layoutsTable[row].backgroundStyle == Layout::PatternBackgroundStyle && m_layoutsTable[row].background.isEmpty()) {
@@ -458,19 +453,29 @@ QList<Latte::Data::LayoutIcon> Layouts::iconsForCentralLayout(const int &row) co
         }
 
         if (QFileInfo(colorPath).exists()) {
-            Latte::Data::LayoutIcon icon;
-            icon.isBackgroundFile = true;
-            icon.name = colorPath;
-            icons << icon;
+            _icon.isBackgroundFile = true;
+            _icon.name = colorPath;
+            return _icon;
         }
     }
 
-    return icons;
+    return Latte::Data::LayoutIcon();
 }
 
-QList<Latte::Data::LayoutIcon> Layouts::icons(const int &row) const
+Latte::Data::LayoutIcon Layouts::icon(const int &row) const
 {
-    return iconsForCentralLayout(row);
+    return iconForCentralLayout(row);
+}
+
+const Latte::Data::LayoutIcon Layouts::currentLayoutIcon(const QString &id) const
+{
+    int row = rowForId(id);
+
+    if (row >= 0) {
+        return icon(row);
+    }
+
+    return Latte::Data::LayoutIcon();
 }
 
 QString Layouts::sortableText(const int &priority, const int &row) const
@@ -523,6 +528,8 @@ QVariant Layouts::data(const QModelIndex &index, int role) const
         return m_layoutsTable[row].id;
     } else if (role == ISACTIVEROLE) {
         return m_layoutsTable[row].isActive;
+    } else if (role == ISCONSIDEREDACTIVEROLE) {
+        return m_layoutsTable[row].isConsideredActive;
     } else if (role == ISLOCKEDROLE) {
         return m_layoutsTable[row].isLocked;
     } else if (role == INMULTIPLELAYOUTSROLE) {
@@ -549,10 +556,10 @@ QVariant Layouts::data(const QModelIndex &index, int role) const
     } else if (role == LAYOUTHASCHANGESROLE) {
         return isNewLayout ? true : (original != m_layoutsTable[row]);
     } else if (role == BACKGROUNDUSERROLE) {
-        QList<Latte::Data::LayoutIcon> iconsList = icons(row);
-        QVariant iconsVariant;
-        iconsVariant.setValue<QList<Latte::Data::LayoutIcon>>(iconsList);
-        return iconsVariant;
+        Latte::Data::LayoutIcon _icon = icon(row);
+        QVariant iconVariant;
+        iconVariant.setValue<Latte::Data::LayoutIcon>(_icon);
+        return iconVariant;
     }
 
     switch (column) {
@@ -571,16 +578,15 @@ QVariant Layouts::data(const QModelIndex &index, int role) const
         if (role == Qt::DisplayRole) {
             return m_layoutsTable[row].background;
         } else if (role == Qt::UserRole) {
-            QList<Latte::Data::LayoutIcon> iconsList = icons(row);
-            QVariant iconsVariant;
-            iconsVariant.setValue<QList<Latte::Data::LayoutIcon>>(iconsList);
-            return iconsVariant;
+            Latte::Data::LayoutIcon _icon = icon(row);
+            QVariant iconVariant;
+            iconVariant.setValue<Latte::Data::LayoutIcon>(_icon);
+            return iconVariant;
         }
         break;
     case NAMECOLUMN:
         if (role == SORTINGROLE) {
-            if ((m_inMultipleMode && m_layoutsTable[row].isActive)
-                || (!m_inMultipleMode && m_corona->universalSettings()->singleModeLayoutName() == m_layoutsTable[row].name)) {
+            if (m_layoutsTable[row].isConsideredActive) {
                 return sortingPriority(HIGHESTPRIORITY, row);
             }
 
@@ -675,6 +681,13 @@ void Layouts::setOriginalActivitiesForLayout(const Latte::Data::Layout &layout)
 
         int mrow = rowForId(layout.id);
         setActivities(mrow, layout.activities);
+    }
+}
+
+void Layouts::setOriginalViewsForLayout(const Latte::Data::Layout &layout)
+{
+    if (o_layoutsTable.containsId(layout.id) && m_layoutsTable.containsId(layout.id)) {
+        o_layoutsTable[layout.id].views = layout.views;
     }
 }
 
@@ -810,9 +823,83 @@ void Layouts::updateActiveStates()
             iActive = true;
         }
 
-        if (m_layoutsTable[i].isActive != iActive || (!m_inMultipleMode && m_corona->universalSettings()->singleModeLayoutName() == m_layoutsTable[i].name)) {
+        if (m_layoutsTable[i].isActive != iActive) {
             m_layoutsTable[i].isActive = iActive;
             emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
+        }
+    }
+}
+
+void Layouts::updateConsideredActiveStates()
+{
+    QVector<int> roles;
+    roles << Qt::DisplayRole;
+    roles << Qt::UserRole;
+    roles << ISCONSIDEREDACTIVEROLE;
+    roles << SORTINGROLE;
+
+    if ((m_inMultipleMode && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts))
+            || (!m_inMultipleMode && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout))) {
+        //! current running layouts mode is the same shown in settings
+
+        for(int i=0; i<rowCount(); ++i) {
+            bool iConsideredActive{false};
+
+            if (m_corona->layoutsManager()->synchronizer()->layout(m_layoutsTable[i].name)) {
+                iConsideredActive = true;
+            }
+
+            if (m_layoutsTable[i].isConsideredActive != iConsideredActive) {
+                m_layoutsTable[i].isConsideredActive = iConsideredActive;
+                emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
+            }
+        }
+
+        return;
+    }
+
+    if (!m_inMultipleMode) {
+        //! single mode but not the running one
+
+        for(int i=0; i<rowCount(); ++i) {
+            bool iConsideredActive{false};
+
+            if (m_corona->universalSettings()->singleModeLayoutName() == m_layoutsTable[i].name) {
+                iConsideredActive = true;
+            }
+
+            if (m_layoutsTable[i].isConsideredActive != iConsideredActive) {
+                m_layoutsTable[i].isConsideredActive = iConsideredActive;
+                emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
+            }
+        }
+
+        return;
+    }
+
+    if (m_inMultipleMode) {
+        //! multiple mode but not the running one
+
+        QStringList runningActivities = m_corona->layoutsManager()->synchronizer()->runningActivities();
+        QStringList freeRunningActivities = m_corona->layoutsManager()->synchronizer()->freeRunningActivities();
+
+        for(int i=0; i<rowCount(); ++i) {
+            bool iConsideredActive{false};
+
+            if (m_layoutsTable[i].activities.contains(Latte::Data::Layout::ALLACTIVITIESID)) {
+                iConsideredActive = true;
+            } else if (freeRunningActivities.count()>0 && m_layoutsTable[i].activities.contains(Latte::Data::Layout::FREEACTIVITIESID)) {
+                iConsideredActive = true;
+            } else if (m_layoutsTable[i].activities.count()>0 && containsSpecificRunningActivity(runningActivities, m_layoutsTable[i])) {
+                iConsideredActive = true;
+            } else {
+                iConsideredActive = false;
+            }
+
+            if (m_layoutsTable[i].isConsideredActive != iConsideredActive) {
+                m_layoutsTable[i].isConsideredActive = iConsideredActive;
+                emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
+            }
         }
     }
 }
@@ -861,7 +948,6 @@ void Layouts::setOriginalInMultipleMode(const bool &inmultiple)
     }
 
     o_inMultipleMode = inmultiple;
-    emit inMultipleModeChanged();
 }
 
 void Layouts::setOriginalData(Latte::Data::LayoutsTable &data)
@@ -874,6 +960,9 @@ void Layouts::setOriginalData(Latte::Data::LayoutsTable &data)
     endInsertRows();
 
     emit rowsInserted();
+
+    updateActiveStates();
+    updateConsideredActiveStates();
 }
 
 QList<Latte::Data::Layout> Layouts::alteredLayouts() const
@@ -898,21 +987,21 @@ void Layouts::initActivities()
     Latte::Data::Activity allActivities;
     allActivities.id = Latte::Data::Layout::ALLACTIVITIESID;
     allActivities.name = QString("[ " + i18n("All Activities") + " ]");
-    allActivities.icon = "favorites";
+    allActivities.icon = "activities";
     allActivities.state = KActivities::Info::Stopped;
     m_activitiesTable << allActivities;
 
     Latte::Data::Activity freeActivities;
     freeActivities.id = Latte::Data::Layout::FREEACTIVITIESID;
     freeActivities.name = QString("[ " + i18n("Free Activities") + " ]");
-    freeActivities.icon = "favorites";
+    freeActivities.icon = "activities";
     freeActivities.state = KActivities::Info::Stopped;
     m_activitiesTable << freeActivities;
 
     Latte::Data::Activity currentActivity;
     currentActivity.id = Latte::Data::Layout::CURRENTACTIVITYID;
     currentActivity.name = QString("[ " + i18n("Current Activity") + " ]");
-    currentActivity.icon = "favorites";
+    currentActivity.icon = "dialog-yes";
     currentActivity.state = KActivities::Info::Stopped;
     m_activitiesTable << currentActivity;
 
@@ -930,10 +1019,10 @@ void Layouts::initActivities()
     connect(m_corona->activitiesConsumer(), &KActivities::Consumer::activityRemoved, this, &Layouts::onActivityRemoved);
     connect(m_corona->activitiesConsumer(), &KActivities::Consumer::runningActivitiesChanged, this, &Layouts::onRunningActivitiesChanged);
 
-    activitiesStatesChanged();
+    emit activitiesStatesChanged();
 }
 
-void Layouts::activitiesStatesChanged()
+void Layouts::onActivitiesStatesChanged()
 {
     QVector<int> roles;
     roles << Qt::DisplayRole;
@@ -986,7 +1075,7 @@ void Layouts::onActivityRemoved(const QString &id)
         info->deleteLater();
     }
 
-    activitiesStatesChanged();
+    emit activitiesStatesChanged();
 }
 
 void Layouts::onActivityChanged(const QString &id)
@@ -997,21 +1086,34 @@ void Layouts::onActivityChanged(const QString &id)
         m_activitiesTable[id].state = m_activitiesInfo[id]->state();
         m_activitiesTable[id].isCurrent = m_activitiesInfo[id]->isCurrent();
 
-        activitiesStatesChanged();
+        emit activitiesStatesChanged();
     }
 }
 
 void Layouts::onRunningActivitiesChanged(const QStringList &runningIds)
 {
     for (int i = 0; i < m_activitiesTable.rowCount(); ++i) {
-       if (runningIds.contains(m_activitiesTable[i].id)) {
-           m_activitiesTable[i].state = KActivities::Info::Running;
-       } else {
-           m_activitiesTable[i].state = KActivities::Info::Stopped;
-       }
+        if (runningIds.contains(m_activitiesTable[i].id)) {
+            m_activitiesTable[i].state = KActivities::Info::Running;
+        } else {
+            m_activitiesTable[i].state = KActivities::Info::Stopped;
+        }
     }
 
     emit activitiesStatesChanged();
+}
+
+bool Layouts::containsSpecificRunningActivity(const QStringList &runningIds, const Latte::Data::Layout &layout) const
+{
+    if (runningIds.count()>0 && layout.activities.count()>0) {
+        for (int i=0; i<layout.activities.count(); ++i) {
+            if (runningIds.contains(layout.activities[i])) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 }

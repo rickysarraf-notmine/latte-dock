@@ -32,6 +32,7 @@
 #include "indicator/indicator.h"
 #include "settings/primaryconfigview.h"
 #include "windowstracker/windowstracker.h"
+#include "../data/viewdata.h"
 #include "../shortcuts/globalshortcuts.h"
 #include "../layout/genericlayout.h"
 #include "../plasma/quick/containmentview.h"
@@ -116,6 +117,8 @@ class View : public PlasmaQuick::ContainmentView
 
     Q_PROPERTY(float maxLength READ maxLength WRITE setMaxLength NOTIFY maxLengthChanged)
     Q_PROPERTY(float offset READ offset WRITE setOffset NOTIFY offsetChanged)
+
+    Q_PROPERTY(QString name READ name NOTIFY nameChanged)
 
     Q_PROPERTY(QQuickItem *colorizer READ colorizer WRITE setColorizer NOTIFY colorizerChanged)
 
@@ -221,6 +224,9 @@ public:
 
     QString validTitle() const;
 
+    QString name() const;
+    void setName(const QString &newname);
+
     bool isOnActivity(const QString &activity) const;
     bool isOnAllActivities() const;
 
@@ -236,6 +242,8 @@ public:
     QVariantList containmentActions() const;
 
     QQuickView *configView();
+
+    Latte::Data::View data() const;
 
     ViewPart::Effects *effects() const;   
     ViewPart::ContextMenu *contextMenu() const;
@@ -328,6 +336,7 @@ signals:
     void maxThicknessChanged();
     void normalThicknessChanged();
     void maxNormalThicknessChanged();
+    void nameChanged();
     void offsetChanged();
     void onPrimaryChanged();
     void parabolicChanged();
@@ -413,6 +422,8 @@ private:
 
     QRect m_localGeometry;
     QRect m_absoluteGeometry;
+
+    QString m_name;
 
     QStringList m_activities;
 
