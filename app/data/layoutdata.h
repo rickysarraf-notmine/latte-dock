@@ -23,6 +23,7 @@
 
 // local
 #include "genericdata.h"
+#include "viewstable.h"
 #include "../layout/abstractlayout.h"
 
 //Qt
@@ -51,6 +52,7 @@ public:
     QString textColor;
     QString lastUsedActivity;
     bool isActive{false};
+    bool isConsideredActive{false}; //used from settings window to indicate activeness based on selected layouts mode
     bool isBroken{false};
     bool isLocked{false};
     bool isShownInMenu{false};
@@ -60,6 +62,8 @@ public:
 
     Latte::Layout::BackgroundStyle backgroundStyle{Latte::Layout::ColorBackgroundStyle};
 
+    ViewsTable views;
+
     //! Functionality
     bool isOnAllActivities() const;
     bool isForFreeActivities() const;
@@ -67,7 +71,6 @@ public:
     bool isNull() const;
     bool isEmpty() const;
     bool isSystemTemplate() const;
-
 
     //! Operators
     Layout &operator=(const Layout &rhs);

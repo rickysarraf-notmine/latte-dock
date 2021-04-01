@@ -1,5 +1,5 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
+ * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
  *
  * This file is part of Latte-Dock
  *
@@ -18,108 +18,108 @@
  *
  */
 
-#include "detailsdialog.h"
+#include "viewsdialog.h"
 
 // local
-#include "ui_detailsdialog.h"
-#include "detailshandler.h"
+#include "ui_viewsdialog.h"
+#include "viewshandler.h"
 #include "../settingsdialog/layoutscontroller.h"
 
 namespace Latte {
 namespace Settings {
 namespace Dialog {
 
-DetailsDialog::DetailsDialog(SettingsDialog *parent, Controller::Layouts *controller)
+ViewsDialog::ViewsDialog(SettingsDialog *parent, Controller::Layouts *controller)
     : GenericDialog(parent),
       m_parentDlg(parent),
-      m_ui(new Ui::DetailsDialog),
+      m_ui(new Ui::ViewsDialog),
       m_layoutsController(controller),
-      m_storage(KConfigGroup(KSharedConfig::openConfig(),"LatteSettingsDialog").group("DetailsDialog"))
+      m_storage(KConfigGroup(KSharedConfig::openConfig(),"LatteSettingsDialog").group("ViewsDialog"))
 {
     loadConfig();
 
     //! first we need to setup the ui
     m_ui->setupUi(this);
     //! we must create handlers after creating/adjusting the ui
-    m_handler = new Handler::DetailsHandler(this);
+    m_handler = new Handler::ViewsHandler(this);
 
-    connect(m_handler, &Handler::DetailsHandler::currentLayoutChanged, this, &DetailsDialog::updateApplyButtonsState);
-    connect(m_handler, &Handler::DetailsHandler::dataChanged, this, &DetailsDialog::updateApplyButtonsState);
+    connect(m_handler, &Handler::ViewsHandler::currentLayoutChanged, this, &ViewsDialog::updateApplyButtonsState);
+    connect(m_handler, &Handler::ViewsHandler::dataChanged, this, &ViewsDialog::updateApplyButtonsState);
 
     connect(m_ui->buttonBox->button(QDialogButtonBox::Ok), &QPushButton::clicked,
-            this, &DetailsDialog::onOk);
+            this, &ViewsDialog::onOk);
 
     connect(m_ui->buttonBox->button(QDialogButtonBox::Cancel), &QPushButton::clicked,
-            this, &DetailsDialog::onCancel);
+            this, &ViewsDialog::onCancel);
 
     connect(m_ui->buttonBox->button(QDialogButtonBox::Reset), &QPushButton::clicked,
-            this, &DetailsDialog::onReset);
+            this, &ViewsDialog::onReset);
 
     resize(m_windowSize);
-    updateApplyButtonsState();
+    updateApplyButtonsState();    
 }
 
-DetailsDialog::~DetailsDialog()
+ViewsDialog::~ViewsDialog()
 {
     saveConfig();
 }
 
-Controller::Layouts *DetailsDialog::layoutsController() const
+Controller::Layouts *ViewsDialog::layoutsController() const
 {
     return m_layoutsController;
 }
 
-Ui::DetailsDialog *DetailsDialog::ui() const
+Ui::ViewsDialog *ViewsDialog::ui() const
 {
     return m_ui;
 }
 
-Latte::Corona *DetailsDialog::corona() const
+Latte::Corona *ViewsDialog::corona() const
 {
     return m_parentDlg->corona();
 }
 
-void DetailsDialog::updateApplyButtonsState()
+void ViewsDialog::updateApplyButtonsState()
 {
-    if (m_handler->hasChangedData()) {
+  /*  if (m_handler->hasChangedData()) {
         m_ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(true);
         m_ui->buttonBox->button(QDialogButtonBox::Reset)->setEnabled(true);
     } else {
         m_ui->buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
         m_ui->buttonBox->button(QDialogButtonBox::Reset)->setEnabled(false);
-    }
+    }*/
 }
 
-void DetailsDialog::accept()
+void ViewsDialog::accept()
 {
     qDebug() << Q_FUNC_INFO;
 }
 
-void DetailsDialog::onOk()
+void ViewsDialog::onOk()
 {
     qDebug() << Q_FUNC_INFO;
-    m_handler->save();
+//    m_handler->save();
     close();
 }
 
-void DetailsDialog::onCancel()
+void ViewsDialog::onCancel()
 {
     qDebug() << Q_FUNC_INFO;
     close();
 }
 
-void DetailsDialog::onReset()
+void ViewsDialog::onReset()
 {
     qDebug() << Q_FUNC_INFO;
-    m_handler->reset();
+   // m_handler->reset();
 }
 
-void DetailsDialog::loadConfig()
+void ViewsDialog::loadConfig()
 {
-    m_windowSize = m_storage.readEntry("windowSize", QSize(560, 615));
+    m_windowSize = m_storage.readEntry("windowSize", QSize(775, 500));
 }
 
-void DetailsDialog::saveConfig()
+void ViewsDialog::saveConfig()
 {
     m_storage.writeEntry("windowSize", size());
 }

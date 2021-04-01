@@ -30,6 +30,7 @@
 #include "../universalsettings.h"
 #include "../detailsdialog/detailsdialog.h"
 #include "../exporttemplatedialog/exporttemplatedialog.h"
+#include "../viewsdialog/viewsdialog.h"
 #include "../../apptypes.h"
 #include "../../lattecorona.h"
 #include "../../layout/centrallayout.h"
@@ -154,12 +155,12 @@ void TabLayouts::initLayoutMenu()
 
     connect(m_corona->templatesManager(), &Latte::Templates::Manager::layoutTemplatesChanged, this, &TabLayouts::initLayoutTemplatesSubMenu);
 
-    m_copyLayoutAction = m_layoutMenu->addAction(i18nc("copy layout", "&Copy"));
-    m_copyLayoutAction->setToolTip(i18n("Copy selected layout"));
-    m_copyLayoutAction->setIcon(QIcon::fromTheme("edit-copy"));
-    m_copyLayoutAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_C));
-    connectActionWithButton(m_ui->copyButton, m_copyLayoutAction);
-    connect(m_copyLayoutAction, &QAction::triggered, this, &TabLayouts::copyLayout);
+    m_duplicateLayoutAction = m_layoutMenu->addAction(i18nc("duplicate layout", "&Duplicate"));
+    m_duplicateLayoutAction->setToolTip(i18n("Duplicate selected layout"));
+    m_duplicateLayoutAction->setIcon(QIcon::fromTheme("edit-copy"));
+    m_duplicateLayoutAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_D));
+    connectActionWithButton(m_ui->duplicateButton, m_duplicateLayoutAction);
+    connect(m_duplicateLayoutAction, &QAction::triggered, this, &TabLayouts::duplicateLayout);
 
     m_removeLayoutAction = m_layoutMenu->addAction(i18nc("remove layout", "Remove"));
     m_removeLayoutAction->setToolTip(i18n("Remove selected layout"));
@@ -185,6 +186,12 @@ void TabLayouts::initLayoutMenu()
     m_readOnlyLayoutAction->setCheckable(true);
     connectActionWithButton(m_ui->readOnlyButton, m_readOnlyLayoutAction);
     connect(m_readOnlyLayoutAction, &QAction::triggered, this, &TabLayouts::lockLayout);
+
+    m_viewsAction = m_layoutMenu->addAction(i18nc("layout docks / panels", "Docks/&Panels..."));
+    m_viewsAction->setToolTip(i18n("Show selected layouts docks and panels"));
+    m_viewsAction->setIcon(QIcon::fromTheme("window"));
+    m_viewsAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_P));
+    connect(m_viewsAction, &QAction::triggered, this, &TabLayouts::viewsLayout);
 
     m_detailsAction = m_layoutMenu->addAction(i18nc("layout details", "De&tails..."));
     m_detailsAction->setToolTip(i18n("Show selected layout details"));
@@ -417,15 +424,15 @@ void TabLayouts::newLayout(const QString &templateName)
     }
 }
 
-void TabLayouts::copyLayout()
+void TabLayouts::duplicateLayout()
 {
     qDebug() << Q_FUNC_INFO;
 
-    if (!isCurrentTab() || !m_copyLayoutAction->isEnabled()) {
+    if (!isCurrentTab() || !m_duplicateLayoutAction->isEnabled()) {
         return;
     }
 
-    m_layoutsController->copySelectedLayout();
+    m_layoutsController->duplicateSelectedLayout();
 }
 
 void TabLayouts::installLayoutTemplate(Latte::Data::Layout importedLayout, QString templateFilePath, ImportedLayoutOrigin origin)
@@ -720,12 +727,29 @@ void TabLayouts::detailsLayout()
     }
 
     Latte::Data::Layout selectedLayout = m_layoutsController->selectedLayoutCurrentData();
-
     auto detailsDlg = new Settings::Dialog::DetailsDialog(m_parentDialog, m_layoutsController);
 
     detailsDlg->exec();
-
     detailsDlg->deleteLater();
+}
+
+void TabLayouts::viewsLayout()
+{
+    qDebug() << Q_FUNC_INFO;
+
+    if (!isCurrentTab() || !m_viewsAction->isEnabled()) {
+        return;
+    }
+
+    if (!m_layoutsController->hasSelectedLayout()) {
+        return;
+    }
+
+    Latte::Data::Layout selectedLayout = m_layoutsController->selectedLayoutCurrentData();
+    auto viewsDlg = new Settings::Dialog::ViewsDialog(m_parentDialog, m_layoutsController);
+
+    viewsDlg->exec();
+    viewsDlg->deleteLater();
 }
 
 void TabLayouts::onLayoutFilesDropped(const QStringList &paths)

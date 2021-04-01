@@ -1,5 +1,5 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
+ * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
  *
  * This file is part of Latte-Dock
  *
@@ -18,8 +18,8 @@
  *
  */
 
-#ifndef DETAILSDIALOGHANDLER_H
-#define DETAILSDIALOGHANDLER_H
+#ifndef VIEWSDIALOGHANDLER_H
+#define VIEWSDIALOGHANDLER_H
 
 // local
 #include "../generic/generichandler.h"
@@ -31,21 +31,17 @@
 #include <QSortFilterProxyModel>
 
 namespace Ui {
-class DetailsDialog;
+class ViewsDialog;
 }
 
 namespace Latte{
+class Corona;
 namespace Settings{
+namespace Controller{
+class Views;
+}
 namespace Dialog{
-class DetailsDialog;
-}
-}
-}
-
-namespace Latte{
-namespace Settings{
-namespace Model {
-class Colors;
+class ViewsDialog;
 }
 }
 }
@@ -59,17 +55,20 @@ namespace Handler {
 //! ui::tabs or different windows. They are responsible also to handle the user interaction
 //! between controllers and views
 
-class DetailsHandler : public Generic
+class ViewsHandler : public Generic
 {
     Q_OBJECT
 public:
-    DetailsHandler(Dialog::DetailsDialog *dialog);
-    ~DetailsHandler();
+    ViewsHandler(Dialog::ViewsDialog *dialog);
+    ~ViewsHandler();
 
     bool hasChangedData() const override;
     bool inDefaultValues() const override;
 
     Latte::Data::Layout currentData() const;
+
+    Ui::ViewsDialog *ui() const;
+    Latte::Corona *corona() const;
 
 public slots:
     void reset() override;
@@ -81,44 +80,24 @@ signals:
 
 private slots:
     void onCurrentLayoutIndexChanged(int row);
-    void onCurrentColorIndexChanged(int row);
-
-    void clearIcon();
-    void clearPattern();
-    void selectBackground();
-    void selectIcon();
-    void selectTextColor();
     void updateWindowTitle();
 
 private:
     void init();
     void reload();
 
-    void setIsShownInMenu(bool inMenu);
-    void setHasDisabledBorders(bool disabled);
-
-    void setBackground(const QString &background);
-    void setTextColor(const QString &textColor);
-    void setColor(const QString &color);
-    void setIcon(const QString &icon);
-
-    void setBackgroundStyle(const Latte::Layout::BackgroundStyle &style);
-
     void loadLayout(const Latte::Data::Layout &data);
 
     int saveChanges();
 
 private:
-    Dialog::DetailsDialog *m_dialog{nullptr};
-    Ui::DetailsDialog *m_ui{nullptr};
+    Dialog::ViewsDialog *m_dialog{nullptr};
+    Ui::ViewsDialog *m_ui{nullptr};
+    Settings::Controller::Views *m_viewsController{nullptr};
 
     QSortFilterProxyModel *m_layoutsProxyModel{nullptr};
 
     //! current data
-    Model::Colors *m_colorsModel{nullptr};
-
-    QButtonGroup *m_backButtonsGroup;
-
     Latte::Data::Layout o_data;
     Latte::Data::Layout c_data;
 };

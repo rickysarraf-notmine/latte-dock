@@ -22,6 +22,8 @@
 
 // local
 #include "../data/appletdata.h"
+#include "../data/generictable.h"
+#include "../data/viewstable.h"
 
 // Qt
 #include <QTemporaryDir>
@@ -36,7 +38,6 @@
 namespace Latte {
 namespace Layout {
 class GenericLayout;
-struct ViewData;
 }
 }
 
@@ -68,7 +69,7 @@ public:
     static const int IDBASE;
 
     bool isWritable(const Layout::GenericLayout *layout) const;
-    bool isLatteContainment(Plasma::Containment *containment) const;
+    bool isLatteContainment(const Plasma::Containment *containment) const;
     bool isLatteContainment(const KConfigGroup &group) const;
     bool isBroken(const Layout::GenericLayout *layout, QStringList &errors) const;
     bool isSubContainment(const Layout::GenericLayout *layout, const Plasma::Applet *applet) const;
@@ -99,13 +100,15 @@ public:
     Data::AppletsTable plugins(const Layout::GenericLayout *layout, const int containmentid = IDNULL);
     Data::AppletsTable plugins(const QString &layoutfile, const int containmentid = IDNULL);
 
-    //! Functions used from Layout Reports
-    //! [containment id, list<subcontainment ids>], list<subcontainment ids>, list[subcontainment ids]
-    void subContainmentsInfo(const QString &file, QHash<int, QList<int>> &subContainments, QList<int> &assignedSubContainments, QList<int> &orphanSubContainments);
     //! list<screens ids>
     QList<int> viewsScreens(const QString &file);
-    //! list<ViewData>
-    QList<Layout::ViewData> viewsData(const QString &file, const QHash<int, QList<int>> &subContainments);
+
+    Data::GenericTable<Data::Generic> subcontainments(const KConfigGroup &containmentGroup);
+    Data::GenericTable<Data::Generic> subcontainments(const Layout::GenericLayout *layout, const Plasma::Containment *lattecontainment) const;
+    Data::View view(const KConfigGroup &containmentGroup);
+    Data::View view(const Layout::GenericLayout *layout, const Plasma::Containment *lattecontainment);
+    Data::ViewsTable views(const QString &file);
+    Data::ViewsTable views(const Layout::GenericLayout *layout);
 
 private:
     Storage();

@@ -11,5 +11,7 @@ set(lattedock-app_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/preferencesdata.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/screendata.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/uniqueidinfo.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewdata.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/viewstable.cpp
     PARENT_SCOPE
 )

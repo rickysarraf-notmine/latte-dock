@@ -41,6 +41,8 @@
 
 namespace Latte {
 
+const int ScreenPool::FIRSTSCREENID;
+
 ScreenPool::ScreenPool(KSharedConfig::Ptr config, QObject *parent)
     : QObject(parent),
       m_configGroup(KConfigGroup(config, QStringLiteral("ScreenConnectors")))
@@ -74,6 +76,10 @@ void ScreenPool::load()
 
     //restore the known ids to connector mappings
     for (const QString &key : m_configGroup.keyList()) {
+        if (key.toInt() <= 0) {
+            continue;
+        }
+
         QString serialized = m_configGroup.readEntry(key, QString());
 
         Data::Screen screenRecord(key, serialized);
@@ -226,7 +232,9 @@ void ScreenPool::save()
 
     for (int i=0; i<m_screensTable.rowCount(); ++i) {
         Data::Screen screenRecord = m_screensTable[i];
-        m_configGroup.writeEntry(screenRecord.id, screenRecord.serialize());
+        if (screenRecord.id.toInt() >= FIRSTSCREENID) {
+            m_configGroup.writeEntry(screenRecord.id, screenRecord.serialize());
+        }
     }
 
     //write to disck every 10 seconds at most
@@ -246,7 +254,7 @@ void ScreenPool::insertScreenMapping(const QString &connector)
     qDebug() << "add connector..." << connector;
 
     Data::Screen screenRecord;
-    screenRecord.id = firstAvailableId();
+    screenRecord.id = QString::number(firstAvailableId());
     screenRecord.name = connector;
 
     //! update screen geometry
@@ -276,7 +284,7 @@ QString ScreenPool::connector(int id) const
 int ScreenPool::firstAvailableId() const
 {
     //start counting from 10, first numbers will be used for special cases e.g. primaryScreen, id=0
-    int availableId = 10;
+    int availableId = FIRSTSCREENID;
 
     for (int row=0; row<m_screensTable.rowCount(); ++row) {
         if (!m_screensTable.containsId(QString::number(availableId))) {

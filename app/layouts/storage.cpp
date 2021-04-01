@@ -20,6 +20,7 @@
 #include "storage.h"
 
 // local
+#include <coretypes.h>
 #include "importer.h"
 #include "manager.h"
 #include "../lattecorona.h"
@@ -84,7 +85,7 @@ bool Storage::isWritable(const Layout::GenericLayout *layout) const
     }
 }
 
-bool Storage::isLatteContainment(Plasma::Containment *containment) const
+bool Storage::isLatteContainment(const Plasma::Containment *containment) const
 {
     if (!containment) {
         return false;
@@ -354,15 +355,27 @@ QString Storage::newUniqueIdsLayoutFromFile(const Layout::GenericLayout *layout,
     }
 
     //! Reassign containment and applet ids to unique ones
-    for (const auto &contId : toInvestigateContainmentIds) {
-        QString newId = availableId(allIds, assignedIds, 12);
+    for (const auto &contId : toInvestigateContainmentIds) {        
+        QString newId;
+
+        if (contId.toInt()>=12 && !allIds.contains(contId) && !assignedIds.contains(contId)) {
+            newId = contId;
+        } else {
+            newId = availableId(allIds, assignedIds, 12);
+        }
 
         assignedIds << newId;
         assigned[contId] = newId;
     }
 
     for (const auto &appId : toInvestigateAppletIds) {
-        QString newId = availableId(allIds, assignedIds, 40);
+        QString newId;
+
+        if (appId.toInt()>=40 && !allIds.contains(appId) && !assignedIds.contains(appId)) {
+            newId = appId;
+        } else {
+            newId = availableId(allIds, assignedIds, 40);
+        }
 
         assignedIds << newId;
         assigned[appId] = newId;
@@ -1173,77 +1186,144 @@ Data::AppletsTable Storage::plugins(const QString &layoutfile, const int contain
     return knownapplets;
 }
 
+//! Views Data
 
-//! Data For Reports
-void Storage::subContainmentsInfo(const QString &file, QHash<int, QList<int>> &subContainments, QList<int> &assignedSubContainments, QList<int> &orphanSubContainments)
+Data::GenericTable<Data::Generic> Storage::subcontainments(const Layout::GenericLayout *layout, const Plasma::Containment *lattecontainment) const
 {
-    subContainments.clear();
-    assignedSubContainments.clear();
-    orphanSubContainments.clear();
+    Data::GenericTable<Data::Generic> subs;
 
-    KSharedConfigPtr lFile = KSharedConfig::openConfig(file);
-    KConfigGroup containmentGroups = KConfigGroup(lFile, "Containments");
+    if (!layout || !Layouts::Storage::self()->isLatteContainment(lattecontainment)) {
+        return subs;
+    }
 
-    //! assigned subcontainments
-    for (const auto &cId : containmentGroups.groupList()) {
-        if (Layouts::Storage::self()->isLatteContainment(containmentGroups.group(cId))) {
-            auto applets = containmentGroups.group(cId).group("Applets");
+    for (const auto containment : (*layout->containments())) {
+        if (containment == lattecontainment) {
+            continue;
+        }
 
-            for (const auto &applet : applets.groupList()) {
-                KConfigGroup appletSettings = applets.group(applet).group("Configuration");
-                int tSubId = appletSettings.readEntry("SystrayContainmentId", IDNULL);
+        Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent());
 
-                if (isValid(tSubId)) {
-                    assignedSubContainments << tSubId;
-                    subContainments[cId.toInt()].append(tSubId);
-                }
-            }
+        //! add subcontainments for that lattecontainment
+        if (parentApplet && parentApplet->containment() && parentApplet->containment() == lattecontainment) {
+            Data::Generic subdata;
+            subdata.id = QString::number(containment->id());
+            subs << subdata;
         }
     }
 
-    //! orphan subcontainments
-    for (const auto &cId : containmentGroups.groupList()) {
-        if (!Layouts::Storage::self()->isLatteContainment(containmentGroups.group(cId)) && !assignedSubContainments.contains(cId.toInt())) {
-            orphanSubContainments << cId.toInt();
-        }
-    }
+    return subs;
 }
 
-QList<Layout::ViewData> Storage::viewsData(const QString &file, const QHash<int, QList<int>> &subContainments)
+Data::GenericTable<Data::Generic> Storage::subcontainments(const KConfigGroup &containmentGroup)
 {
-    QList<Layout::ViewData> viewsData;
+    Data::GenericTable<Data::Generic> subs;
+
+    if (!Layouts::Storage::self()->isLatteContainment(containmentGroup)) {
+        return subs;
+    }
+
+    auto applets = containmentGroup.group("Applets");
+
+    for (const auto &applet : applets.groupList()) {
+        if (isSubContainment(applets.group(applet))) {
+            Data::Generic subdata;
+            subdata.id = QString::number(subContainmentId(applets.group(applet)));
+            subs << subdata;
+        }
+    }
+
+    return subs;
+}
+
+Data::View Storage::view(const Layout::GenericLayout *layout, const Plasma::Containment *lattecontainment)
+{
+    Data::View vdata;
+
+    if (!layout || !Layouts::Storage::self()->isLatteContainment(lattecontainment)) {
+        return vdata;
+    }
+
+    vdata = view(lattecontainment->config());
+
+    vdata.screen = lattecontainment->screen();
+    if (!isValid(vdata.screen)) {
+        vdata.screen = lattecontainment->lastScreen();
+    }
+
+    vdata.subcontainments = subcontainments(layout, lattecontainment);
+
+    return vdata;
+}
+
+Data::View Storage::view(const KConfigGroup &containmentGroup)
+{
+    Data::View vdata;
+
+    if (!Layouts::Storage::self()->isLatteContainment(containmentGroup)) {
+        return vdata;
+    }
+
+    vdata.id = containmentGroup.name();
+    vdata.name = containmentGroup.readEntry("name", QString());
+    vdata.isActive = false;
+    vdata.onPrimary = containmentGroup.readEntry("onPrimary", true);
+    vdata.screen = containmentGroup.readEntry("lastScreen", IDNULL);
+
+    int location = containmentGroup.readEntry("location", (int)Plasma::Types::BottomEdge);
+    vdata.edge = (Plasma::Types::Location)location;
+
+    vdata.maxLength = containmentGroup.group("General").readEntry("maxLength", (float)100.0);
+
+    int alignment = containmentGroup.group("General").readEntry("alignment", (int)Latte::Types::Center) ;
+    vdata.alignment = (Latte::Types::Alignment)alignment;
+
+    vdata.subcontainments = subcontainments(containmentGroup);
+    vdata.setState(Data::View::IsCreated);
+
+    return vdata;
+}
+
+Data::ViewsTable Storage::views(const Layout::GenericLayout *layout)
+{
+    Data::ViewsTable vtable;
+
+    if (!layout) {
+        return vtable;
+    } else if (!layout->isActive()) {
+        return views(layout->file());
+    }
+
+    for (const auto containment : (*layout->containments())) {
+        if (!isLatteContainment(containment)) {
+            continue;
+        }
+
+        Latte::View *vw = layout->viewForContainment(containment);
+
+        if (vw) {
+            vtable << vw->data();
+        } else {
+            vtable << view(layout, containment);
+        }
+    }
+
+    return vtable;
+}
+
+Data::ViewsTable Storage::views(const QString &file)
+{
+    Data::ViewsTable vtable;
 
     KSharedConfigPtr lFile = KSharedConfig::openConfig(file);
     KConfigGroup containmentGroups = KConfigGroup(lFile, "Containments");
 
     for (const auto &cId : containmentGroups.groupList()) {
         if (Layouts::Storage::self()->isLatteContainment(containmentGroups.group(cId))) {
-            Layout::ViewData vData;
-            int id = cId.toInt();
-
-            //! id
-            vData.id = id;
-
-            //! active
-            vData.active = false;
-
-            //! onPrimary
-            vData.onPrimary = containmentGroups.group(cId).readEntry("onPrimary", true);
-
-            //! Screen
-            vData.screenId = containmentGroups.group(cId).readEntry("lastScreen", IDNULL);
-
-            //! location
-            vData.location = containmentGroups.group(cId).readEntry("location", (int)Plasma::Types::BottomEdge);
-
-            //! subcontainments
-            vData.subContainments = subContainments[id];
-
-            viewsData << vData;
+            vtable << view(containmentGroups.group(cId));
         }
     }
 
-    return viewsData;
+    return vtable;
 }
 
 QList<int> Storage::viewsScreens(const QString &file)

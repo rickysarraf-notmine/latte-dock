@@ -75,6 +75,7 @@ public:
     bool hasSelectedLayout() const;
     const Latte::Data::Layout selectedLayoutCurrentData() const;
     const Latte::Data::Layout selectedLayoutOriginalData() const;
+    const Latte::Data::LayoutIcon selectedLayoutIcon() const;
 
     void selectRow(const QString &id);
     void setLayoutProperties(const Latte::Data::Layout &layout);
@@ -85,6 +86,7 @@ public:
     void removeSelected();
     void toggleEnabledForSelected();
     void toggleLockedForSelected();
+    void initializeSelectedLayoutViews();
 
     QString iconsPath() const;
     QString colorPath(const QString color) const;
@@ -94,7 +96,7 @@ public:
 
     void setOriginalInMultipleMode(const bool &inmultiple);
 
-    void copySelectedLayout();
+    void duplicateSelectedLayout();
     const Latte::Data::Layout addLayoutForFile(QString file, QString layoutName = QString(), bool newTempDirectory = true);
     const Latte::Data::Layout addLayoutByText(QString rawLayoutText);
 

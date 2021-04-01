@@ -97,8 +97,8 @@ private slots:
     void loadConfig();
     void saveConfig();
 
-    void copyLayout();
     void downloadLayout();
+    void duplicateLayout();
     void switchLayout();
     void importLayout();
     void exportLayoutForBackup();
@@ -108,6 +108,7 @@ private slots:
     void toggleActivitiesManager();
     void toggleEnabledLayout();
     void detailsLayout();
+    void viewsLayout();
 
     void onCurrentPageChanged(int page);
     void onLayoutFilesDropped(const QStringList &paths);
@@ -143,7 +144,7 @@ private:
     QAction *m_switchLayoutAction{nullptr};
     QAction *m_activitiesManagerAction{nullptr};
     QAction *m_newLayoutAction{nullptr};
-    QAction *m_copyLayoutAction{nullptr};
+    QAction *m_duplicateLayoutAction{nullptr};
     QAction *m_enabledLayoutAction{nullptr};
     QAction *m_readOnlyLayoutAction{nullptr};
     QAction *m_removeLayoutAction{nullptr};
@@ -151,6 +152,7 @@ private:
     QAction *m_exportLayoutAction{nullptr};
     QAction *m_downloadLayoutAction{nullptr};
     QAction *m_detailsAction{nullptr};
+    QAction *m_viewsAction{nullptr};
 };
 
 }
