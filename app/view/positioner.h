@@ -21,6 +21,8 @@
 #define POSITIONER_H
 
 //local
+#include <coretypes.h>
+#include "../wm/abstractwindowinterface.h"
 #include "../wm/windowinfowrap.h"
 
 // Qt
@@ -49,6 +51,7 @@ class Positioner: public QObject
     Q_OBJECT
 
     Q_PROPERTY(bool inRelocationAnimation READ inRelocationAnimation NOTIFY inRelocationAnimationChanged)
+    Q_PROPERTY(bool inRelocationShowing READ inRelocationShowing WRITE setInRelocationShowing NOTIFY inRelocationShowingChanged)
     Q_PROPERTY(bool inSlideAnimation READ inSlideAnimation WRITE setInSlideAnimation NOTIFY inSlideAnimationChanged)
 
     Q_PROPERTY(bool isStickedOnTopEdge READ isStickedOnTopEdge WRITE setIsStickedOnTopEdge NOTIFY isStickedOnTopEdgeChanged)
@@ -75,6 +78,9 @@ public:
     bool inLayoutUnloading();
     bool inRelocationAnimation();
 
+    bool inRelocationShowing() const;
+    void setInRelocationShowing(bool active);
+
     bool inSlideAnimation() const;
     void setInSlideAnimation(bool active);
 
@@ -95,16 +101,16 @@ public:
     Latte::WindowSystem::WindowId trackedWindowId();
 
 public slots:
-    Q_INVOKABLE void hideDockDuringLocationChange(int goToLocation);
-    Q_INVOKABLE void hideDockDuringMovingToLayout(QString layoutName);
-
-    Q_INVOKABLE bool setCurrentScreen(const QString id);
+    Q_INVOKABLE void setNextLocation(const QString layoutName, const QString screenId, int edge, int alignment);
 
     void syncGeometry();
 
     //! direct geometry calculations without any protections or checks
     //! that might prevent them. It must be called with care.
     void immediateSyncGeometry();
+
+    void slideInDuringStartup();
+    void slideOutDuringExit(Plasma::Types::Location location = Plasma::Types::Floating);
 
     void initDelayedSignals();
     void updateWaylandId();
@@ -120,18 +126,13 @@ signals:
     //! these two signals are used from config ui and containment ui
     //! in order to orchestrate an animated hiding/showing of dock
     //! during changing location
-    void hideDockDuringLocationChangeStarted();
-    void hideDockDuringLocationChangeFinished();
-    void hideDockDuringScreenChangeStarted();
-    void hideDockDuringScreenChangeFinished();
-    void hideDockDuringMovingToLayoutStarted();
-    void hideDockDuringMovingToLayoutFinished();
-    void showDockAfterLocationChangeFinished();
-    void showDockAfterScreenChangeFinished();
-    void showDockAfterMovingToLayoutFinished();
+    void hidingForRelocationStarted();
+    void hidingForRelocationFinished();
+    void showingAfterRelocationFinished();
 
     void onHideWindowsForSlidingOut();
     void inRelocationAnimationChanged();
+    void inRelocationShowingChanged();
     void inSlideAnimationChanged();
     void isStickedOnTopEdgeChanged();
     void isStickedOnBottomEdgeChanged();
@@ -139,6 +140,7 @@ signals:
 private slots:
     void onScreenChanged(QScreen *screen);
     void onCurrentLayoutIsSwitching(const QString &layoutName);
+    void onLastRepositionApplyEvent();
 
     void validateDockGeometry();
     void updateInRelocationAnimation();
@@ -158,12 +160,17 @@ private:
 
     void setCanvasGeometry(const QRect &geometry);
 
+    bool isLastHidingRelocationEvent() const;
+
     QRect maximumNormalGeometry();
+
+    WindowSystem::AbstractWindowInterface::Slide slideLocation(Plasma::Types::Location location);
 
 private:
     bool m_inDelete{false};
     bool m_inLayoutUnloading{false};
     bool m_inRelocationAnimation{false};
+    bool m_inRelocationShowing{false};
     bool m_inSlideAnimation{false};
 
     bool m_isStickedOnTopEdge{false};
@@ -187,10 +194,15 @@ private:
     QTimer m_syncGeometryTimer;
     QTimer m_validateGeometryTimer;
 
-    //!used at sliding out/in animation
-    QString m_moveToLayout;
-    Plasma::Types::Location m_goToLocation{Plasma::Types::Floating};
-    QScreen *m_goToScreen{nullptr};
+    //!used for relocation properties group
+    bool m_repositionFromViewSettingsWindow{false};
+    bool m_repositionIsAnimated{false};
+
+    QString m_nextLayoutName;
+    QString m_nextScreenName;
+    QScreen *m_nextScreen{nullptr};
+    Plasma::Types::Location m_nextScreenEdge{Plasma::Types::Floating};
+    Latte::Types::Alignment m_nextAlignment{Latte::Types::NoneAlignment};
 
     Latte::WindowSystem::WindowId m_trackedWindowId;
 };

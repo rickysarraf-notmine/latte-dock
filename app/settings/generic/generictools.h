@@ -23,12 +23,14 @@
 
 // local
 #include "../../data/layouticondata.h"
+#include "../../data/viewdata.h"
 
 // Qt
 #include <QPainter>
 #include <QPalette>
 #include <QRect>
 #include <QStyleOption>
+#include <QStyleOptionViewItem>
 
 namespace Latte {
 
@@ -37,6 +39,7 @@ bool isEnabled(const QStyleOption &option);
 bool isFocused(const QStyleOption &option);
 bool isSelected(const QStyleOption &option);
 bool isHovered(const QStyleOption &option);
+bool isTextCentered(const QStyleOptionViewItem &option);
 
 QPalette::ColorGroup colorGroup(const QStyleOption &option);
 
@@ -44,7 +47,29 @@ QPalette::ColorGroup colorGroup(const QStyleOption &option);
 //! now they are not present to current list
 QStringList subtracted(const QStringList &original, const QStringList &current);
 
+void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, const float textOpacity = 1.0);
 void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const QRect &target, const Latte::Data::LayoutIcon &icon);
+
+//! simple icon
+QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
+void drawIconBackground(QPainter *painter, const QStyleOptionViewItem &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
+void drawIconBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
+void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon, Qt::AlignmentFlag alignment = Qt::AlignLeft);
+
+//! changes indicator
+QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option);
+void drawChangesIndicatorBackground(QPainter *painter, const QStyleOptionViewItem &option);
+void drawChangesIndicator(QPainter *painter, const QStyleOptionViewItem &option);
+
+
+//! screen icon
+QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSize = -1);
+QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeometry, const int &maxIconSize = -1, const float brushOpacity = 1.0); // returns screen available rect
+void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionViewItem &option, const int &maxIconSize = -1);
+void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, const int &maxIconSize = -1);
+void drawView(QPainter *painter, const QStyleOption &option, const Latte::Data::View &view, const QRect &availableScreenRect, const float brushOpacity = 1.0);
+
+int screenMaxLength(const QStyleOption &option, const int &maxIconSize = -1);
 
 }
 

@@ -43,11 +43,16 @@ public:
 
     void print();
 
+    void appendTemporaryView(const Data::View &view);
+
+    bool hasContainmentId(const QString &cid) const;
+
     //! Operators
     ViewsTable &operator=(const ViewsTable &rhs);
     ViewsTable &operator=(ViewsTable &&rhs);
     bool operator==(const ViewsTable &rhs) const;
     bool operator!=(const ViewsTable &rhs) const;
+    ViewsTable subtracted(const ViewsTable &rhs) const;
 };
 
 }

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>776</width>
-    <height>511</height>
+    <width>980</width>
+    <height>630</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -87,7 +87,41 @@
           <number>6</number>
          </property>
          <item row="1" column="0">
-          <widget class="QTableView" name="viewsTable"/>
+          <widget class="Latte::Settings::View::ViewsTableView" name="viewsTable">
+           <property name="contextMenuPolicy">
+            <enum>Qt::ActionsContextMenu</enum>
+           </property>
+           <property name="alternatingRowColors">
+            <bool>true</bool>
+           </property>
+           <property name="selectionMode">
+            <enum>QAbstractItemView::ExtendedSelection</enum>
+           </property>
+           <property name="selectionBehavior">
+            <enum>QAbstractItemView::SelectRows</enum>
+           </property>
+           <property name="showGrid">
+            <bool>true</bool>
+           </property>
+           <attribute name="horizontalHeaderVisible">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="horizontalHeaderCascadingSectionResizes">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="horizontalHeaderHighlightSections">
+            <bool>false</bool>
+           </attribute>
+           <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
+            <bool>true</bool>
+           </attribute>
+           <attribute name="verticalHeaderVisible">
+            <bool>false</bool>
+           </attribute>
+           <attribute name="verticalHeaderHighlightSections">
+            <bool>false</bool>
+           </attribute>
+          </widget>
          </item>
          <item row="1" column="2">
           <layout class="QVBoxLayout" name="buttonsLayout">
@@ -109,47 +143,9 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="removeBtn">
+            <widget class="QPushButton" name="duplicateBtn">
              <property name="text">
-              <string notr="true">Remove</string>
-             </property>
-             <property name="icon">
-              <iconset theme="delete">
-               <normaloff>.</normaloff>.</iconset>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="verticalSpacer">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Fixed</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>10</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item>
-            <widget class="QPushButton" name="cutBtn">
-             <property name="text">
-              <string notr="true">Cut</string>
-             </property>
-             <property name="icon">
-              <iconset theme="edit-cut">
-               <normaloff>.</normaloff>.</iconset>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="copyBtn">
-             <property name="text">
-              <string notr="true">Copy</string>
+              <string>Duplicate</string>
              </property>
              <property name="icon">
               <iconset theme="edit-copy">
@@ -158,12 +154,12 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="pasteBtn">
+            <widget class="QPushButton" name="removeBtn">
              <property name="text">
-              <string notr="true">Paste</string>
+              <string notr="true">Remove</string>
              </property>
              <property name="icon">
-              <iconset theme="edit-paste">
+              <iconset theme="delete">
                <normaloff>.</normaloff>.</iconset>
              </property>
             </widget>
@@ -236,7 +232,7 @@
       <enum>Qt::Horizontal</enum>
      </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok|QDialogButtonBox::Reset</set>
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Reset</set>
      </property>
     </widget>
    </item>
@@ -247,6 +243,11 @@
    <class>Latte::Settings::LayoutsComboBox</class>
    <extends>QComboBox</extends>
    <header>settings/generic/layoutscombobox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>Latte::Settings::View::ViewsTableView</class>
+   <extends>QTableView</extends>
+   <header>settings/viewsdialog/viewstableview.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

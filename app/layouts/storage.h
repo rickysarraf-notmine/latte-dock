@@ -22,6 +22,8 @@
 
 // local
 #include "../data/appletdata.h"
+#include "../data/errordata.h"
+#include "../data/genericdata.h"
 #include "../data/generictable.h"
 #include "../data/viewstable.h"
 
@@ -50,14 +52,6 @@ struct SubContaimentIdentityData
     QString cfgProperty;
 };
 
-struct ViewDelayedCreationData
-{
-    Plasma::Containment *containment{nullptr};
-    bool forceOnPrimary{false};
-    int explicitScreen{-1};
-    bool reactToScreenChange{false};
-};
-
 class Storage
 {
 
@@ -71,8 +65,10 @@ public:
     bool isWritable(const Layout::GenericLayout *layout) const;
     bool isLatteContainment(const Plasma::Containment *containment) const;
     bool isLatteContainment(const KConfigGroup &group) const;
-    bool isBroken(const Layout::GenericLayout *layout, QStringList &errors) const;
     bool isSubContainment(const Layout::GenericLayout *layout, const Plasma::Applet *applet) const;
+
+    bool hasContainment(const Layout::GenericLayout *layout, const int &id);
+    bool containsView(const QString &filepath, const int &viewId);
 
     int subContainmentId(const KConfigGroup &appletGroup) const;
 
@@ -83,8 +79,14 @@ public:
 
     void importToCorona(const Layout::GenericLayout *layout);
     void syncToLayoutFile(const Layout::GenericLayout *layout, bool removeLayoutId);
-    ViewDelayedCreationData copyView(const Layout::GenericLayout *layout, Plasma::Containment *containment);
-    ViewDelayedCreationData newView(const Layout::GenericLayout *destination, const QString &templateFile);
+
+    Data::View newView(const Layout::GenericLayout *destination, const Data::View &nextViewData);
+    void removeView(const QString &filepath, const Data::View &viewData);
+    void updateView(const Layout::GenericLayout *layout, const Data::View &viewData);
+    void updateView(KConfigGroup viewGroup, const Data::View &viewData);
+    QString storedView(const Layout::GenericLayout *layout, const int &containmentId); //returns temp filepath containing all view data
+
+    void removeContainment(const QString &filepath, const QString &containmentId);
 
     bool exportTemplate(const QString &originFile, const QString &destinationFile, const Data::AppletsTable &approvedApplets);
     bool exportTemplate(const Layout::GenericLayout *layout, Plasma::Containment *containment, const QString &destinationFile, const Data::AppletsTable &approvedApplets);
@@ -110,10 +112,16 @@ public:
     Data::ViewsTable views(const QString &file);
     Data::ViewsTable views(const Layout::GenericLayout *layout);
 
+    //! errors/warning;
+    Data::ErrorsList errors(const Layout::GenericLayout *layout);
+    Data::WarningsList warnings(const Layout::GenericLayout *layout);
+
 private:
     Storage();
 
     void clearExportedLayoutSettings(KConfigGroup &layoutSettingsGroup);
+    void importContainments(const QString &originFile, const QString &destinationFile);
+    void syncContainmentConfig(Plasma::Containment *containment);
 
     bool isSubContainment(const KConfigGroup &appletGroup) const;
     int subIdentityIndex(const KConfigGroup &appletGroup) const;
@@ -123,12 +131,23 @@ private:
     //! provides a new file path based the provided file. The new file
     //! has updated ids for containments and applets based on the corona
     //! loaded ones
-    QString newUniqueIdsLayoutFromFile(const Layout::GenericLayout *layout, QString file);
+    QString newUniqueIdsFile(QString originFile, const Layout::GenericLayout *destinationLayout);
     //! imports a layout file and returns the containments for the docks
     QList<Plasma::Containment *> importLayoutFile(const Layout::GenericLayout *layout, QString file);
 
+    QStringList containmentsIds(const QString &filepath);
+    QStringList appletsIds(const QString &filepath);
+
+    //! errors checkers
+    bool hasDifferentAppletsWithSameId(const Layout::GenericLayout *layout, Data::Error &error);
+    bool hasOrphanedParentAppletOfSubContainment(const Layout::GenericLayout *layout, Data::Error &error);
+    //! warnings checkers
+    bool hasAppletsAndContainmentsWithSameId(const Layout::GenericLayout *layout, Data::Warning &warning);
+    bool hasOrphanedSubContainments(const Layout::GenericLayout *layout, Data::Warning &warning);
 private:
     QTemporaryDir m_storageTmpDir;
+
+    Data::GenericTable<Data::Generic> s_knownErrors;
 
     QList<SubContaimentIdentityData> m_subIdentities;
 };

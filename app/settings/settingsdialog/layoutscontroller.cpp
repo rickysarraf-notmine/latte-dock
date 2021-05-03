@@ -24,6 +24,7 @@
 #include "ui_settingsdialog.h"
 #include "settingsdialog.h"
 #include "tablayoutshandler.h"
+#include "templateskeeper.h"
 #include "delegates/activitiesdelegate.h"
 #include "delegates/backgrounddelegate.h"
 #include "delegates/checkboxdelegate.h"
@@ -65,6 +66,8 @@ Layouts::Layouts(Settings::Handler::TabLayouts *parent)
       m_headerView(new Settings::Layouts::HeaderView(Qt::Horizontal, m_handler->dialog())),
       m_storage(KConfigGroup(KSharedConfig::openConfig(),"LatteSettingsDialog").group("TabLayouts"))
 {   
+    m_templatesKeeper = new Settings::Part::TemplatesKeeper(this, m_handler->corona());
+
     loadConfig();
     m_proxyModel->setSourceModel(m_model);
 
@@ -123,6 +126,11 @@ QTableView *Layouts::view() const
     return m_view;
 }
 
+Settings::Part::TemplatesKeeper *Layouts::templatesKeeper() const
+{
+    return m_templatesKeeper;
+}
+
 void Layouts::initView()
 {
     m_view->setModel(m_proxyModel);
@@ -157,6 +165,8 @@ void Layouts::initView()
     m_view->setItemDelegateForColumn(Model::Layouts::BORDERSCOLUMN, new Settings::Layout::Delegate::CheckBox(this));
     m_view->setItemDelegateForColumn(Model::Layouts::ACTIVITYCOLUMN, new Settings::Layout::Delegate::Activities(this));
 
+    connect(m_view->selectionModel(), &QItemSelectionModel::currentRowChanged, this, &Layouts::onCurrentRowChanged);
+
     connect(m_view, &QObject::destroyed, this, [&]() {
         storeColumnWidths(m_model->inMultipleMode());
     });
@@ -184,9 +194,23 @@ void Layouts::setOriginalInMultipleMode(const bool &inmultiple)
 
 bool Layouts::hasSelectedLayout() const
 {
-    int selectedRow = m_view->currentIndex().row();
+    return m_view->selectionModel()->hasSelection();
+}
 
-    return (selectedRow >= 0);
+bool Layouts::isLayoutOriginal(const QString &currentLayoutId) const
+{
+    return m_model->originalLayoutsData().containsId(currentLayoutId);
+}
+
+bool Layouts::isSelectedLayoutOriginal() const
+{
+    if (!hasSelectedLayout()) {
+        return false;
+    }
+
+    Data::Layout currentData = selectedLayoutCurrentData();
+
+    return m_model->originalLayoutsData().containsId(currentData.id);
 }
 
 QString Layouts::colorPath(const QString color) const
@@ -205,36 +229,36 @@ QString Layouts::iconsPath() const
     return m_iconsPath;
 }
 
-void Layouts::initializeSelectedLayoutViews()
+const Latte::Data::ViewsTable Layouts::selectedLayoutViews()
 {
+    Latte::Data::ViewsTable views;
     int selectedRow = m_view->currentIndex().row();
-    if (selectedRow >= 0) {
-        QString selectedId = m_proxyModel->data(m_proxyModel->index(selectedRow, Model::Layouts::IDCOLUMN), Qt::UserRole).toString();
-        Data::Layout selectedCurrentData = m_model->currentData(selectedId);
 
-        if (!selectedCurrentData.views.isInitialized) {
-            Data::Layout originalSelectedData = selectedLayoutOriginalData();
-            CentralLayout *central = m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originalSelectedData.name);
-
-            bool islayoutactive{true};
-
-            if (!central) {
-                islayoutactive = false;
-                central = new CentralLayout(this, selectedCurrentData.id);
-            }
-
-            selectedCurrentData.views = central->viewsTable();
-            selectedCurrentData.views.isInitialized = true;
-            originalSelectedData.views = selectedCurrentData.views;
-
-            m_model->setOriginalViewsForLayout(originalSelectedData);
-            m_model->setLayoutProperties(selectedCurrentData);
-
-            if (!islayoutactive) {
-                central->deleteLater();
-            }
-        }
+    if (selectedRow < 0) {
+        return views;
     }
+
+    QString selectedId = m_proxyModel->data(m_proxyModel->index(selectedRow, Model::Layouts::IDCOLUMN), Qt::UserRole).toString();
+    Data::Layout selectedCurrentData = m_model->currentData(selectedId);
+
+    Data::Layout originalSelectedData = selectedLayoutOriginalData();
+    CentralLayout *central = m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originalSelectedData.name);
+
+    bool islayoutactive{true};
+
+    if (!central) {
+        islayoutactive = false;
+        central = new CentralLayout(this, selectedCurrentData.id);
+    }
+
+    selectedCurrentData.views = central->viewsTable();
+    selectedCurrentData.views.isInitialized = true;
+
+    if (!islayoutactive) {
+        central->deleteLater();
+    }
+
+    return selectedCurrentData.views;
 }
 
 const Latte::Data::LayoutIcon Layouts::selectedLayoutIcon() const
@@ -268,6 +292,17 @@ const Latte::Data::Layout Layouts::selectedLayoutOriginalData() const
 
     return m_model->originalData(selectedId);
 }
+
+const Latte::Data::Layout Layouts::currentData(const QString &currentLayoutId) const
+{
+    return m_model->currentData(currentLayoutId);
+}
+
+const Latte::Data::Layout Layouts::originalData(const QString &currentLayoutId) const
+{
+    return m_model->originalData(currentLayoutId);
+}
+
 
 bool Layouts::inMultipleMode() const
 {
@@ -479,15 +514,6 @@ void Layouts::initLayouts()
     m_handler->corona()->layoutsManager()->synchronizer()->updateLayoutsTable();
     Latte::Data::LayoutsTable layouts = m_handler->corona()->layoutsManager()->synchronizer()->layoutsTable();
 
-
-    QStringList brokenLayouts;
-
-    for (int i=0; i<layouts.rowCount(); ++i) {
-        if (layouts[i].isBroken) {
-            brokenLayouts.append(layouts[i].name);
-        }
-    }
-
     //! Send original loaded data to model
     m_model->setOriginalInMultipleMode(inMultiple);
     m_model->setOriginalData(layouts);
@@ -499,16 +525,113 @@ void Layouts::initLayouts()
 
     applyColumnWidths();
 
-    //! there are broken layouts and the user must be informed!
-    if (brokenLayouts.count() > 0) {
-        if (brokenLayouts.count() == 1) {
-            m_handler->showInlineMessage(i18nc("settings:broken layout", "Layout <b>%0</b> <i>is broken</i>! Please <b>remove</b> it to improve stability...").arg(brokenLayouts.join(", ")),
-                                         KMessageWidget::Error,
-                                         true);
-        } else {
-            m_handler->showInlineMessage(i18nc("settings:broken layouts", "Layouts <b>%0</b> <i>are broken</i>! Please <b>remove</b> them to improve stability...").arg(brokenLayouts.join(", ")),
-                                         KMessageWidget::Error,
-                                         true);
+    showInitialErrorWarningMessages();
+}
+
+void Layouts::initialMessageForErroredLayouts(const int &count)
+{
+    if (count <= 0) {
+        return;
+    }
+
+    m_handler->showInlineMessage(i18ncp("settings:counted layout with errors",
+                                           "<b>Error:</b> There is <b>1 layout</b> that has reported errors.",
+                                           "<b>Error:</b> There are <b>%0 layouts</b> that have reported errors.",
+                                           count).arg(count),
+                                     KMessageWidget::Error);
+}
+
+void Layouts::initialMessageForWarningLayouts(const int &count)
+{
+    if (count <= 0) {
+        return;
+    }
+
+    m_handler->showInlineMessage(i18ncp("settings:counted layout with warnings",
+                                           "<b>Warning:</b> There is <b>1 layout</b> that has reported warnings.",
+                                           "<b>Warning:</b> There are <b>%0 layouts</b> that have reported warnings.",
+                                           count).arg(count),
+                                     KMessageWidget::Warning);
+}
+
+
+void Layouts::messageForErroredLayout(const Data::Layout &layout)
+{
+    //! add actions
+    QAction *examineaction = new QAction(i18n("Examine..."), this);
+    examineaction->setIcon(QIcon::fromTheme("document-preview"));
+    examineaction->setData(layout.id);
+    QList<QAction *> actions;
+    actions << examineaction;
+
+    connect(examineaction, &QAction::triggered, this, [&, examineaction]() {
+        QString currentid = examineaction->data().toString();
+
+        if (!currentid.isEmpty()) {
+            selectRow(currentid);
+            m_handler->showViewsDialog();
+        }
+    });
+
+    if (!layout.hasErrors() && layout.hasWarnings()) {
+        //! add only warnings first
+        m_handler->showInlineMessage(i18nc("settings:layout with warnings",
+                                           "<b>Warning: %0</b> layout has reported <b>%1 warning(s)</b> that need your attention.").arg(layout.name).arg(layout.warnings),
+                                     KMessageWidget::Warning,
+                                     false,
+                                     actions);
+    } else if (layout.hasErrors() && !layout.hasWarnings()) {
+        //! add errors in the end in order to be read by the user
+        m_handler->showInlineMessage(i18nc("settings:layout with errors",
+                                           "<b>Error: %0</b> layout has reported <b>%1 error(s)</b> that you need to repair.").arg(layout.name).arg(layout.errors),
+                                     KMessageWidget::Error,
+                                     true,
+                                     actions);
+    } else if (layout.hasErrors() && layout.hasWarnings()) {
+        //! add most important errors in the end in order to be read by the user
+        m_handler->showInlineMessage(i18nc("settings:layout with errors and warnings",
+                                           "<b>Error: %0</b> layout has reported <b>%1 error(s)</b> and <b>%2 warning(s)</b> that you need to repair.").arg(layout.name).arg(layout.errors).arg(layout.warnings),
+                                     KMessageWidget::Error,
+                                     true,
+                                     actions);
+    }
+}
+
+void Layouts::showInitialErrorWarningMessages()
+{
+    if (!m_hasShownInitialErrorWarningMessages) {
+        m_hasShownInitialErrorWarningMessages = true;
+
+        Latte::Data::LayoutsTable layouts = m_handler->corona()->layoutsManager()->synchronizer()->layoutsTable();
+
+        int erroredlayouts{0};
+        int warninglayouts{0};
+
+        for (int i=0; i<layouts.rowCount(); ++i) {
+            if (layouts[i].hasErrors()) {
+                erroredlayouts++;
+            } else if (layouts[i].hasWarnings()) {
+                warninglayouts++;
+            }
+        }
+
+        onCurrentRowChanged();
+        initialMessageForWarningLayouts(warninglayouts);
+        initialMessageForErroredLayouts(erroredlayouts);
+    }
+}
+
+void Layouts::onCurrentRowChanged()
+{
+    if (!hasSelectedLayout()) {
+        return;
+    }
+
+    if (!m_handler->isViewsDialogVisible()) {
+        Latte::Data::Layout selectedlayout = selectedLayoutCurrentData();
+
+        if (selectedlayout.hasErrors() || selectedlayout.hasWarnings()) {
+            messageForErroredLayout(selectedlayout);
         }
     }
 }
@@ -521,6 +644,18 @@ void Layouts::onLayoutActivitiesChangedExternally(const Data::Layout &layout)
 void Layouts::onLayoutAddedExternally(const Data::Layout &layout)
 {
     m_model->appendOriginalLayout(layout);
+}
+
+void Layouts::setLayoutCurrentErrorsWarnings(const QString &layoutCurrentId, const int &errors, const int &warnings)
+{
+    Latte::Data::Layout layout = m_model->currentData(layoutCurrentId);
+
+    if (!layout.isNull()) {
+        layout.errors = errors;
+        layout.warnings = warnings;
+        setLayoutProperties(layout);
+    }
+
 }
 
 void Layouts::sortByColumn(int column, Qt::SortOrder order)
@@ -562,6 +697,8 @@ const Latte::Data::Layout Layouts::addLayoutForFile(QString file, QString layout
     copied.isLocked = !settings->isWritable();
     copied.isShownInMenu = settings->showInMenu();
     copied.hasDisabledBorders = settings->disableBordersForMaximizedWindows();
+    copied.errors = settings->errors().count();
+    copied.warnings = settings->warnings().count();
 
     m_model->appendLayout(copied);
 
@@ -619,6 +756,7 @@ void Layouts::duplicateSelectedLayout()
     copied.name = uniqueLayoutName(selectedLayoutCurrent.name);
     copied.id = uniqueTempDirectory() + "/" + copied.name + ".layout.latte";;
     copied.isActive = false;
+    copied.isConsideredActive = false;
     copied.isLocked = false;
     copied.activities = QStringList();
 
@@ -676,10 +814,10 @@ bool Layouts::importLayoutsFromV1ConfigFile(QString file)
             if (importedlayouts.count() > 0) {
                 if (importedlayouts.count() == 1) {
                     m_handler->showInlineMessage(i18n("Layout <b>%0</b> imported successfully...").arg(importedlayouts[0]),
-                            KMessageWidget::Information);
+                            KMessageWidget::Positive);
                 } else {
                     m_handler->showInlineMessage(i18n("Layouts <b>%0</b> imported successfully...").arg(importedlayouts.join(",")),
-                                                 KMessageWidget::Information);
+                                                 KMessageWidget::Positive);
                 }
 
                 return true;
@@ -697,6 +835,9 @@ void Layouts::reset()
     if (currentLayoutNames.count() > 0) {
         m_view->selectRow(rowForName(currentLayoutNames[0]));
     }
+
+    //! Clear any templates keeper data
+    m_templatesKeeper->clear();
 }
 
 void Layouts::save()
@@ -753,6 +894,7 @@ void Layouts::save()
         //! Extra Properties
         central->setShowInMenu(iLayoutCurrentData.isShownInMenu);
         central->setDisableBordersForMaximizedWindows(iLayoutCurrentData.hasDisabledBorders);
+        central->setPopUpMargin(iLayoutCurrentData.popUpMargin);
         central->setActivities(iLayoutCurrentData.activities);
 
         //! If the layout name changed OR the layout path is a temporary one
@@ -846,6 +988,9 @@ void Layouts::save()
 
     m_model->applyData();
 
+    //! Clear any templates keeper data
+    m_templatesKeeper->clear();
+
     emit dataChanged();
 }
 
@@ -892,19 +1037,13 @@ void Layouts::onNameDuplicatedFrom(const QString &provenId, const QString &trial
 
 void Layouts::loadConfig()
 {
-    //! remove old unneeded oprtions
-    KConfigGroup deprecatedStorage(KConfigGroup(KSharedConfig::openConfig(), "UniversalSettings"));
-    QStringList columnWidths = deprecatedStorage.readEntry("layoutsColumnWidths", QStringList());
+    QStringList defaultcolumnwidths;
+    defaultcolumnwidths << QString::number(48) << QString::number(508) << QString::number(129) << QString::number(104);
 
-    if (!columnWidths.isEmpty()) {
-        //! migrating
-        m_viewColumnWidths = columnWidths;
-    } else {
-        //! new storage
-        m_viewColumnWidths = m_storage.readEntry("columnWidths", QStringList());
-        m_viewSortColumn = m_storage.readEntry("sortColumn", (int)Model::Layouts::NAMECOLUMN);
-        m_viewSortOrder = static_cast<Qt::SortOrder>(m_storage.readEntry("sortOrder", (int)Qt::AscendingOrder));
-    }
+    //! new storage
+    m_viewColumnWidths = m_storage.readEntry("columnWidths", defaultcolumnwidths);
+    m_viewSortColumn = m_storage.readEntry("sortColumn", (int)Model::Layouts::NAMECOLUMN);
+    m_viewSortOrder = static_cast<Qt::SortOrder>(m_storage.readEntry("sortOrder", (int)Qt::AscendingOrder));
 }
 
 void Layouts::saveConfig()

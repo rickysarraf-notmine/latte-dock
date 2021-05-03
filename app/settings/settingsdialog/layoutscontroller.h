@@ -45,6 +45,9 @@ namespace Settings {
 namespace Handler {
 class TabLayouts;
 }
+namespace Part{
+class TemplatesKeeper;
+}
 }
 }
 
@@ -63,6 +66,7 @@ public:
     QAbstractItemModel *proxyModel() const;
     QAbstractItemModel *baseModel() const;
     QTableView *view() const;
+    Settings::Part::TemplatesKeeper *templatesKeeper() const;
 
     bool hasChangedData() const;
     bool layoutsAreChanged() const;
@@ -73,9 +77,15 @@ public:
     void sortByColumn(int column, Qt::SortOrder order);
 
     bool hasSelectedLayout() const;
+    bool isSelectedLayoutOriginal() const;
+    bool isLayoutOriginal(const QString &currentLayoutId) const;
     const Latte::Data::Layout selectedLayoutCurrentData() const;
     const Latte::Data::Layout selectedLayoutOriginalData() const;
     const Latte::Data::LayoutIcon selectedLayoutIcon() const;
+    const Latte::Data::ViewsTable selectedLayoutViews();
+
+    const Latte::Data::Layout currentData(const QString &currentLayoutId) const;
+    const Latte::Data::Layout originalData(const QString &currentLayoutId) const;
 
     void selectRow(const QString &id);
     void setLayoutProperties(const Latte::Data::Layout &layout);
@@ -85,8 +95,7 @@ public:
     void save();
     void removeSelected();
     void toggleEnabledForSelected();
-    void toggleLockedForSelected();
-    void initializeSelectedLayoutViews();
+    void toggleLockedForSelected();    
 
     QString iconsPath() const;
     QString colorPath(const QString color) const;
@@ -95,6 +104,7 @@ public:
     void setOriginalLayoutForFreeActivities(const QString &id);
 
     void setOriginalInMultipleMode(const bool &inmultiple);
+    void setLayoutCurrentErrorsWarnings(const QString &layoutCurrentId, const int &errors, const int &warnings);
 
     void duplicateSelectedLayout();
     const Latte::Data::Layout addLayoutForFile(QString file, QString layoutName = QString(), bool newTempDirectory = true);
@@ -113,9 +123,12 @@ private slots:
     void storeColumnWidths(bool inMultipleMode);
     void applyColumnWidths(bool storeValues = false);
 
+    void showInitialErrorWarningMessages();
+
+    void onCurrentRowChanged();
     void onNameDuplicatedFrom(const QString &provenId,  const QString &trialId);
     void onLayoutAddedExternally(const Data::Layout &layout);
-    void onLayoutActivitiesChangedExternally(const Data::Layout &layout);
+    void onLayoutActivitiesChangedExternally(const Data::Layout &layout);  
 
 private:
     void initView();
@@ -126,8 +139,15 @@ private:
     QString uniqueTempDirectory();
     QString uniqueLayoutName(QString name);
 
+    void initialMessageForErroredLayouts(const int &count);
+    void initialMessageForWarningLayouts(const int &count);
+    void messageForErroredLayout(const Data::Layout &layout);
+
 private:
     Settings::Handler::TabLayouts *m_handler{nullptr};
+    Settings::Part::TemplatesKeeper *m_templatesKeeper{nullptr};
+
+    bool m_hasShownInitialErrorWarningMessages{false};
 
     QString m_iconsPath;
 

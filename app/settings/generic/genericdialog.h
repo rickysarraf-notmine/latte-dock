@@ -24,11 +24,13 @@
 // Qt
 #include <QAction>
 #include <QDialog>
+#include <QMessageBox>
 #include <QObject>
 #include <QTimer>
 #include <QWidget>
 
 // KDE
+#include <KMessageBox>
 #include <KMessageWidget>
 
 namespace Latte {
@@ -44,29 +46,12 @@ public:
     ~GenericDialog();
 
     void showInlineMessage(const QString &msg, const KMessageWidget::MessageType &type, const bool &isPersistent = false, QList<QAction *> actions = QList<QAction *>());
-    void hideInlineMessage();
+    void deleteInlineMessages();
 
-    int saveChangesConfirmation(const QString &text);
-
-protected:
-    void keyPressEvent(QKeyEvent *event) override;
+    KMessageBox::ButtonCode saveChangesConfirmation(const QString &text);
 
 private slots:
-    void initMessageWidget();
-
-private:
-    void clearCurrentMessageActions();
-
-private:
-    KMessageWidget *m_messageWidget{nullptr};
-
-    //! Current shown KMessageActions
-    QList<QAction *> m_currentMessageActions;
-
-    //! Timer to hide the inline message widget
-    QTimer m_hideInlineMessageTimer;
-
-
+    KMessageWidget *initMessageWidget();
 };
 
 }

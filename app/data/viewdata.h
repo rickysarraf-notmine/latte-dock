@@ -43,33 +43,49 @@ public:
     enum State {
         IsInvalid = -1,
         IsCreated = 0,
-        OriginFromViewTemplate,
-        OriginFromLayout
+        OriginFromViewTemplate, /*used for view templates files*/
+        OriginFromLayout /*used from duplicate, copy, move view functions*/
     };
 
     View();
     View(View &&o);
     View(const View &o);
+    View(const QString &newid, const QString &newname);
 
     //! View data
     bool isActive{false};
     bool onPrimary{true};
     int screen{Latte::ScreenPool::FIRSTSCREENID};
+    int screenEdgeMargin{0};
     float maxLength{1.0};
     Plasma::Types::Location edge{Plasma::Types::BottomEdge};
     Latte::Types::Alignment alignment{Latte::Types::Center};
     GenericTable<Data::Generic> subcontainments;
+
+    int errors{0};
+    int warnings{0};
+
+    //! View sub-states
+    bool isMoveOrigin{false};
+    bool isMoveDestination{false};
 
     bool isValid() const;
     bool isCreated() const;
     bool hasViewTemplateOrigin() const;
     bool hasLayoutOrigin() const;
     bool hasSubContainment(const QString &subId) const;
+    bool hasErrors() const;
+    bool hasWarnings() const;
 
-    QString tempId() const;
+    bool isHorizontal() const;
+    bool isVertical() const;
+
+    QString originFile() const;
+    QString originLayout() const;
+    QString originView() const;    
 
     View::State state() const;
-    void setState(View::State state, QString file = QString(), QString view = QString());
+    void setState(View::State state, QString file = QString(), QString layout = QString(), QString view = QString());
 
     //! Operators
     View &operator=(const View &rhs);
@@ -82,8 +98,9 @@ protected:
     View::State m_state{IsInvalid};
 
     //! Origin Data
-    QString originFile;
-    QString originView;
+    QString m_originFile;
+    QString m_originLayout;
+    QString m_originView;
 };
 
 }

@@ -28,6 +28,7 @@
 // Qt
 #include <QDialog>
 #include <QObject>
+#include <QPushButton>
 
 namespace Ui {
 class ViewsDialog;
@@ -69,6 +70,7 @@ private slots:
     void saveConfig();
 
     void onOk();
+    void onApply();
     void onCancel();
     void onReset();
 
@@ -79,7 +81,9 @@ private:
     Ui::ViewsDialog *m_ui;
     Controller::Layouts *m_layoutsController{nullptr};
 
-    Handler::ViewsHandler *m_handler;
+    QPushButton *m_applyNowBtn{nullptr};
+
+    Handler::ViewsHandler *m_handler;   
 
     //! properties
     QSize m_windowSize;

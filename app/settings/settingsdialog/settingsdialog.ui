@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>920</width>
-    <height>717</height>
+    <width>1100</width>
+    <height>750</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -362,6 +362,17 @@
                </widget>
               </item>
               <item>
+               <widget class="QPushButton" name="viewsBtn">
+                <property name="text">
+                 <string notr="true">Docks, Panels...</string>
+                </property>
+                <property name="icon">
+                 <iconset theme="window">
+                  <normaloff>.</normaloff>.</iconset>
+                </property>
+               </widget>
+              </item>
+              <item>
                <spacer name="verticalSpacer_2">
                 <property name="orientation">
                  <enum>Qt::Vertical</enum>
@@ -453,17 +464,6 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="downloadButton">
-                <property name="text">
-                 <string>Download...</string>
-                </property>
-                <property name="icon">
-                 <iconset theme="get-hot-new-stuff">
-                  <normaloff>.</normaloff>.</iconset>
-                </property>
-               </widget>
-              </item>
-              <item>
                <spacer name="verticalSpacer">
                 <property name="orientation">
                  <enum>Qt::Vertical</enum>
@@ -521,7 +521,7 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>888</width>
+            <width>1068</width>
             <height>375</height>
            </rect>
           </property>

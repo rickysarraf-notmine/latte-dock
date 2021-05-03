@@ -23,10 +23,6 @@
 namespace Latte {
 namespace Data {
 
-Generic::Generic()
-{
-}
-
 Generic::Generic(Generic &&o)
     : id(o.id),
       name(o.name)
@@ -36,6 +32,12 @@ Generic::Generic(Generic &&o)
 Generic::Generic(const Generic &o)
     : id(o.id),
       name(o.name)
+{
+}
+
+Generic::Generic(const QString &newid, const QString &newname)
+    : id(newid),
+      name(newname)
 {
 }
 

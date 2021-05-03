@@ -36,7 +36,6 @@
 #include <QColorDialog>
 #include <QFileDialog>
 #include <QIcon>
-#include <QMessageBox>
 
 // KDE
 #include <KIconDialog>
@@ -98,6 +97,10 @@ void DetailsHandler::init()
 
 
     //! Options
+    connect(m_ui->popUpMarginSpinBox, qOverload<int>(&QSpinBox::valueChanged), this, [&](int i) {
+        setPopUpMargin(i);
+    });
+
     connect(m_ui->inMenuChk, &QCheckBox::stateChanged, this, [&]() {
         setIsShownInMenu(m_ui->inMenuChk->isChecked());
     });
@@ -109,6 +112,7 @@ void DetailsHandler::init()
     connect(this, &DetailsHandler::currentLayoutChanged, this, &DetailsHandler::reload);
 
     reload();
+    m_lastConfirmedLayoutIndex = m_ui->colorsCmb->currentIndex();
 
     //! connect layout combobox after the selected layout has been loaded
     connect(m_ui->layoutsCmb, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &DetailsHandler::onCurrentLayoutIndexChanged);
@@ -196,6 +200,8 @@ void DetailsHandler::loadLayout(const Latte::Data::Layout &data)
         m_ui->patternClearBtn->setEnabled(false);
     }
 
+    m_ui->popUpMarginSpinBox->setValue(data.popUpMargin);
+
     m_ui->inMenuChk->setChecked(data.isShownInMenu);
     m_ui->borderlessChk->setChecked(data.hasDisabledBorders);
 
@@ -254,17 +260,25 @@ void DetailsHandler::onCurrentColorIndexChanged(int row)
 
 void DetailsHandler::onCurrentLayoutIndexChanged(int row)
 {
-    bool switchtonewlayout{true};
+    bool switchtonewlayout{false};
 
-    if (hasChangedData()) {
-        int result = saveChanges();
+    if (m_lastConfirmedLayoutIndex != row) {
+        if (hasChangedData()) { //new layout was chosen but there are changes
+            KMessageBox::ButtonCode result = saveChangesConfirmation();
 
-        if (result == QMessageBox::Apply) {
-            save();
-        } else if (result == QMessageBox::Discard) {
-            //do nothing
-        } else if (result == QMessageBox::Cancel) {
-            switchtonewlayout = false;
+            if (result == KMessageBox::Yes) {
+                switchtonewlayout = true;
+                m_lastConfirmedLayoutIndex = row;
+                save();
+            } else if (result == KMessageBox::No) {
+                switchtonewlayout = true;
+                m_lastConfirmedLayoutIndex = row;
+            } else if (result == KMessageBox::Cancel) {
+                //do nothing
+            }
+        } else { //new layout was chosen and there are no changes
+            switchtonewlayout = true;
+            m_lastConfirmedLayoutIndex = row;
         }
     }
 
@@ -272,7 +286,6 @@ void DetailsHandler::onCurrentLayoutIndexChanged(int row)
         QString layoutId = m_layoutsProxyModel->data(m_layoutsProxyModel->index(row, Model::Layouts::IDCOLUMN), Qt::UserRole).toString();
         m_dialog->layoutsController()->selectRow(layoutId);
         reload();
-
         emit currentLayoutChanged();
     } else {
         //! reset combobox index
@@ -350,6 +363,16 @@ void DetailsHandler::setBackgroundStyle(const Latte::Layout::BackgroundStyle &st
     emit dataChanged();
 }
 
+void DetailsHandler::setPopUpMargin(const int &margin)
+{
+    if (c_data.popUpMargin == margin) {
+        return;
+    }
+
+    c_data.popUpMargin = margin;
+    emit dataChanged();
+}
+
 void DetailsHandler::selectBackground()
 {
     QStringList mimeTypeFilters;
@@ -400,16 +423,16 @@ void DetailsHandler::updateWindowTitle()
     m_dialog->setWindowTitle(i18nc("<layout name> Details","%0 Details").arg(m_ui->layoutsCmb->currentText()));
 }
 
-int DetailsHandler::saveChanges()
+KMessageBox::ButtonCode DetailsHandler::saveChangesConfirmation()
 {
     if (hasChangedData()) {
         QString layoutName = c_data.name;
-        QString saveChangesText = i18n("The settings of <b>%0</b> layout have changed. Do you want to apply the changes or discard them?").arg(layoutName);
+        QString saveChangesText = i18n("The settings of <b>%0</b> layout have changed.<br/>Do you want to apply the changes or discard them?").arg(layoutName);
 
         return m_dialog->saveChangesConfirmation(saveChangesText);
     }
 
-    return QMessageBox::Cancel;
+    return KMessageBox::Cancel;
 }
 
 }

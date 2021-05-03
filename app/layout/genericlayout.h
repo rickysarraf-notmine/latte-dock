@@ -23,6 +23,7 @@
 // local
 #include <coretypes.h>
 #include "abstractlayout.h"
+#include "../data/errordata.h"
 #include "../data/viewdata.h"
 #include "../data/viewstable.h"
 
@@ -74,7 +75,6 @@ public:
     bool isActive() const; //! is loaded and running
     virtual bool isCurrent();
     bool isWritable() const;
-    bool isBroken() const;
 
     virtual int viewsCount(int screen) const;
     virtual int viewsCount(QScreen *screen) const;
@@ -89,9 +89,15 @@ public:
     virtual Types::ViewType latteViewType(uint containmentId) const;
     const QList<Plasma::Containment *> *containments() const;
 
+    bool contains(Plasma::Containment *containment) const;
+    bool containsView(const int &containmentId) const;
+    int screenForContainment(Plasma::Containment *containment);
+
     Latte::View *highestPriorityView();
     Latte::View *viewForContainment(uint id) const;
     Latte::View *viewForContainment(Plasma::Containment *containment) const;
+    Plasma::Containment *containmentForId(uint id) const;
+    QList<Plasma::Containment *> subContainmentsOf(uint id) const;
 
     static bool viewAtLowerScreenPriority(Latte::View *test, Latte::View *base);
     static bool viewAtLowerEdgePriority(Latte::View *test, Latte::View *base);
@@ -116,9 +122,14 @@ public:
 
     //! this function needs the layout to have first set the corona through initToCorona() function
     virtual void addView(Plasma::Containment *containment, bool forceOnPrimary = false, int explicitScreen = -1, Layout::ViewsMap *occupied = nullptr);
-    void duplicateView(Plasma::Containment *containment);
     void recreateView(Plasma::Containment *containment, bool delayed = true);
     bool latteViewExists(Plasma::Containment *containment);
+
+    Data::View newView(const Latte::Data::View &nextViewData);
+    void removeView(const Latte::Data::View &viewData);
+    void updateView(const Latte::Data::View &viewData);    
+    QString storedView(const int &containmentId); //returns temp filepath containing all view data
+    void removeOrphanedSubContainment(const int &containmentId);
 
     //! Available edges for specific view in that screen
     virtual QList<Plasma::Types::Location> availableEdgesForView(QScreen *scr, Latte::View *forView) const;
@@ -132,14 +143,17 @@ public:
     //! Unassign that latteView from this layout (this is used for moving a latteView
     //! from layout to layout) and returns all the containments relevant to
     //! that latteView
-    QList<Plasma::Containment *> unassignFromLayout(Latte::View *latteView);
+    QList<Plasma::Containment *> unassignFromLayout(Plasma::Containment *latteContainment);
 
     QList<int> viewsScreens();
 
     Latte::Data::ViewsTable viewsTable() const;
 
+    //! errors/warnings
+    Data::ErrorsList errors() const;
+    Data::WarningsList warnings() const;
+
 public slots:
-    Q_INVOKABLE void newView(const QString &templateFile);
     Q_INVOKABLE int viewsWithTasks() const;
     virtual Q_INVOKABLE QList<int> qmlFreeEdges(int screen) const;  //change <Plasma::Types::Location> to <int> types
 
@@ -194,6 +208,8 @@ private:
 
     QList<Latte::Data::View> sortedViewsData(const QList<Latte::Data::View> &viewsData);
 
+    void destroyContainment(Plasma::Containment *containment);
+
 private:
     bool m_blockAutomaticLatteViewCreation{false};
 
@@ -203,6 +219,9 @@ private:
 
     //! try to avoid crashes from recreating the same views all the time
     QList<const Plasma::Containment *> m_viewsToRecreate;
+
+    //! Containments that are pending screen/state updates
+    Latte::Data::ViewsTable m_pendingContainmentUpdates;
 
     friend class Latte::View;
 };
