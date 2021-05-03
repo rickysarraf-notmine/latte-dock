@@ -164,12 +164,23 @@ PlasmaComponents.Page {
                     }
 
                     PlasmaComponents.Label {
-                        text: proportionSizeSlider.value !== proportionSizeSlider.from ?
-                                  i18nc("number in percentage, e.g. 85 %","%0 %").arg(proportionSizeSlider.value.toFixed(1)) : i18nc("no value in percentage","--- %")
-                        horizontalAlignment: Text.AlignRight
+                        id: absoluteSizeLbl
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        text: proportionSizeSlider.value !== proportionSizeSlider.from ?
+                                  (absoluteSizeLblMouseArea.containsMouse ?
+                                       i18nc("number in pixels, e.g. 64 px.","%0 px.").arg(latteView.metrics.maxIconSize) :
+                                       i18nc("number in percentage, e.g. 85 %","%0 %").arg(proportionSizeSlider.value.toFixed(1))) :
+                                  i18nc("no value in percentage","--- %")
+                        horizontalAlignment: Text.AlignRight
                         enabled: proportionSizeSlider.value !== proportionSizeSlider.from
+
+                        MouseArea {
+                            id: absoluteSizeLblMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
                     }
                 }
 
@@ -491,7 +502,7 @@ PlasmaComponents.Page {
                                 } else {
                                     value = Math.min(Math.max(from, plasmoid.configuration.offset), to);
                                     plasmoid.configuration.offset = value;
-                                }                                
+                                }
 
                                 var newTotal = Math.abs(value) + plasmoid.configuration.maxLength;
 
@@ -617,10 +628,20 @@ PlasmaComponents.Page {
                     }
 
                     PlasmaComponents.Label {
-                        text: i18nc("number in percentage, e.g. 85 %","%0 %").arg(lengthExtMarginSlider.value)
+                        text: lengthMarginLblMouseArea.containsMouse ?
+                                  i18nc("number in pixels, e.g. 8 px.","%0 px.").arg(currentValueInPixels) :
+                                  i18nc("number in percentage, e.g. 85 %","%0 %").arg(lengthExtMarginSlider.value)
                         horizontalAlignment: Text.AlignRight
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+                        readonly property int currentValueInPixels: (lengthExtMarginSlider.value/100) * latteView.metrics.maxIconSize
+
+                        MouseArea {
+                            id: lengthMarginLblMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
                     }
                 }
 
@@ -653,12 +674,21 @@ PlasmaComponents.Page {
                     }
 
                     PlasmaComponents.Label {
-                        text: i18nc("number in percentage, e.g. 85 %","%0 %").arg(currentValue)
+                        text: thickMarginLblMouseArea.containsMouse ?
+                                  i18nc("number in pixels, e.g. 8 px.","%0 px.").arg(currentValueInPixels) :
+                                  i18nc("number in percentage, e.g. 85 %","%0 %").arg(currentValue)
                         horizontalAlignment: Text.AlignRight
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
 
                         readonly property int currentValue: Math.max(thickMarginSlider.minimumInternalValue, thickMarginSlider.value)
+                        readonly property int currentValueInPixels: (currentValue/100) * latteView.metrics.maxIconSize
+
+                        MouseArea {
+                            id: thickMarginLblMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
                     }
                 }
 
@@ -731,12 +761,42 @@ PlasmaComponents.Page {
 
                 LatteComponents.ComboBox {
                     Layout.fillWidth: true
-                    model: [i18nc("plasma theme colors", "Plasma"),
-                        i18nc("reverse plasma theme colors", "Reverse"),
-                        i18nc("smart theme colors", "Smart")]
+                    model: [
+                        {
+                            name: i18nc("plasma theme colors", "Plasma"),
+                            value: LatteContainment.Types.PlasmaThemeColors
+                        },{
+                            name: i18nc("dark theme colors", "Dark"),
+                            value: LatteContainment.Types.DarkThemeColors
+                        },{
+                            name: i18nc("light theme colors", "Light"),
+                            value: LatteContainment.Types.LightThemeColors
+                        },{
+                            name: i18nc("reverse plasma theme colors", "Reverse"),
+                            value: LatteContainment.Types.ReverseThemeColors
+                        },{
+                            name: i18nc("smart theme colors", "Smart"),
+                            value: LatteContainment.Types.SmartThemeColors
+                        }
+                    ]
 
-                    currentIndex: plasmoid.configuration.themeColors
-                    onCurrentIndexChanged: plasmoid.configuration.themeColors = currentIndex
+                    currentIndex: colorsToIndex(plasmoid.configuration.themeColors)
+                    textRole: "name"
+                    onCurrentIndexChanged: plasmoid.configuration.themeColors = model[currentIndex].value
+
+                    function colorsToIndex(colors) {
+                        if (colors === LatteContainment.Types.PlasmaThemeColors) {
+                            return 0;
+                        } else if (colors === LatteContainment.Types.DarkThemeColors) {
+                            return 1;
+                        } else if (colors === LatteContainment.Types.LightThemeColors) {
+                            return 2;
+                        } else if (colors === LatteContainment.Types.ReverseThemeColors) {
+                            return 3;
+                        } else if (colors === LatteContainment.Types.SmartThemeColors) {
+                            return 4;
+                        }
+                    }
                 }
 
                 PlasmaComponents.Label {
@@ -754,14 +814,14 @@ PlasmaComponents.Page {
                             name:i18n("Current Active Window"),
                             icon: !colorsGridLayout.colorsScriptIsPresent ? "state-warning" : "",
                             toolTip: colorsGridLayout.colorsScriptIsPresent ?
-                                             i18n("Colors are going to be based on the active window") :
-                                             i18n("Colors are going to be based on the active window.\nWarning: You need to install Colors KWin Script from KDE Store")
+                                         i18n("Colors are going to be based on the active window") :
+                                         i18n("Colors are going to be based on the active window.\nWarning: You need to install Colors KWin Script from KDE Store")
                         },{
                             name: i18n("Any Touching Window"),
                             icon: !colorsGridLayout.colorsScriptIsPresent ? "state-warning" : "",
                             toolTip: colorsGridLayout.colorsScriptIsPresent ?
-                                             i18n("Colors are going to be based on windows that are touching the view") :
-                                             i18n("Colors are going to be based on windows that are touching the view.\nWarning: You need to install Colors KWin Script from KDE Store")
+                                         i18n("Colors are going to be based on windows that are touching the view") :
+                                         i18n("Colors are going to be based on windows that are touching the view.\nWarning: You need to install Colors KWin Script from KDE Store")
                         }
                     ]
 
@@ -797,7 +857,7 @@ PlasmaComponents.Page {
                 tooltip: i18n("Enable/disable background")
 
                 onPressed: {
-                    plasmoid.configuration.useThemePanel = checked;
+                    plasmoid.configuration.useThemePanel = !plasmoid.configuration.useThemePanel;
                 }
             }
 
@@ -1036,7 +1096,7 @@ PlasmaComponents.Page {
                     }
 
                     PlasmaComponents.Button {
-                        id: solidBackground                     
+                        id: solidBackground
                         Layout.minimumWidth: parent.buttonSize
                         Layout.maximumWidth: Layout.minimumWidth
                         text: i18n("Outline")

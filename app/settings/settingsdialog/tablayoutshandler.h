@@ -48,6 +48,7 @@ class Layouts;
 namespace Dialog{
 class SettingsDialog;
 }
+
 }
 }
 
@@ -76,6 +77,8 @@ public:
     bool inDefaultValues() const override;
     bool isCurrentTab() const;
 
+    bool isViewsDialogVisible() const;
+
     Latte::Corona *corona() const;
     Dialog::SettingsDialog *dialog() const;
     Ui::SettingsDialog *ui() const;
@@ -86,9 +89,14 @@ public slots:
     void onDragMoveEvent(QDragMoveEvent *event);
     void onDropEvent(QDropEvent *event);
 
+    void showViewsDialog();
+
     void reset() override;
     void resetDefaults() override;
     void save() override;
+
+signals:
+    void currentPageChanged();
 
 private slots:
     void initUi();
@@ -107,10 +115,9 @@ private slots:
     void removeLayout();
     void toggleActivitiesManager();
     void toggleEnabledLayout();
-    void detailsLayout();
-    void viewsLayout();
+    void showDetailsDialog();
 
-    void onCurrentPageChanged(int page);
+    void onCurrentPageChanged();
     void onLayoutFilesDropped(const QStringList &paths);
     void onRawLayoutDropped(const QString &rawLayout);
     void updatePerLayoutButtonsState();
@@ -121,6 +128,7 @@ private:
     bool isHoveringLayoutsTable(const QPoint &pos);
 
     void initLayoutTemplatesSubMenu();
+    void initImportLayoutSubMenu();
     void initExportLayoutSubMenu();
 
     void installLayoutTemplate(Latte::Data::Layout importedLayout, QString templateFilePath, ImportedLayoutOrigin origin);
@@ -134,11 +142,14 @@ private:
 
     KConfigGroup m_storage;
 
+    bool m_isViewsDialogVisible{false};
+
     QButtonGroup *m_inMemoryButtons;
 
     //! Layout menu actions
     QMenu *m_layoutMenu{nullptr};
     QMenu *m_layoutTemplatesSubMenu{nullptr};
+    QMenu *m_layoutImportSubMenu{nullptr};
     QMenu *m_layoutExportSubMenu{nullptr};
 
     QAction *m_switchLayoutAction{nullptr};
@@ -150,7 +161,6 @@ private:
     QAction *m_removeLayoutAction{nullptr};
     QAction *m_importLayoutAction{nullptr};
     QAction *m_exportLayoutAction{nullptr};
-    QAction *m_downloadLayoutAction{nullptr};
     QAction *m_detailsAction{nullptr};
     QAction *m_viewsAction{nullptr};
 };

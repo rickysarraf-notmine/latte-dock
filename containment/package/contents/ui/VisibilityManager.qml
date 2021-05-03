@@ -212,6 +212,13 @@ Item{
         value: colorizerManager
     }
 
+    Binding{
+        target: latteView
+        property: "metrics"
+        when: latteView
+        value: metrics
+    }
+
     //! View::Effects bindings
     Binding{
         target: latteView && latteView.effects ? latteView.effects : null
@@ -275,6 +282,50 @@ Item{
         property:"innerShadow"
         when: latteView && latteView.effects
         value: background.shadows.headThickness
+    }
+
+    Binding{
+        target: latteView && latteView.effects ? latteView.effects : null
+        property:"appletsLayoutGeometry"
+        when: latteView && latteView.effects && manager.inNormalState
+        value: {
+            if (root.behaveAsPlasmaPanel
+                    || (!parabolic.isEnabled && root.userShowPanelBackground && plasmoid.configuration.panelSize===100)) {
+                if (myView.alignment === LatteCore.Types.Justify) {
+                    //! Justify is using the full LayoutsContainer layout
+
+                    var margintail = layoutsContainer.backgroundTailLength + metrics.margin.length;
+                    var marginhead = layoutsContainer.backgroundHeadLength + metrics.margin.length;
+                    if (root.isHorizontal) {
+                        return Qt.rect(layoutsContainer.x + margintail,
+                                       layoutsContainer.y,
+                                       layoutsContainer.width - margintail - marginhead,
+                                       layoutsContainer.height);
+                    } else {
+                        return Qt.rect(layoutsContainer.x,
+                                       layoutsContainer.y + margintail,
+                                       layoutsContainer.width,
+                                       layoutsContainer.height - margintail - marginhead);
+                    }
+                } else {
+                    //! All the rest alignments are using MainLayout container
+
+                    if (root.isHorizontal) {
+                        return Qt.rect(layoutsContainer.mainLayout.x + metrics.margin.length,
+                                       layoutsContainer.mainLayout.y,
+                                       layoutsContainer.mainLayout.width - 2*metrics.margin.length,
+                                       layoutsContainer.mainLayout.height);
+                    } else {
+                        return Qt.rect(layoutsContainer.mainLayout.x,
+                                       layoutsContainer.mainLayout.y + metrics.margin.length,
+                                       layoutsContainer.mainLayout.width,
+                                       layoutsContainer.mainLayout.height - 2*metrics.margin.length);
+                    }
+                }
+            }
+
+            return Qt.rect(-1, -1, 0, 0);
+        }
     }
 
     //! View::Positioner bindings
@@ -398,7 +449,7 @@ Item{
         onXChanged: updateMaskArea();
         onYChanged: updateMaskArea()
         onWidthChanged: updateMaskArea();
-        onHeightChanged: updateMaskArea();
+        onHeightChanged: updateMaskArea();        
     }
 
     Connections{
@@ -464,6 +515,12 @@ Item{
         }
     }
 
+    onInSlidingInChanged: {
+        if (latteView && !inSlidingIn && latteView.positioner.inRelocationShowing) {
+            latteView.positioner.inRelocationShowing = false;
+        }
+    }
+
     onUpdateIsEnabledChanged: {
         if (updateIsEnabled) {
             updateMaskArea();
@@ -521,7 +578,7 @@ Item{
         //! Normal Dodge/AutoHide case
         if (!slidingAnimationAutoHiddenOut.running
                 && !latteView.visibility.blockHiding
-                && (!latteView.visibility.containsMouse || latteView.visibility.mode === LatteCore.Types.SidebarOnDemand)) {
+                && (!latteView.visibility.containsMouse)) {
             slidingAnimationAutoHiddenOut.init();
         }
     }
@@ -540,7 +597,7 @@ Item{
     }
 
     function sendHideDockDuringLocationChangeFinished(){
-        latteView.positioner.hideDockDuringLocationChangeFinished();
+        latteView.positioner.hidingForRelocationFinished();
     }
 
     function sendSlidingOutAnimationEnded() {

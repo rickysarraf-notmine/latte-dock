@@ -237,13 +237,15 @@ void Layouts::removeLayout(const QString &id)
 
 void Layouts::setLayoutProperties(const Latte::Data::Layout &layout)
 {
-    if (m_layoutsTable.containsId(layout.id) && m_layoutsTable[layout.id] != layout) {
+    if (m_layoutsTable.containsId(layout.id)) {
         m_layoutsTable[layout.id] = layout;
         int dataRow = m_layoutsTable.indexOf(layout.id);
 
         QVector<int> roles;
         roles << Qt::DisplayRole;
         roles << Qt::UserRole;
+        roles << ERRORSROLE;
+        roles << WARNINGSROLE;
         emit dataChanged(index(dataRow, IDCOLUMN), index(dataRow, ACTIVITYCOLUMN), roles);
     }
 }
@@ -560,6 +562,10 @@ QVariant Layouts::data(const QModelIndex &index, int role) const
         QVariant iconVariant;
         iconVariant.setValue<Latte::Data::LayoutIcon>(_icon);
         return iconVariant;
+    } else if (role == ERRORSROLE) {
+        return m_layoutsTable[row].errors;
+    } else if (role == WARNINGSROLE) {
+        return m_layoutsTable[row].warnings;
     }
 
     switch (column) {
@@ -799,6 +805,7 @@ bool Layouts::setData(const QModelIndex &index, const QVariant &value, int role)
     case ACTIVITYCOLUMN:
         if (role == Qt::UserRole)  {
             setActivities(row, value.toStringList());
+            updateConsideredActiveStates();
             emit dataChanged(this->index(row, NAMECOLUMN), this->index(row,NAMECOLUMN), roles);
             return true;
         }
@@ -838,26 +845,6 @@ void Layouts::updateConsideredActiveStates()
     roles << ISCONSIDEREDACTIVEROLE;
     roles << SORTINGROLE;
 
-    if ((m_inMultipleMode && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts))
-            || (!m_inMultipleMode && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout))) {
-        //! current running layouts mode is the same shown in settings
-
-        for(int i=0; i<rowCount(); ++i) {
-            bool iConsideredActive{false};
-
-            if (m_corona->layoutsManager()->synchronizer()->layout(m_layoutsTable[i].name)) {
-                iConsideredActive = true;
-            }
-
-            if (m_layoutsTable[i].isConsideredActive != iConsideredActive) {
-                m_layoutsTable[i].isConsideredActive = iConsideredActive;
-                emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
-            }
-        }
-
-        return;
-    }
-
     if (!m_inMultipleMode) {
         //! single mode but not the running one
 
@@ -873,11 +860,7 @@ void Layouts::updateConsideredActiveStates()
                 emit dataChanged(index(i, BACKGROUNDCOLUMN), index(i,ACTIVITYCOLUMN), roles);
             }
         }
-
-        return;
-    }
-
-    if (m_inMultipleMode) {
+    } else if (m_inMultipleMode) {
         //! multiple mode but not the running one
 
         QStringList runningActivities = m_corona->layoutsManager()->synchronizer()->runningActivities();
@@ -916,7 +899,11 @@ const Latte::Data::Layout &Layouts::at(const int &row)
 
 const Latte::Data::Layout &Layouts::currentData(const QString &id)
 {
-    return m_layoutsTable[id];
+    if (m_layoutsTable.containsId(id)){
+        return m_layoutsTable[id];
+    }
+
+    return Latte::Data::Layout();
 }
 
 

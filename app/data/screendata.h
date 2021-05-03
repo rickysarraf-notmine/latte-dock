@@ -37,6 +37,8 @@ class Screen : public Generic
 {
 public:
     static constexpr const char* SERIALIZESPLITTER = ":::";
+    static const int ONPRIMARYID = 0;
+    static constexpr const char* ONPRIMARYNAME = "{primary-screen}";
 
     Screen();
     Screen(Screen &&o);
@@ -45,6 +47,7 @@ public:
 
     //! Screen data
     bool hasExplicitViews{false};
+    bool isActive{false};
     QRect geometry;
 
     //! Operators
@@ -64,5 +67,6 @@ typedef GenericTable<Screen> ScreensTable;
 }
 
 Q_DECLARE_METATYPE(Latte::Data::Screen)
+Q_DECLARE_METATYPE(Latte::Data::ScreensTable)
 
 #endif

@@ -68,8 +68,11 @@ BackgroundProperties{
     paddings.top: {
         if (hasTopBorder) {
             var themePadding = themeExtendedBackground ? themeExtendedBackground.paddingTop : 0;
-            var customAppliedRadius = customRadiusIsEnabled && root.isVertical ? 0.8 * customRadius : 0;
-            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackground.margins.top);
+            var customAppliedRadius = customRadiusIsEnabled && root.isVertical ? customRadius - metrics.margin.length : 0;
+
+            themePadding = root.isVertical ? themePadding - metrics.margin.length : themePadding;
+            var solidBackgroundPadding = root.isVertical ? solidBackground.margins.top - metrics.margin.length : solidBackground.margins.top;
+            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
         }
 
         return 0;
@@ -77,8 +80,11 @@ BackgroundProperties{
     paddings.bottom: {
         if (hasBottomBorder) {
             var themePadding = themeExtendedBackground ? themeExtendedBackground.paddingBottom : 0;
-            var customAppliedRadius = customRadiusIsEnabled && root.isVertical ? 0.8 * customRadius : 0;
-            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackground.margins.bottom);
+            var customAppliedRadius = customRadiusIsEnabled && root.isVertical ? customRadius - metrics.margin.length : 0;
+
+            themePadding = root.isVertical ? themePadding - metrics.margin.length : themePadding;
+            var solidBackgroundPadding = root.isVertical ? solidBackground.margins.bottom - metrics.margin.length : solidBackground.margins.bottom;
+            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
         }
 
         return 0;
@@ -87,8 +93,11 @@ BackgroundProperties{
     paddings.left: {
         if (hasLeftBorder) {
             var themePadding = themeExtendedBackground ? themeExtendedBackground.paddingLeft : 0;
-            var customAppliedRadius = customRadiusIsEnabled && root.isHorizontal ? 0.8 * customRadius : 0;
-            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackground.margins.left);
+            var customAppliedRadius = customRadiusIsEnabled && root.isHorizontal ? customRadius - metrics.margin.length : 0;
+
+            themePadding = root.isHorizontal ? themePadding - metrics.margin.length : themePadding;
+            var solidBackgroundPadding = root.isHorizontal ? solidBackground.margins.left - metrics.margin.length : solidBackground.margins.left;
+            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
         }
 
         return 0;
@@ -96,10 +105,12 @@ BackgroundProperties{
 
     paddings.right: {
         if (hasRightBorder) {
-            var themePadding= themeExtendedBackground ? themeExtendedBackground.paddingRight : 0;
-            var customAppliedRadius = customRadiusIsEnabled  && root.isHorizontal ? 0.8 * customRadius : 0;
+            var themePadding = themeExtendedBackground ? themeExtendedBackground.paddingRight : 0;
+            var customAppliedRadius = customRadiusIsEnabled  && root.isHorizontal ? customRadius - metrics.margin.length : 0;
 
-            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackground.margins.right);
+            themePadding = root.isHorizontal ? themePadding - metrics.margin.length : themePadding;
+            var solidBackgroundPadding = root.isHorizontal ? solidBackground.margins.right - metrics.margin.length : solidBackground.margins.right;
+            return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
         }
 
         return 0;

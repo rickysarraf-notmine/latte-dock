@@ -40,13 +40,15 @@ Layout::Layout(Layout &&o)
       lastUsedActivity(o.lastUsedActivity),
       isActive(o.isActive),
       isConsideredActive(o.isConsideredActive),
-      isBroken(o.isBroken),
       isLocked(o.isLocked),
       isShownInMenu(o.isShownInMenu),
       isTemplate(o.isTemplate),
       hasDisabledBorders(o.hasDisabledBorders),
+      popUpMargin(o.popUpMargin),
       activities(o.activities),
       backgroundStyle(o.backgroundStyle),
+      errors(o.errors),
+      warnings(o.warnings),
       views(o.views)
 {
 }
@@ -60,13 +62,15 @@ Layout::Layout(const Layout &o)
       lastUsedActivity(o.lastUsedActivity),
       isActive(o.isActive),
       isConsideredActive(o.isConsideredActive),
-      isBroken(o.isBroken),
       isLocked(o.isLocked),
       isShownInMenu(o.isShownInMenu),
       isTemplate(o.isTemplate),
       hasDisabledBorders(o.hasDisabledBorders),
+      popUpMargin(o.popUpMargin),
       activities(o.activities),
       backgroundStyle(o.backgroundStyle),
+      errors(o.errors),
+      warnings(o.warnings),
       views(o.views)
 {
 }
@@ -82,13 +86,15 @@ Layout &Layout::operator=(Layout &&rhs)
     lastUsedActivity = rhs.lastUsedActivity;
     isActive = rhs.isActive;
     isConsideredActive = rhs.isConsideredActive;
-    isBroken = rhs.isBroken;
     isLocked = rhs.isLocked;
     isShownInMenu = rhs.isShownInMenu;
     isTemplate = rhs.isTemplate;
     hasDisabledBorders = rhs.hasDisabledBorders;
+    popUpMargin = rhs.popUpMargin;
     activities = rhs.activities;
     backgroundStyle = rhs.backgroundStyle;
+    errors = rhs.errors;
+    warnings = rhs.warnings;
     views = rhs.views;
 
     return (*this);
@@ -105,13 +111,15 @@ Layout &Layout::operator=(const Layout &rhs)
     lastUsedActivity = rhs.lastUsedActivity;
     isActive = rhs.isActive;
     isConsideredActive = rhs.isConsideredActive;
-    isBroken = rhs.isBroken;
     isLocked = rhs.isLocked;
     isShownInMenu = rhs.isShownInMenu;
     isTemplate = rhs.isTemplate;
     hasDisabledBorders = rhs.hasDisabledBorders;
+    popUpMargin = rhs.popUpMargin;
     activities = rhs.activities;
     backgroundStyle = rhs.backgroundStyle;
+    errors = rhs.errors;
+    warnings = rhs.warnings;
     views = rhs.views;
 
     return (*this);
@@ -125,16 +133,18 @@ bool Layout::operator==(const Layout &rhs) const
             && (color == rhs.color)
             && (background == rhs.background)
             && (textColor == rhs.textColor)
-            && (isBroken == rhs.isBroken)
-            //&& (lastUsedActivity == rhs.lastUsedActivity) /*Disabled because it can change too often*/
-            //&& (isActive == rhs.isActive) /*Disabled because this is not a data but a layout state*/
-            //&& (isConsideredActive == rhs.isConsideredActive) /*Disabled because this is not a data but a layout state*/
+            //&& (lastUsedActivity == rhs.lastUsedActivity) /*Disabled because this is not needed in order to track layout changes for saving*/
+            //&& (isActive == rhs.isActive) /*Disabled because this is not needed in order to track layout changes for saving*/
+            //&& (isConsideredActive == rhs.isConsideredActive) /*Disabled because this is not needed in order to track layout changes for saving*/
             && (isLocked == rhs.isLocked)
             && (isShownInMenu == rhs.isShownInMenu)
             && (isTemplate == rhs.isTemplate)
             && (hasDisabledBorders == rhs.hasDisabledBorders)
+            && (popUpMargin == rhs.popUpMargin)
             && (activities == rhs.activities)
             && (backgroundStyle == rhs.backgroundStyle)
+            //&& (errors == rhs.errors) /*Disabled because this is not needed in order to track layout changes for saving*/
+            //&& (warnings == rhs.warnings) /*Disabled because this is not needed in order to track layout changes for saving*/
             && (views == rhs.views);
 }
 
@@ -171,6 +181,16 @@ bool Layout::isNull() const
 bool Layout::isSystemTemplate() const
 {
     return isTemplate && !id.startsWith(QDir::tempPath()) && !id.startsWith(QDir::homePath());
+}
+
+bool Layout::hasErrors() const
+{
+    return errors > 0;
+}
+
+bool Layout::hasWarnings() const
+{
+    return warnings > 0;
 }
 
 }

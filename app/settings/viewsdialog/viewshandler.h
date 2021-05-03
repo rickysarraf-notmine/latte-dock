@@ -27,8 +27,13 @@
 #include "../../layout/abstractlayout.h"
 
 // Qt
+#include <QAction>
 #include <QButtonGroup>
+#include <QMenu>
 #include <QSortFilterProxyModel>
+
+// KDE
+#include <KMessageBox>
 
 namespace Ui {
 class ViewsDialog;
@@ -38,6 +43,7 @@ namespace Latte{
 class Corona;
 namespace Settings{
 namespace Controller{
+class Layouts;
 class Views;
 }
 namespace Dialog{
@@ -65,10 +71,14 @@ public:
     bool hasChangedData() const override;
     bool inDefaultValues() const override;
 
+    bool isSelectedLayoutOriginal() const;
+
     Latte::Data::Layout currentData() const;
+    Latte::Data::Layout originalData() const;
 
     Ui::ViewsDialog *ui() const;
     Latte::Corona *corona() const;
+    Settings::Controller::Layouts *layoutsController() const;
 
 public slots:
     void reset() override;
@@ -79,16 +89,23 @@ signals:
     void currentLayoutChanged();
 
 private slots:
-    void onCurrentLayoutIndexChanged(int row);
+    void initViewTemplatesSubMenu();
+    void removeSelectedViews();
     void updateWindowTitle();
+
+    void onCurrentLayoutIndexChanged(int row);
+
+    void newView(const Data::Generic &templateData);
 
 private:
     void init();
+
     void reload();
 
     void loadLayout(const Latte::Data::Layout &data);
 
-    int saveChanges();
+    KMessageBox::ButtonCode saveChangesConfirmation();
+    KMessageBox::ButtonCode removalConfirmation(const int &count);
 
 private:
     Dialog::ViewsDialog *m_dialog{nullptr};
@@ -97,9 +114,17 @@ private:
 
     QSortFilterProxyModel *m_layoutsProxyModel{nullptr};
 
-    //! current data
     Latte::Data::Layout o_data;
-    Latte::Data::Layout c_data;
+
+    int m_lastConfirmedLayoutIndex{-1};
+
+    //! Actions
+    QAction *m_newViewAction{nullptr};
+    QAction *m_duplicateViewAction{nullptr};
+    QAction *m_removeViewAction{nullptr};
+
+    //! Menus
+    QMenu *m_viewTemplatesSubMenu{nullptr};
 };
 
 }

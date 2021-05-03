@@ -111,8 +111,9 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
       m_plasmaGeometries(new PlasmaExtended::ScreenGeometries(this)),
       m_dialogShadows(new PanelShadows(this, QStringLiteral("dialogs/background")))
 {
-    //! create the window manager
+    connect(qApp, &QApplication::aboutToQuit, this, &Corona::onAboutToQuit);
 
+    //! create the window manager
     if (KWindowSystem::isPlatformWayland()) {
         m_wm = new WindowSystem::WaylandInterface(this);
     } else {
@@ -162,26 +163,11 @@ Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int use
 
 Corona::~Corona()
 {
-    m_inQuit = true;
+    /*m_inQuit = true;
 
     //! BEGIN: Give the time to slide-out views when closing
     m_layoutsManager->synchronizer()->hideAllViews();
     m_viewSettingsFactory->deleteLater();
-
-    //! Don't delay the destruction under wayland in any case
-    //! because it creates a crash with kwin effects
-    //! https://bugs.kde.org/show_bug.cgi?id=392890
-    if (!KWindowSystem::isPlatformWayland()) {
-        QTimer::singleShot(400, [this]() {
-            m_quitTimedEnded = true;
-        });
-
-        while (!m_quitTimedEnded) {
-            QGuiApplication::processEvents(QEventLoop::AllEvents, 50);
-        }
-    }
-
-    //! END: slide-out views when closing
 
     m_viewsScreenSyncTimer.stop();
 
@@ -190,8 +176,8 @@ Corona::~Corona()
     }
 
     qDebug() << "Latte Corona - unload: containments ...";
+    m_layoutsManager->unload();*/
 
-    m_layoutsManager->unload();
     m_plasmaGeometries->deleteLater();
     m_wm->deleteLater();
     m_dialogShadows->deleteLater();
@@ -215,6 +201,24 @@ Corona::~Corona()
 
         QProcess::startDetached(importCommand);
     }
+}
+
+void Corona::onAboutToQuit()
+{
+    m_inQuit = true;
+
+    //! BEGIN: Give the time to slide-out views when closing
+    m_layoutsManager->synchronizer()->hideAllViews();
+    m_viewSettingsFactory->deleteLater();
+
+    m_viewsScreenSyncTimer.stop();
+
+    if (m_layoutsManager->memoryUsage() == MemoryUsage::SingleLayout) {
+        cleanConfig();
+    }
+
+    qDebug() << "Latte Corona - unload: containments ...";
+    m_layoutsManager->unload();
 }
 
 void Corona::load()
@@ -925,7 +929,6 @@ int Corona::screenForContainment(const Plasma::Containment *containment) const
     // screen:0 and primaryScreen
 
     //case in which this containment is child of an applet, hello systray :)
-
     if (Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent())) {
         if (Plasma::Containment *cont = parentApplet->containment()) {
             return screenForContainment(cont);
@@ -935,29 +938,13 @@ int Corona::screenForContainment(const Plasma::Containment *containment) const
     }
 
     Plasma::Containment *c = const_cast<Plasma::Containment *>(containment);
-    Latte::View *view =  m_layoutsManager->synchronizer()->viewForContainment(c);
+    int scrId = m_layoutsManager->synchronizer()->screenForContainment(c);
 
-    if (view && view->screen()) {
-        return m_screenPool->id(view->screen()->name());
+    if (scrId >= 0) {
+        return scrId;
     }
 
-    //Failed? fallback on lastScreen()
-    //lastScreen() is the correct screen for panels
-    //It is also correct for desktops *that have the correct activity()*
-    //a containment with lastScreen() == 0 but another activity,
-    //won't be associated to a screen
-    //     qDebug() << "ShellCorona screenForContainment: " << containment << " Last screen is " << containment->lastScreen();
-
-    for (auto screen : qGuiApp->screens()) {
-        // containment->lastScreen() == m_screenPool->id(screen->name()) to check if the lastScreen refers to a screen that exists/it's known
-        if (containment->lastScreen() == m_screenPool->id(screen->name()) &&
-                (containment->activity() == m_activitiesConsumer->currentActivity() ||
-                 containment->containmentType() == Plasma::Types::PanelContainment || containment->containmentType() == Plasma::Types::CustomPanelContainment)) {
-            return containment->lastScreen();
-        }
-    }
-
-    return -1;
+    return containment->lastScreen();
 }
 
 void Corona::showAlternativesForApplet(Plasma::Applet *applet)
@@ -1181,8 +1168,8 @@ QStringList Corona::viewTemplatesData()
 void Corona::addView(const uint &containmentId, const QString &templateId)
 {
     auto view = m_layoutsManager->synchronizer()->viewForContainment((int)containmentId);
-    if (view && view->layout() && !templateId.isEmpty()) {
-        view->layout()->newView(templateId);
+    if (view) {
+        view->newView(templateId);
     }
 }
 
@@ -1206,7 +1193,7 @@ void Corona::moveViewToLayout(const uint &containmentId, const QString &layoutNa
 {
     auto view = m_layoutsManager->synchronizer()->viewForContainment((int)containmentId);
     if (view && !layoutName.isEmpty() && view->layout()->name() != layoutName) {
-        view->positioner()->hideDockDuringMovingToLayout(layoutName);
+        view->positioner()->setNextLocation(layoutName, "", Plasma::Types::Floating, Latte::Types::NoneAlignment);
     }
 }
 

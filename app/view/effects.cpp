@@ -92,6 +92,8 @@ void Effects::init()
 
     connect(this, &Effects::backgroundAllCornersChanged, this, &Effects::updateEnabledBorders);
 
+    connect(this, &Effects::popUpMarginChanged, this, &Effects::onPopUpMarginChanged);
+
     connect(m_view, &Latte::View::alignmentChanged, this, &Effects::updateEnabledBorders);
     connect(m_view, &Latte::View::maxLengthChanged, this, &Effects::updateEnabledBorders);
     connect(m_view, &Latte::View::offsetChanged, this, &Effects::updateEnabledBorders);
@@ -100,6 +102,7 @@ void Effects::init()
     connect(this, &Effects::drawShadowsChanged, this, &Effects::updateShadows);
     connect(m_view, &Latte::View::behaveAsPlasmaPanelChanged, this, &Effects::updateShadows);
     connect(m_view, &Latte::View::configWindowGeometryChanged, this, &Effects::updateMask);
+    connect(m_view, &Latte::View::layoutChanged, this, &Effects::onPopUpMarginChanged);
 
     connect(&m_theme, &Plasma::Theme::themeChanged, this, [&]() {
         auto background = m_background;
@@ -277,6 +280,11 @@ void Effects::setInnerShadow(int shadow)
     emit innerShadowChanged();
 }
 
+int Effects::popUpMargin() const
+{
+    return m_view->layout() ? m_view->layout()->popUpMargin() : -1/*default*/;
+}
+
 QRect Effects::rect() const
 {
     return m_rect;
@@ -331,6 +339,28 @@ void Effects::setInputMask(QRect area)
     }
 
     emit inputMaskChanged();
+}
+
+QRect Effects::appletsLayoutGeometry() const
+{
+    return m_appletsLayoutGeometry;
+}
+
+void Effects::setAppletsLayoutGeometry(const QRect &geom)
+{
+    if (m_appletsLayoutGeometry == geom) {
+        return;
+    }
+
+    m_appletsLayoutGeometry = geom;
+    m_view->setProperty("_applets_layout_geometry", QVariant(m_appletsLayoutGeometry));
+
+    emit appletsLayoutGeometryChanged();
+}
+
+void Effects::onPopUpMarginChanged()
+{
+    m_view->setProperty("_applets_popup_margin", QVariant(popUpMargin()));
 }
 
 void Effects::forceMaskRedraw()

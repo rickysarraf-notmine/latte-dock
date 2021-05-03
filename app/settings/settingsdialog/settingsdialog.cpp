@@ -43,9 +43,10 @@
 #include <QMimeData>
 
 // KDE
-#include <KIO/OpenFileManagerWindowJob>
 #include <KLocalizedString>
+#include <KMessageBox>
 #include <KWindowSystem>
+#include <KIO/OpenFileManagerWindowJob>
 
 
 namespace Latte {
@@ -349,11 +350,14 @@ void SettingsDialog::exportFullConfiguration()
 
     connect(exportFileDialog, &QFileDialog::fileSelected, this, [&](const QString & file) {
         auto showExportConfigurationError = [this]() {
-            showInlineMessage(i18n("Full configuration export <b>failed</b>..."), KMessageWidget::Error, true);
+            showInlineMessage(i18n("Full configuration export <b>failed</b>..."),
+                              KMessageWidget::Error,
+                              true);
         };
 
         if (m_corona->layoutsManager()->importer()->exportFullConfiguration(file)) {
             QAction *openUrlAction = new QAction(i18n("Open Location..."), this);
+            openUrlAction->setIcon(QIcon::fromTheme("document-open"));
             openUrlAction->setData(file);
             QList<QAction *> actions;
             actions << openUrlAction;
@@ -367,7 +371,7 @@ void SettingsDialog::exportFullConfiguration()
             });
 
             showInlineMessage(i18n("Full configuration export succeeded..."),
-                              KMessageWidget::Information,
+                              KMessageWidget::Positive,
                               false,
                               actions);
         } else {
@@ -475,13 +479,13 @@ bool SettingsDialog::saveChanges()
         || (m_acceptedPage == PreferencesPage && m_tabPreferencesHandler->hasChangedData())) {
 
         QString tabName = m_ui->tabWidget->tabBar()->tabText(m_acceptedPage).remove("&");
-        QString saveChangesText = i18n("The settings of <b>%0</b> tab have changed. Do you want to apply the changes or discard them?").arg(tabName);
+        QString saveChangesText = i18n("The settings of <b>%0</b> tab have changed.<br/>Do you want to apply the changes or discard them?").arg(tabName);
 
-        int result = saveChangesConfirmation(saveChangesText);
+        KMessageBox::ButtonCode result = saveChangesConfirmation(saveChangesText);
 
-        if (result == QMessageBox::Apply) {
+        if (result == KMessageBox::Yes) {
             save();
-        } else if (result == QMessageBox::Discard) {
+        } else if (result == KMessageBox::No) {
             reset();
         } else {
             return false;
@@ -623,23 +627,8 @@ void SettingsDialog::save()
 
 void SettingsDialog::loadConfig()
 {
-    //! remove old unneeded oprtions
-    KConfigGroup deprecatedStorage(KConfigGroup(KSharedConfig::openConfig(), "UniversalSettings"));
-    QStringList columnWidths = deprecatedStorage.readEntry("layoutsColumnWidths", QStringList());
-
-    if (!columnWidths.isEmpty()) {
-        //! migrating
-        m_windowSize = deprecatedStorage.readEntry("layoutsWindowSize", QSize(700, 450));
-        m_downloadWindowSize = deprecatedStorage.readEntry("downloadWindowSize", QSize(800, 550));
-
-        deprecatedStorage.writeEntry("layoutsColumnWidths", QStringList());
-        deprecatedStorage.writeEntry("layoutsWindowSize", QSize());
-        deprecatedStorage.writeEntry("downloadWindowSize", QSize());
-    } else {
-        //! new storage
-        m_windowSize = m_storage.readEntry("windowSize", QSize(700, 450));
-        m_downloadWindowSize = m_storage.readEntry("downloadWindowSize", QSize(800, 550));
-    }
+    m_windowSize = m_storage.readEntry("windowSize", QSize(1100, 750));
+    m_downloadWindowSize = m_storage.readEntry("downloadWindowSize", QSize(980, 600));
 }
 
 void SettingsDialog::saveConfig()

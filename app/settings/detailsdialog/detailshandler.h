@@ -30,6 +30,9 @@
 #include <QButtonGroup>
 #include <QSortFilterProxyModel>
 
+// KDE
+#include <KMessageBox>
+
 namespace Ui {
 class DetailsDialog;
 }
@@ -102,17 +105,21 @@ private:
     void setColor(const QString &color);
     void setIcon(const QString &icon);
 
+    void setPopUpMargin(const int &margin);
+
     void setBackgroundStyle(const Latte::Layout::BackgroundStyle &style);
 
     void loadLayout(const Latte::Data::Layout &data);
 
-    int saveChanges();
+    KMessageBox::ButtonCode saveChangesConfirmation();
 
 private:
     Dialog::DetailsDialog *m_dialog{nullptr};
     Ui::DetailsDialog *m_ui{nullptr};
 
     QSortFilterProxyModel *m_layoutsProxyModel{nullptr};
+
+    int m_lastConfirmedLayoutIndex{-1};
 
     //! current data
     Model::Colors *m_colorsModel{nullptr};

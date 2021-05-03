@@ -53,12 +53,14 @@ public:
     QString lastUsedActivity;
     bool isActive{false};
     bool isConsideredActive{false}; //used from settings window to indicate activeness based on selected layouts mode
-    bool isBroken{false};
     bool isLocked{false};
     bool isShownInMenu{false};
     bool isTemplate{false};
     bool hasDisabledBorders{false};
+    int popUpMargin{-1};
     QStringList activities;
+    int errors{0};
+    int warnings{0};
 
     Latte::Layout::BackgroundStyle backgroundStyle{Latte::Layout::ColorBackgroundStyle};
 
@@ -71,6 +73,9 @@ public:
     bool isNull() const;
     bool isEmpty() const;
     bool isSystemTemplate() const;
+
+    bool hasErrors() const;
+    bool hasWarnings() const;
 
     //! Operators
     Layout &operator=(const Layout &rhs);

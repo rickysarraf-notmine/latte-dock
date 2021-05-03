@@ -451,30 +451,30 @@ Item {
         updateIndexes();
     }
 
-    //! It is used only when the user chooses different alignment types
-    //! and not during startup
+    //! It is used only when the user chooses different alignment types and not during startup
     Connections {
-        target: myView
+        target: latteView ? latteView : null
         onAlignmentChanged: {
-            if (!root.editMode) {
+            if (latteView.alignment === LatteCore.Types.NoneAlignment) {
                 return;
             }
 
-            if (root.editMode){
-                if (root.myView.alignment===LatteCore.Types.Justify) {
-                    layouter.appletsInParentChange = true;
-                    fastLayoutManager.addJustifySplittersInMainLayout();
-                    console.log("LAYOUTS: Moving applets from MAIN to THREE Layouts mode...");
-                    fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
-                    layouter.appletsInParentChange = false;
-                } else {
-                    layouter.appletsInParentChange = true;
-                    console.log("LAYOUTS: Moving applets from THREE to MAIN Layout mode...");
-                    fastLayoutManager.joinLayoutsToMainLayout();
-                    layouter.appletsInParentChange = false;
-                }
+            var previousalignment = plasmoid.configuration.alignment;
+
+            if (latteView.alignment===LatteCore.Types.Justify && previousalignment!==LatteCore.Types.Justify) { // main -> justify
+                layouter.appletsInParentChange = true;
+                fastLayoutManager.addJustifySplittersInMainLayout();
+                console.log("LAYOUTS: Moving applets from MAIN to THREE Layouts mode...");
+                fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
+                layouter.appletsInParentChange = false;
+            } else if (latteView.alignment!==LatteCore.Types.Justify && previousalignment===LatteCore.Types.Justify ) { // justify ->main
+                layouter.appletsInParentChange = true;
+                console.log("LAYOUTS: Moving applets from THREE to MAIN Layout mode...");
+                fastLayoutManager.joinLayoutsToMainLayout();
+                layouter.appletsInParentChange = false;
             }
 
+            plasmoid.configuration.alignment = latteView.alignment;
             fastLayoutManager.save();
         }
     }
@@ -482,12 +482,8 @@ Item {
     onLatteViewChanged: {
         if (latteView) {
             if (latteView.positioner) {
-                latteView.positioner.hideDockDuringLocationChangeStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterLocationChangeFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringScreenChangeStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterScreenChangeFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringMovingToLayoutStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterMovingToLayoutFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
+                latteView.positioner.hidingForRelocationStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
+                latteView.positioner.showingAfterRelocationFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
             }
 
             if (latteView.visibility) {
@@ -502,12 +498,8 @@ Item {
         target: latteView
         onPositionerChanged: {
             if (latteView.positioner) {
-                latteView.positioner.hideDockDuringLocationChangeStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterLocationChangeFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringScreenChangeStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterScreenChangeFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringMovingToLayoutStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterMovingToLayoutFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
+                latteView.positioner.hidingForRelocationStarted.connect(visibilityManager.slotHideDockDuringLocationChange);
+                latteView.positioner.showingAfterRelocationFinished.connect(visibilityManager.slotShowDockAfterLocationChange);
             }
         }
 
@@ -563,12 +555,8 @@ Item {
 
         if (latteView) {
             if (latteView.positioner) {
-                latteView.positioner.hideDockDuringLocationChangeStarted.disconnect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterLocationChangeFinished.disconnect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringScreenChangeStarted.disconnect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterScreenChangeFinished.disconnect(visibilityManager.slotShowDockAfterLocationChange);
-                latteView.positioner.hideDockDuringMovingToLayoutStarted.disconnect(visibilityManager.slotHideDockDuringLocationChange);
-                latteView.positioner.showDockAfterMovingToLayoutFinished.disconnect(visibilityManager.slotShowDockAfterLocationChange);
+                latteView.positioner.hidingForRelocationStarted.disconnect(visibilityManager.slotHideDockDuringLocationChange);
+                latteView.positioner.showingAfterRelocationFinished.disconnect(visibilityManager.slotShowDockAfterLocationChange);
             }
 
             if (latteView.visibility) {
@@ -845,21 +833,54 @@ Item {
         width: root.isHorizontal ? length : thickness
         height: root.isHorizontal ? thickness : length
 
-        readonly property bool isDndSpacer: true
-        readonly property int length: metrics.totals.length
-        readonly property int thickness: metrics.totals.thickness + metrics.margin.screenEdge
+        property int length: opacity > 0 ? (dndSpacerAddItem.length + metrics.totals.lengthEdges + metrics.totals.lengthPaddings) : 0
 
-        Layout.preferredWidth: width
-        Layout.preferredHeight: height
+        readonly property bool isDndSpacer: true
+        readonly property int thickness: metrics.totals.thickness + metrics.margin.screenEdge
+        readonly property int maxLength: 96
+
+        Layout.minimumWidth: width
+        Layout.minimumHeight: height
+        Layout.preferredWidth: Layout.minimumWidth
+        Layout.preferredHeight: Layout.minimumHeight
+        Layout.maximumWidth: Layout.minimumWidth
+        Layout.maximumHeight: Layout.minimumHeight
         opacity: 0
+        visible: parent === layoutsContainer.startLayout
+                 || parent === layoutsContainer.mainLayout
+                 || parent === layoutsContainer.endLayout
+
         z:1500
 
-        LatteComponents.AddItem{
-            id: dndSpacerAddItem
-            width: metrics.iconSize
-            height: metrics.iconSize
+        Behavior on length {
+            NumberAnimation {
+                duration: animations.duration.large
+                easing.type: Easing.InQuad
+            }
+        }
 
-            property int thickMargin: metrics.margin.screenEdge + metrics.margin.thickness
+        Behavior on opacity {
+            NumberAnimation {
+                duration: animations.duration.large
+                easing.type: Easing.InQuad
+            }
+        }
+
+        Item {
+            id: dndSpacerAddItemContainer
+            width: root.isHorizontal ? parent.length : parent.thickness - metrics.margin.screenEdge
+            height: root.isHorizontal ? parent.thickness - metrics.margin.screenEdge : parent.length
+
+            property int thickMargin: metrics.margin.screenEdge //+ metrics.margin.thickness
+
+            LatteComponents.AddItem{
+                id: dndSpacerAddItem
+                anchors.centerIn: parent
+                width: length
+                height: width
+
+                readonly property int length: Math.min(metrics.iconSize, 96)
+            }
 
             states:[
                 State{
@@ -867,13 +888,13 @@ Item {
                     when: plasmoid.location === PlasmaCore.Types.BottomEdge
 
                     AnchorChanges{
-                        target: dndSpacerAddItem;
+                        target: dndSpacerAddItemContainer;
                         anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
                         anchors.right: undefined; anchors.left: undefined; anchors.top: undefined; anchors.bottom: parent.bottom;
                     }
                     PropertyChanges{
-                        target: dndSpacerAddItem;
-                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: thickMargin;
+                        target: dndSpacerAddItemContainer;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: dndSpacerAddItemContainer.thickMargin;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -882,13 +903,13 @@ Item {
                     when: plasmoid.location === PlasmaCore.Types.TopEdge
 
                     AnchorChanges{
-                        target: dndSpacerAddItem;
+                        target: dndSpacerAddItemContainer;
                         anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: undefined;
                         anchors.right: undefined; anchors.left: undefined; anchors.top: parent.top; anchors.bottom: undefined;
                     }
                     PropertyChanges{
-                        target: dndSpacerAddItem;
-                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: thickMargin;    anchors.bottomMargin: 0;
+                        target: dndSpacerAddItemContainer;
+                        anchors.leftMargin: 0;    anchors.rightMargin: 0;     anchors.topMargin: dndSpacerAddItemContainer.thickMargin;    anchors.bottomMargin: 0;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -897,13 +918,13 @@ Item {
                     when: plasmoid.location === PlasmaCore.Types.LeftEdge
 
                     AnchorChanges{
-                        target: dndSpacerAddItem;
+                        target: dndSpacerAddItemContainer;
                         anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
                         anchors.right: undefined; anchors.left: parent.left; anchors.top: undefined; anchors.bottom: undefined;
                     }
                     PropertyChanges{
-                        target: dndSpacerAddItem;
-                        anchors.leftMargin: thickMargin;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                        target: dndSpacerAddItemContainer;
+                        anchors.leftMargin: dndSpacerAddItemContainer.thickMargin;    anchors.rightMargin: 0;     anchors.topMargin:0;    anchors.bottomMargin: 0;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 },
@@ -912,13 +933,13 @@ Item {
                     when: plasmoid.location === PlasmaCore.Types.RightEdge
 
                     AnchorChanges{
-                        target: dndSpacerAddItem;
+                        target: dndSpacerAddItemContainer;
                         anchors.horizontalCenter: undefined; anchors.verticalCenter: parent.verticalCenter;
                         anchors.right: parent.right; anchors.left: undefined; anchors.top: undefined; anchors.bottom: undefined;
                     }
                     PropertyChanges{
-                        target: dndSpacerAddItem;
-                        anchors.leftMargin: 0;    anchors.rightMargin: metrics.margin.screenEdge;     anchors.topMargin:0;    anchors.bottomMargin: 0;
+                        target: dndSpacerAddItemContainer;
+                        anchors.leftMargin: 0;    anchors.rightMargin: dndSpacerAddItemContainer.thickMargin;     anchors.topMargin:0;    anchors.bottomMargin: 0;
                         anchors.horizontalCenterOffset: 0; anchors.verticalCenterOffset: 0;
                     }
                 }

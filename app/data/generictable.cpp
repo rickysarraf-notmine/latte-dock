@@ -22,6 +22,7 @@
 #include "generictable.h"
 #include "activitydata.h"
 #include "appletdata.h"
+#include "errorinformationdata.h"
 #include "layoutdata.h"
 #include "screendata.h"
 #include "viewdata.h"
@@ -213,6 +214,12 @@ bool GenericTable<T>::containsName(const QString &name) const
 }
 
 template <class T>
+bool GenericTable<T>::isEmpty() const
+{
+    return m_list.count() <= 0;
+}
+
+template <class T>
 bool GenericTable<T>::rowExists(const int &row) const
 {
     return (m_list.count()>=0 && row>=0 && row<rowCount());
@@ -321,6 +328,7 @@ void GenericTable<T>::remove(const int &row)
 //! but that would drop readability
 template class GenericTable<Data::Activity>;
 template class GenericTable<Data::Applet>;
+template class GenericTable<Data::ErrorInformation>;
 template class GenericTable<Data::Generic>;
 template class GenericTable<Data::Layout>;
 template class GenericTable<Data::Screen>;

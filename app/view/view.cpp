@@ -32,10 +32,12 @@
 #include "../apptypes.h"
 #include "../lattecorona.h"
 #include "../data/layoutdata.h"
+#include "../data/viewstable.h"
 #include "../declarativeimports/interfaces.h"
 #include "../indicator/factory.h"
 #include "../layout/genericlayout.h"
 #include "../layouts/manager.h"
+#include "../layouts/storage.h"
 #include "../plasma/extended/theme.h"
 #include "../screenpool.h"
 #include "../settings/universalsettings.h"
@@ -83,7 +85,10 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
       m_interface(new ViewPart::ContainmentInterface(this)),
       m_parabolic(new ViewPart::Parabolic(this)),
       m_sink(new ViewPart::EventsSink(this))
-{      
+{
+    //this is disabled because under wayland breaks Views positioning
+    //setVisible(false);
+
     //! needs to be created after Effects because it catches some of its signals
     //! and avoid a crash from View::winId() at the same time
     m_positioner = new ViewPart::Positioner(this);
@@ -177,6 +182,10 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
         if (m_positioner) {
             //! immediateSyncGeometry helps avoiding binding loops from containment qml side
             m_positioner->immediateSyncGeometry();
+            if (m_inStartup) {
+                m_inStartup = false;
+                m_positioner->slideInDuringStartup();
+            }
         }
 
         connect(this->containment(), SIGNAL(statusChanged(Plasma::Types::ItemStatus)), SLOT(statusChanged(Plasma::Types::ItemStatus)));
@@ -316,7 +325,7 @@ void View::init(Plasma::Containment *plasma_containment)
 
     connect(m_effects, &ViewPart::Effects::innerShadowChanged, this, [&]() {
         emit availableScreenRectChangedFrom(this);
-    });        
+    });
     connect(m_positioner, &ViewPart::Positioner::onHideWindowsForSlidingOut, this, &View::hideWindowsForSlidingOut);
     connect(m_positioner, &ViewPart::Positioner::screenGeometryChanged, this, &View::screenGeometryChanged);
     connect(m_positioner, &ViewPart::Positioner::windowSizeChanged, this, [&]() {
@@ -457,13 +466,40 @@ void View::reconsiderScreen()
 
 void View::duplicateView()
 {
-    m_layout->duplicateView(containment());
+    QString storedTmpViewFilepath = m_layout->storedView(containment()->id());
+    newView(storedTmpViewFilepath);
 }
 
 void View::exportTemplate()
 {
     Latte::Settings::Dialog::ExportTemplateDialog *exportDlg = new Latte::Settings::Dialog::ExportTemplateDialog(this);
     exportDlg->show();
+}
+
+void View::newView(const QString &templateFile)
+{
+    if (templateFile.isEmpty() || !m_layout) {
+        return;
+    }
+
+    Data::ViewsTable templateviews = Layouts::Storage::self()->views(templateFile);
+
+    if (templateviews.rowCount() <= 0) {
+        return;
+    }
+
+    Data::View nextdata = templateviews[0];
+    int scrId = onPrimary() ? m_corona->screenPool()->primaryScreenId() : m_positioner->currentScreenId();
+
+    QList<Plasma::Types::Location> freeedges = m_layout->freeEdges(scrId);
+
+    if (!freeedges.contains(nextdata.edge)) {
+        nextdata.edge = (freeedges.count() > 0 ? freeedges[0] : Plasma::Types::BottomEdge);
+    }
+
+    nextdata.setState(Data::View::OriginFromViewTemplate, templateFile);
+
+    m_layout->newView(nextdata);
 }
 
 void View::removeView()
@@ -1159,6 +1195,7 @@ void View::setLayout(Layout::GenericLayout *layout)
         }
 
         connectionsLayout << connect(m_positioner, &Latte::ViewPart::Positioner::edgeChanged, m_layout, &Layout::GenericLayout::viewEdgeChanged);
+        connectionsLayout << connect(m_layout, &Layout::GenericLayout::popUpMarginChanged, m_effects, &Latte::ViewPart::Effects::popUpMarginChanged);
 
         //! Sometimes the activity isnt completely ready, by adding a delay
         //! we try to catch up
@@ -1244,25 +1281,6 @@ void View::setLayout(Layout::GenericLayout *layout)
     }
 }
 
-void View::moveToLayout(QString layoutName)
-{
-    if (!m_layout) {
-        return;
-    }
-
-    QList<Plasma::Containment *> containments = m_layout->unassignFromLayout(this);
-
-    Latte::Corona *latteCorona = qobject_cast<Latte::Corona *>(this->corona());
-
-    if (latteCorona && containments.size() > 0) {
-        Layout::GenericLayout *newLayout = latteCorona->layoutsManager()->synchronizer()->layout(layoutName);
-
-        if (newLayout) {
-            newLayout->assignToLayout(this, containments);
-        }
-    }
-}
-
 void View::hideWindowsForSlidingOut()
 {
     if (m_primaryConfigView) {
@@ -1303,6 +1321,8 @@ Latte::Data::View View::data() const
         vdata.screen = containment()->lastScreen();
     }
 
+    vdata.screenEdgeMargin = m_screenEdgeMargin;
+
     vdata.edge = location();
     vdata.maxLength = m_maxLength * 100;
     vdata.alignment = m_alignment;
@@ -1325,6 +1345,21 @@ void View::setColorizer(QQuickItem *colorizer)
 
     m_colorizer = colorizer;
     emit colorizerChanged();
+}
+
+QQuickItem *View::metrics() const
+{
+    return m_metrics;
+}
+
+void View::setMetrics(QQuickItem *metrics)
+{
+    if (m_metrics == metrics) {
+        return;
+    }
+
+    m_metrics = metrics;
+    emit metricsChanged();
 }
 
 ViewPart::Effects *View::effects() const
@@ -1652,12 +1687,14 @@ void View::restoreConfig()
 
     auto config = this->containment()->config();
     m_onPrimary = config.readEntry("onPrimary", true);
+    m_alignment = static_cast<Latte::Types::Alignment>(config.group("General").readEntry("alignment", (int)Latte::Types::Center));
     m_byPassWM = config.readEntry("byPassWM", false);
     m_isPreferredForShortcuts = config.readEntry("isPreferredForShortcuts", false);
     m_name = config.readEntry("name", QString());
 
     //! Send changed signals at the end in order to be sure that saveConfig
     //! wont rewrite default/invalid values
+    emit alignmentChanged();
     emit onPrimaryChanged();
     emit byPassWMChanged();
 }

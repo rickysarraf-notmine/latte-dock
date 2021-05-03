@@ -23,8 +23,6 @@
 namespace Latte {
 namespace Data {
 
-const char *TEMPIDPREFIX = "temp:";
-
 View::View()
     : Generic()
 {
@@ -33,14 +31,20 @@ View::View()
 View::View(View &&o)
     : Generic(o),
       isActive(o.isActive),
+      isMoveOrigin(o.isMoveOrigin),
+      isMoveDestination(o.isMoveDestination),
       onPrimary(o.onPrimary),
       screen(o.screen),
+      screenEdgeMargin(o.screenEdgeMargin),
       maxLength(o.maxLength),
       edge(o.edge),
       alignment(o.alignment),
       m_state(o.m_state),
-      originFile(o.originFile),
-      originView(o.originView),
+      m_originFile(o.m_originFile),
+      m_originLayout(o.m_originLayout),
+      m_originView(o.m_originView),
+      errors(o.errors),
+      warnings(o.warnings),
       subcontainments(o.subcontainments)
 {
 }
@@ -48,15 +52,26 @@ View::View(View &&o)
 View::View(const View &o)
     : Generic(o),
       isActive(o.isActive),
+      isMoveOrigin(o.isMoveOrigin),
+      isMoveDestination(o.isMoveDestination),
       onPrimary(o.onPrimary),
-      screen(o.screen),      
+      screen(o.screen),
+      screenEdgeMargin(o.screenEdgeMargin),
       maxLength(o.maxLength),
       edge(o.edge),
       alignment(o.alignment),
       m_state(o.m_state),
-      originFile(o.originFile),
-      originView(o.originView),
+      m_originFile(o.m_originFile),
+      m_originLayout(o.m_originLayout),
+      m_originView(o.m_originView),
+      errors(o.errors),
+      warnings(o.warnings),
       subcontainments(o.subcontainments)
+{
+}
+
+View::View(const QString &newid, const QString &newname)
+    : Generic(newid, newname)
 {
 }
 
@@ -65,14 +80,21 @@ View &View::operator=(const View &rhs)
     id = rhs.id;
     name = rhs.name;
     isActive = rhs.isActive;
+    isMoveOrigin = rhs.isMoveOrigin;
+    isMoveDestination = rhs.isMoveDestination;
     onPrimary = rhs.onPrimary;
     screen = rhs.screen;
+    screenEdgeMargin = rhs.screenEdgeMargin,
     maxLength = rhs.maxLength;
     edge = rhs.edge;
     alignment = rhs.alignment;
     m_state = rhs.m_state;
-    originFile = rhs.originFile;
-    originView = rhs.originView;
+    m_originFile = rhs.m_originFile;
+    m_originLayout = rhs.m_originLayout;
+    m_originView = rhs.m_originView;
+    errors = rhs.errors;
+    warnings = rhs.warnings;
+
     subcontainments = rhs.subcontainments;
 
     return (*this);
@@ -83,14 +105,21 @@ View &View::operator=(View &&rhs)
     id = rhs.id;
     name = rhs.name;
     isActive = rhs.isActive;
+    isMoveOrigin = rhs.isMoveOrigin;
+    isMoveDestination = rhs.isMoveDestination;
     onPrimary = rhs.onPrimary;
     screen = rhs.screen;
+    screenEdgeMargin = rhs.screenEdgeMargin,
     maxLength = rhs.maxLength;
     edge = rhs.edge;
     alignment = rhs.alignment;
     m_state = rhs.m_state;
-    originFile = rhs.originFile;
-    originView = rhs.originView;
+    m_originFile = rhs.m_originFile;
+    m_originLayout = rhs.m_originLayout;
+    m_originView = rhs.m_originView;
+    errors = rhs.errors;
+    warnings = rhs.warnings;
+
     subcontainments = rhs.subcontainments;
 
     return (*this);
@@ -100,15 +129,21 @@ bool View::operator==(const View &rhs) const
 {
     return (id == rhs.id)
             && (name == rhs.name)
-            && (isActive == rhs.isActive)
+            //&& (isActive == rhs.isActive) /*Disabled because this is not needed in order to track view changes for saving*/
+            //&& (isMoveOrigin == rhs.isMoveOrigin) /*Disabled because this is not needed in order to track view changes for saving*/
+            //&& (isMoveDestination == rhs.isMoveDestination) /*Disabled because this is not needed in order to track view changes for saving*/
             && (onPrimary == rhs.onPrimary)
             && (screen == rhs.screen)
+            && (screenEdgeMargin == rhs.screenEdgeMargin)
             && (maxLength == rhs.maxLength)
             && (edge == rhs.edge)
             && (alignment == rhs.alignment)
             && (m_state == rhs.m_state)
-            && (originFile == rhs.originFile)
-            && (originView == rhs.originView)
+            && (m_originFile == rhs.m_originFile)
+            && (m_originLayout == rhs.m_originLayout)
+            && (m_originView == rhs.m_originView)
+            //&& (errors == rhs.errors) /*Disabled because this is not needed in order to track view changes for saving*/
+            //&& (warnings == rhs.warnings) /*Disabled because this is not needed in order to track view changes for saving*/
             && (subcontainments == rhs.subcontainments);
 }
 
@@ -124,6 +159,29 @@ View::operator QString() const
     result += id;
     result +=" : ";
     result += isActive ? "Active" : "Inactive";
+    result +=" : ";
+    if (m_state==OriginFromLayout && isMoveOrigin) {
+        result += " ↑ ";
+    } else if (m_state==OriginFromLayout && isMoveDestination) {
+        result += " ↓ ";
+    } else if (m_state==OriginFromLayout && isMoveOrigin && isMoveDestination) {
+        result += " ↑↓ ";
+    } else {
+        result += " - ";
+    }
+
+    result += " : ";
+
+    if (m_state == IsInvalid) {
+        result += "IsInvalid";
+    } else if (m_state == IsCreated) {
+        result += "IsCreated";
+    } else if (m_state == OriginFromViewTemplate) {
+        result += "OriginFromViewTemplate";
+    } else if (m_state == OriginFromLayout) {
+        result += "OriginFromLayout";
+    }
+
     result += " : ";
     result += onPrimary ? "Primary" : "Explicit";
     result += " : ";
@@ -174,6 +232,16 @@ bool View::isValid() const
     return m_state != IsInvalid;
 }
 
+bool View::isHorizontal() const
+{
+    return !isVertical();
+}
+
+bool View::isVertical() const
+{
+    return (edge == Plasma::Types::LeftEdge || edge == Plasma::Types::RightEdge);
+}
+
 bool View::hasViewTemplateOrigin() const
 {
     return m_state == OriginFromViewTemplate;
@@ -189,15 +257,19 @@ bool View::hasSubContainment(const QString &subId) const
     return subcontainments.containsId(subId);
 }
 
-QString View::tempId() const
+QString View::originFile() const
 {
-    if (isCreated()) {
-        return id;
-    }
+    return m_originFile;
+}
 
-    QString tid = id;
-    tid.remove(0, QString(TEMPIDPREFIX).count());
-    return tid;
+QString View::originLayout() const
+{
+    return m_originLayout;
+}
+
+QString View::originView() const
+{
+    return m_originView;
 }
 
 View::State View::state() const
@@ -205,14 +277,13 @@ View::State View::state() const
     return m_state;
 }
 
-void View::setState(View::State state, QString file, QString view)
+void View::setState(View::State state, QString file, QString layout, QString view)
 {
     m_state = state;
-    originFile = file;
-    originView = view;
+    m_originFile = file;
+    m_originLayout = layout;
+    m_originView = view;
 }
-
-
 
 }
 }

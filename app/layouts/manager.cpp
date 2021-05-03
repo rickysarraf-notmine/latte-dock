@@ -41,6 +41,7 @@
 #include <QMessageBox>
 
 // KDE
+#include <KMessageBox>
 #include <KLocalizedString>
 #include <KNotification>
 
@@ -210,17 +211,57 @@ void Manager::loadLayoutOnStartup(QString layoutName)
 
     //! Latte didn't close correctly, maybe a crash
     if (layouts.size() > 0) {
-        QMessageBox *msg = new QMessageBox();
-        msg->setAttribute(Qt::WA_DeleteOnClose);
-        msg->setIcon(QMessageBox::Warning);
-        msg->setWindowTitle(i18n("Multiple Layouts Warning"));
-        msg->setText(i18n("Latte did not close properly in the previous session. The following layout(s) <b>[%0]</b> were updated for consistency!!!").arg(layouts.join(",")));
-        msg->setStandardButtons(QMessageBox::Ok);
+        QDialog* dialog = new QDialog(nullptr);
+        dialog->setWindowTitle(i18n("Multiple Layouts Startup Warning"));
+        dialog->setObjectName("sorry");
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
 
-        msg->open();
+        auto buttonbox = new QDialogButtonBox(QDialogButtonBox::Ok);
+
+        KMessageBox::createKMessageBox(dialog,
+                                       buttonbox,
+                                       QMessageBox::Warning,
+                                       i18n("<b>Multiple Layouts based on Activities</b> mode did not close properly during the last session.<br/><br/>The following layout(s) <b>[ %0 ]</b> had to be updated for consistency!").arg(layouts.join(",")),
+                                       QStringList(),
+                                       QString(),
+                                       0,
+                                       KMessageBox::NoExec,
+                                       QString());
+        dialog->show();
     }
 
     m_synchronizer->switchToLayout(layoutName);
+}
+
+void Manager::moveView(QString originLayoutName, uint originViewId, QString destinationLayoutName)
+{
+    if (memoryUsage() != Latte::MemoryUsage::MultipleLayouts
+            || originLayoutName.isEmpty()
+            || destinationLayoutName.isEmpty()
+            || originViewId <= 0
+            || originLayoutName == destinationLayoutName) {
+        return;
+    }
+
+    auto originlayout = m_synchronizer->layout(originLayoutName);
+    auto destinationlayout = m_synchronizer->layout(destinationLayoutName);
+
+    if (!originlayout || !destinationlayout || originlayout == destinationlayout) {
+        return;
+    }
+
+    Plasma::Containment *originviewcontainment = originlayout->containmentForId(originViewId);
+    Latte::View *originview = originlayout->viewForContainment(originViewId);
+
+    if (!originviewcontainment) {
+        return;
+    }
+
+    QList<Plasma::Containment *> origincontainments = originlayout->unassignFromLayout(originviewcontainment);
+
+    if (origincontainments.size() > 0) {
+        destinationlayout->assignToLayout(originview, origincontainments);
+    }
 }
 
 void Manager::loadLatteLayout(QString layoutPath)
@@ -319,6 +360,7 @@ void Manager::clearUnloadedContainmentsFromLinkedFile(QStringList containmentsId
         qDebug() << "unloads ::: " << conId;
         KConfigGroup containment = containments.group(conId);
         containment.deleteGroup();
+        containment.sync();
     }
 
     containments.sync();
