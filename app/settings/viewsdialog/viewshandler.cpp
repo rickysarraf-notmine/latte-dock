@@ -24,6 +24,7 @@
 #include "ui_viewsdialog.h"
 #include "viewscontroller.h"
 #include "viewsdialog.h"
+#include "../exporttemplatedialog/exporttemplatedialog.h"
 #include "../settingsdialog/layoutscontroller.h"
 #include "../settingsdialog/layoutsmodel.h"
 #include "../settingsdialog/delegates/layoutcmbitemdelegate.h"
@@ -38,6 +39,9 @@
 #include "../../layouts/synchronizer.h"
 #include "../../templates/templatesmanager.h"
 #include "../../tools/commontools.h"
+
+// Qt
+#include <QFileDialog>
 
 // KDE
 #include <KLocalizedString>
@@ -106,6 +110,26 @@ void ViewsHandler::init()
     connect(m_removeViewAction, &QAction::triggered, this, &ViewsHandler::removeSelectedViews);
     m_ui->removeBtn->addAction(m_removeViewAction); //this is needed in order to be triggered properly
 
+    //! Import
+    m_importViewAction =new QAction(i18nc("import dock/panel","&Import..."));
+    m_duplicateViewAction->setToolTip(i18n("Import dock or panel from local file"));
+    m_importViewAction->setIcon(QIcon::fromTheme("document-import"));
+    m_importViewAction->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT + Qt::Key_I));
+    connectActionWithButton(m_ui->importBtn, m_importViewAction);
+    connect(m_importViewAction, &QAction::triggered, this, &ViewsHandler::importView);
+
+    //! Export
+    m_exportViewAction = new QAction(i18nc("export layout", "&Export"), this);
+    m_exportViewAction->setToolTip(i18n("Export selected dock or panel at your system"));
+    m_exportViewAction->setIcon(QIcon::fromTheme("document-export"));
+    m_exportViewAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_E));
+    connectActionWithButton(m_ui->exportBtn, m_exportViewAction);
+    connect(m_exportViewAction, &QAction::triggered, m_ui->exportBtn, &QPushButton::showMenu);
+
+    initViewExportSubMenu();
+    m_exportViewAction->setMenu(m_viewExportSubMenu);
+    m_ui->exportBtn->setMenu(m_viewExportSubMenu);
+
     //! signals
     connect(this, &ViewsHandler::currentLayoutChanged, this, &ViewsHandler::reload);
 
@@ -160,6 +184,26 @@ void ViewsHandler::initViewTemplatesSubMenu()
             KIO::highlightInFileManager({QString(Latte::configPath() + "/latte/templates/Dock.view.latte")});
         });
     }
+}
+
+void ViewsHandler::initViewExportSubMenu()
+{
+    if (!m_viewExportSubMenu) {
+        m_viewExportSubMenu = new QMenu(m_ui->exportBtn);
+        m_viewExportSubMenu->setMinimumWidth(m_ui->exportBtn->width() * 2);
+    } else {
+        m_viewExportSubMenu->clear();
+    }
+
+    QAction *exportforbackup = m_viewExportSubMenu->addAction(i18nc("export for backup","&Export For Backup..."));
+    exportforbackup->setIcon(QIcon::fromTheme("document-export"));
+    exportforbackup->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT  + Qt::Key_E));
+    connect(exportforbackup, &QAction::triggered, this, &ViewsHandler::exportViewForBackup);
+
+    QAction *exportastemplate = m_viewExportSubMenu->addAction(i18nc("export as template","Export As &Template..."));
+    exportastemplate->setIcon(QIcon::fromTheme("document-export"));
+    exportastemplate->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT  + Qt::Key_T));
+    connect(exportastemplate, &QAction::triggered, this, &ViewsHandler::exportViewAsTemplate);
 }
 
 void ViewsHandler::reload()
@@ -238,6 +282,34 @@ void ViewsHandler::save()
     }
 }
 
+CentralLayout *ViewsHandler::centralLayout(const QString &currentLayoutId)
+{
+    Data::Layout originlayoutdata = layoutsController()->originalData(currentLayoutId);
+    auto activelayout = layoutsController()->isLayoutOriginal(currentLayoutId) ?
+                corona()->layoutsManager()->synchronizer()->centralLayout(originlayoutdata.name) : nullptr;
+
+    Latte::CentralLayout *centrallayout = activelayout ? activelayout : new Latte::CentralLayout(this, currentLayoutId);
+
+    return centrallayout;
+}
+
+QString ViewsHandler::storedView(const QString &viewId)
+{
+    Latte::Data::View viewdata = m_viewsController->currentData(viewId);
+
+    if (!viewdata.isValid()) {
+        return QString();
+    }
+
+    if (viewdata.isCreated()) {
+        CentralLayout *central = centralLayout(currentData().id);
+        return central->storedView(viewdata.id.toInt());
+    } else if (viewdata.hasViewTemplateOrigin() || viewdata.hasLayoutOrigin()) {
+        return viewdata.originFile();
+    }
+
+    return QString();
+}
 
 void ViewsHandler::newView(const Data::Generic &templateData)
 {
@@ -249,7 +321,7 @@ void ViewsHandler::newView(const Data::Generic &templateData)
         viewfromtemplate.name = templateData.name;
         Data::View newview = m_viewsController->appendViewFromViewTemplate(viewfromtemplate);
 
-        showInlineMessage(i18nc("settings:dock/panel added successfully","<b>%0</b> added successfully...").arg(newview.name),
+        showInlineMessage(i18nc("settings:dock/panel added successfully","<b>%1</b> added successfully...", newview.name),
                           KMessageWidget::Positive);
     }
 }
@@ -263,6 +335,141 @@ void ViewsHandler::removeSelectedViews()
     }
 
     m_viewsController->removeSelectedViews();
+}
+
+void ViewsHandler::exportViewForBackup()
+{
+    if (!m_viewsController->hasSelectedView()) {
+        return;
+    }
+
+    if (m_viewsController->selectedViewsCount() > 1) {
+        showInlineMessage(i18n("<b>Export</b> functionality is supported only for one dock or panel each time."),
+                          KMessageWidget::Warning,
+                          false);
+        return;
+    }
+
+    Data::ViewsTable views =  m_viewsController->selectedViewsCurrentData();
+
+    if (views.rowCount() != 1) {
+        return;
+    }
+
+    QString temporiginfile = storedView(views[0].id);
+
+    QFileDialog *exportFileDialog = new QFileDialog(m_dialog, i18n("Export Dock/Panel For Backup"), QDir::homePath(), QStringLiteral("view.latte"));
+
+    exportFileDialog->setLabelText(QFileDialog::Accept, i18nc("export view","Export"));
+    exportFileDialog->setFileMode(QFileDialog::AnyFile);
+    exportFileDialog->setAcceptMode(QFileDialog::AcceptSave);
+    exportFileDialog->setDefaultSuffix("view.latte");
+
+    QStringList filters;
+    QString filter1(i18nc("export view", "Latte Dock/Panel file v0.2") + "(*.view.latte)");
+
+    filters << filter1;
+
+    exportFileDialog->setNameFilters(filters);
+
+    connect(exportFileDialog, &QFileDialog::finished, exportFileDialog, &QFileDialog::deleteLater);
+
+    connect(exportFileDialog, &QFileDialog::fileSelected, this, [&, temporiginfile](const QString & file) {
+        auto showExportViewError = [this](const QString &destinationfile) {
+            showInlineMessage(i18nc("settings:view export fail","Export in file <b>%1</b> <b>failed</b>...", QFileInfo(destinationfile).fileName()),
+                              KMessageWidget::Error,
+                              true);
+        };
+
+        if (QFile::exists(file) && !QFile::remove(file)) {
+            showExportViewError(file);
+            return;
+        }
+
+        if (file.endsWith(".view.latte")) {
+            if (!QFile(temporiginfile).copy(file)) {
+                showExportViewError(file);
+                return;
+            }
+
+            QAction *openUrlAction = new QAction(i18n("Open Location..."), this);
+            openUrlAction->setData(file);
+            QList<QAction *> actions;
+            actions << openUrlAction;
+
+            connect(openUrlAction, &QAction::triggered, this, [&, openUrlAction]() {
+                QString file = openUrlAction->data().toString();
+
+                if (!file.isEmpty()) {
+                    KIO::highlightInFileManager({file});
+                }
+            });
+
+            showInlineMessage(i18nc("settings:view export success","Export in file <b>%1</b> succeeded...", QFileInfo(file).fileName()),
+                              KMessageWidget::Positive,
+                              false,
+                              actions);
+        }
+    });
+
+    exportFileDialog->open();
+    exportFileDialog->selectFile(views[0].name);
+}
+
+void ViewsHandler::exportViewAsTemplate()
+{
+    if (!m_viewsController->hasSelectedView()) {
+        return;
+    }
+
+    if (m_viewsController->selectedViewsCount() > 1) {
+        showInlineMessage(i18n("<b>Export</b> functionality is supported only for one dock or panel each time."),
+                          KMessageWidget::Warning,
+                          false);
+        return;
+    }
+
+    Data::ViewsTable views =  m_viewsController->selectedViewsCurrentData();
+
+    if (views.rowCount() != 1) {
+        return;
+    }
+
+    Data::View exportview = views[0];
+    exportview.id = storedView(views[0].id);
+    exportview.setState(Data::View::OriginFromLayout, exportview.id, currentData().name, views[0].id);
+
+    Dialog::ExportTemplateDialog *exportdlg = new Dialog::ExportTemplateDialog(m_dialog, exportview);
+    exportdlg->exec();
+}
+
+void ViewsHandler::importView()
+{
+    qDebug() << Q_FUNC_INFO;
+
+    QFileDialog *importFileDialog = new QFileDialog(m_dialog, i18nc("import dock/panel", "Import Dock/Panel"), QDir::homePath(), QStringLiteral("view.latte"));
+
+    importFileDialog->setWindowIcon(QIcon::fromTheme("document-import"));
+    importFileDialog->setLabelText(QFileDialog::Accept, i18n("Import"));
+    importFileDialog->setFileMode(QFileDialog::AnyFile);
+    importFileDialog->setAcceptMode(QFileDialog::AcceptOpen);
+    importFileDialog->setDefaultSuffix("view.latte");
+
+    QStringList filters;
+    filters << QString(i18nc("import dock panel", "Latte Dock or Panel file v0.2") + "(*.view.latte)");
+    importFileDialog->setNameFilters(filters);
+
+    connect(importFileDialog, &QFileDialog::finished, importFileDialog, &QFileDialog::deleteLater);
+
+    connect(importFileDialog, &QFileDialog::fileSelected, this, [&](const QString & file) {
+        Data::Generic templatedata;
+        templatedata.id = file;
+        templatedata.name = QFileInfo(file).fileName();
+        templatedata.name = templatedata.name.remove(".view.latte");
+        newView(templatedata);
+    });
+
+    importFileDialog->open();
 }
 
 void ViewsHandler::onCurrentLayoutIndexChanged(int row)
@@ -310,7 +517,9 @@ void ViewsHandler::onCurrentLayoutIndexChanged(int row)
 
 void ViewsHandler::updateWindowTitle()
 {
-    m_dialog->setWindowTitle(i18nc("<layout name> Docks/Panels","%0 Docks/Panels").arg(m_ui->layoutsCmb->currentText()));
+    m_dialog->setWindowTitle(i18nc("<layout name> Docks/Panels",
+                                   "%1 Docks/Panels",
+                                   m_ui->layoutsCmb->currentText()));
 }
 
 KMessageBox::ButtonCode ViewsHandler::removalConfirmation(const int &viewsCount)
@@ -319,15 +528,11 @@ KMessageBox::ButtonCode ViewsHandler::removalConfirmation(const int &viewsCount)
         return KMessageBox::Yes;
     }
 
-    if (hasChangedData()) {
-        QString removalTxt = i18n("You are going to <b>remove 1</b> dock or panel completely from your layout.<br/>Would you like to continue?");
-
-        if (viewsCount > 1) {
-            removalTxt = i18n ("You are going to <b>remove %0</b> docks and panels completely from your layout.<br/>Would you like to continue?").arg(viewsCount);
-        }
-
+    if (hasChangedData() && viewsCount>0) {
         return KMessageBox::warningYesNo(m_dialog,
-                                         removalTxt,
+                                         i18np("You are going to <b>remove 1</b> dock or panel completely from your layout.<br/>Would you like to continue?",
+                                               "You are going to <b>remove %1</b> docks and panels completely from your layout.<br/>Would you like to continue?",
+                                               viewsCount),
                                          i18n("Approve Removal"));
     }
 
@@ -338,7 +543,7 @@ KMessageBox::ButtonCode ViewsHandler::saveChangesConfirmation()
 {
     if (hasChangedData()) {
         QString layoutName = o_data.name;
-        QString saveChangesText = i18n("The settings of <b>%0</b> layout have changed.<br/>Do you want to apply the changes <b>now</b> or discard them?").arg(layoutName);
+        QString saveChangesText = i18n("The settings of <b>%1</b> layout have changed.<br/>Do you want to apply the changes <b>now</b> or discard them?", layoutName);
 
         return m_dialog->saveChangesConfirmation(saveChangesText);
     }

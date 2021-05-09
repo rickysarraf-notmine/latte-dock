@@ -702,6 +702,8 @@ bool Storage::exportTemplate(const QString &originFile, const QString &destinati
     QFile(originFile).copy(destinationFile);
 
     KSharedConfigPtr destFilePtr = KSharedConfig::openConfig(destinationFile);
+    destFilePtr->reparseConfiguration();
+
     KConfigGroup containments = KConfigGroup(destFilePtr, "Containments");
 
     QStringList rejectedSubContainments;
@@ -758,6 +760,8 @@ bool Storage::exportTemplate(const Layout::GenericLayout *layout, Plasma::Contai
     }
 
     KSharedConfigPtr destFilePtr = KSharedConfig::openConfig(destinationFile);
+    destFilePtr->reparseConfiguration();
+
     KConfigGroup copied_conts = KConfigGroup(destFilePtr, "Containments");
     KConfigGroup copied_c1 = KConfigGroup(&copied_conts, QString::number(containment->id()));
 
@@ -1144,7 +1148,11 @@ bool Storage::hasOrphanedSubContainments(const Layout::GenericLayout *layout, Da
         for (const auto containment : *layout->containments()) {
             QString cid = QString::number(containment->id());
 
-            if (views.hasContainmentId(cid)) {
+            Plasma::Applet *parentApplet = qobject_cast<Plasma::Applet *>(containment->parent());
+            Plasma::Containment *parentContainment = parentApplet ? qobject_cast<Plasma::Containment *>(parentApplet->parent()) : nullptr;
+
+            if (isLatteContainment(containment) || (parentApplet && parentContainment && layout->contains(parentContainment))) {
+                //! is latte containment or is subcontainment that belongs to latte containment
                 continue;
             }
 
@@ -1154,7 +1162,6 @@ bool Storage::hasOrphanedSubContainments(const Layout::GenericLayout *layout, Da
             warninginfo.containment.storageId = cid;
             warning.information << warninginfo;
         }
-
     } else { // inactive layout
         KSharedConfigPtr lfile = KSharedConfig::openConfig(layout->file());
         KConfigGroup containmentsEntries = KConfigGroup(lfile, "Containments");

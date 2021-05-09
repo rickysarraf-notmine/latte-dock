@@ -457,8 +457,9 @@ bool ContainmentInterface::appletIsExpandable(PlasmaQuick::AppletQuickItem *appl
         return false;
     }
 
-    return (appletQuickItem->fullRepresentation() != nullptr
-            && appletQuickItem->preferredRepresentation() != appletQuickItem->fullRepresentation());
+    return ((appletQuickItem->fullRepresentation() != nullptr
+            && appletQuickItem->preferredRepresentation() != appletQuickItem->fullRepresentation())
+            || Latte::Layouts::Storage::self()->isSubContainment(m_view->layout(), appletQuickItem->applet()));
 }
 
 bool ContainmentInterface::hasExpandedApplet() const
@@ -536,7 +537,7 @@ void ContainmentInterface::onAppletExpandedChanged()
             }
         }
 
-        if (added) {
+        if (added && appletIsExpandable(appletItem)) {
             addExpandedApplet(appletItem);
         } else {
             removeExpandedApplet(appletItem);
@@ -582,11 +583,7 @@ void ContainmentInterface::toggleAppletExpanded(const int id)
             PlasmaQuick::AppletQuickItem *ai = applet->property("_plasma_graphicObject").value<PlasmaQuick::AppletQuickItem *>();
 
             if (ai) {
-                if (appletIsExpandable(ai)) {
-                    ai->setExpanded(!ai->isExpanded());
-                } else {
-                    emit applet->activated();
-                }
+                emit applet->activated();
             }
         }
     }

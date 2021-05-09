@@ -169,6 +169,11 @@ bool Views::hasSelectedView() const
     return m_view->selectionModel()->hasSelection();
 }
 
+int Views::selectedViewsCount() const
+{
+    return m_view->selectionModel()->selectedRows(Model::Views::IDCOLUMN).count();
+}
+
 int Views::rowForId(QString id) const
 {
     for (int i = 0; i < m_proxyModel->rowCount(); ++i) {
@@ -206,6 +211,11 @@ const Latte::Data::View Views::appendViewFromViewTemplate(const Data::View &view
     newview.name = uniqueViewName(view.name);
     m_model->appendTemporaryView(newview);
     return newview;
+}
+
+const Latte::Data::View Views::currentData(const QString &id)
+{
+    return m_model->currentData(id);
 }
 
 Data::ViewsTable Views::selectedViewsForClipboard()
@@ -407,7 +417,7 @@ void Views::onCurrentLayoutChanged()
         QObject::disconnect(var);
     }
 
-    Latte::CentralLayout *currentlayout = centralLayout(currentlayoutdata);
+    Latte::CentralLayout *currentlayout = m_handler->centralLayout(currentlayoutdata.id);
 
     if (currentlayout && currentlayout->isActive()) {
         m_currentLayoutConnections << connect(currentlayout, &Layout::GenericLayout::viewsCountChanged, this, [&, currentlayout](){
@@ -416,17 +426,6 @@ void Views::onCurrentLayoutChanged()
     }
 
     messagesForErrorsWarnings(currentlayout);
-}
-
-CentralLayout *Views::centralLayout(const Data::Layout &currentLayout)
-{
-    Data::Layout originlayoutdata = m_handler->layoutsController()->originalData(currentLayout.id);
-    auto activelayout = m_handler->layoutsController()->isLayoutOriginal(currentLayout.id) ?
-                m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originlayoutdata.name) : nullptr;
-
-    Latte::CentralLayout *centrallayout = activelayout ? activelayout : new Latte::CentralLayout(this, currentLayout.id);
-
-    return centrallayout;
 }
 
 void Views::onSelectionsChanged()
@@ -652,7 +651,7 @@ void Views::showDefaultInlineMessageValidator()
 
     connect(validateaction, &QAction::triggered, this, [&, currentlayout]() {
 
-        auto centrallayout = centralLayout(currentlayout);
+        auto centrallayout = m_handler->centralLayout(currentlayout.id);
         if (centrallayout && !centrallayout->isActive()) {
             KSharedConfigPtr lFile = KSharedConfig::openConfig(centrallayout->file());
             //! update configuration with latest changes
@@ -678,7 +677,7 @@ void Views::messageForErrorAppletsWithSameId(const Data::Error &error)
     }
 
     //! construct message
-    QString message = i18nc("error id and title", "<b>Error #%0: %1</b> <br/>").arg(error.id).arg(error.name);
+    QString message = i18nc("error id and title", "<b>Error #%1: %2</b> <br/>",error.id, error.name);
     message += "<br/>";
     message += i18n("In your layout there are two or more applets with same id. Such situation can create crashes, abnormal behavior and data loss when you activate and use this layout.<br/>");
 
@@ -691,7 +690,11 @@ void Views::messageForErrorAppletsWithSameId(const Data::Error &error)
         QString containmentname = viewname.isEmpty() ? error.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = error.information[i].containment.storageId;
         message += i18nc("applets with same id error, applet name, applet id, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] inside  <b>%2</b> [#%3]<br/>").arg(appletname).arg(appletstorageid).arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] inside  <b>%3</b> [#%4]<br/>",
+                         appletname,
+                         appletstorageid,
+                         containmentname,
+                         containmentstorageid);
     }
 
     message += "<br/>";
@@ -711,7 +714,7 @@ void Views::messageForErrorOrphanedParentAppletOfSubContainment(const Data::Erro
     }
 
     //! construct message
-    QString message = i18nc("error id and title", "<b>Error #%0: %1</b> <br/><br/>").arg(error.id).arg(error.name);
+    QString message = i18nc("error id and title", "<b>Error #%1: %2</b> <br/><br/>", error.id, error.name);
     message += i18n("In your layout there are orphaned pseudo applets that link to unexistent subcontainments. Such case is for example a systemtray that has lost connection with its child applets. Such situation can create crashes, abnormal behavior and data loss when you activate and use this layout.<br/>");
 
     message += "<br/>";
@@ -727,7 +730,11 @@ void Views::messageForErrorOrphanedParentAppletOfSubContainment(const Data::Erro
         QString containmentname = viewname.isEmpty() ? error.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = error.information[i].containment.storageId;
         message += i18nc("orphaned pseudo applets, applet name, applet id, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] inside  <b>%2</b> [#%3]<br/>").arg(appletname).arg(appletstorageid).arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] inside  <b>%3</b> [#%4]<br/>",
+                         appletname,
+                         appletstorageid,
+                         containmentname,
+                         containmentstorageid);
     }
 
     message += "<br/>";
@@ -741,7 +748,9 @@ void Views::messageForErrorOrphanedParentAppletOfSubContainment(const Data::Erro
         QString containmentname = viewname.isEmpty() ? error.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = error.information[i].containment.storageId;
         message += i18nc("orphaned subcontainments, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] <br/>").arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] <br/>",
+                         containmentname,
+                         containmentstorageid);
     }
 
     message += "<br/>";
@@ -760,7 +769,7 @@ void Views::messageForWarningAppletAndContainmentWithSameId(const Data::Warning 
     }
 
     //! construct message
-    QString message = i18nc("warning id and title", "<b>Warning #%0: %1</b> <br/><br/>").arg(warning.id).arg(warning.name);
+    QString message = i18nc("warning id and title", "<b>Warning #%1: %2</b> <br/><br/>", warning.id, warning.name);
     message += i18n("In your layout there are applets and containments with the same id. Such situation is not dangerous but it should not occur.<br/>");
 
     message += "<br/>";
@@ -776,7 +785,11 @@ void Views::messageForWarningAppletAndContainmentWithSameId(const Data::Warning 
         QString containmentname = viewname.isEmpty() ? warning.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = warning.information[i].containment.storageId;
         message += i18nc("applets, applet name, applet id, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] inside  <b>%2</b> [#%3]<br/>").arg(appletname).arg(appletstorageid).arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] inside  <b>%3</b> [#%4]<br/>",
+                         appletname,
+                         appletstorageid,
+                         containmentname,
+                         containmentstorageid);
     }
 
     message += "<br/>";
@@ -790,7 +803,9 @@ void Views::messageForWarningAppletAndContainmentWithSameId(const Data::Warning 
         QString containmentname = viewname.isEmpty() ? warning.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = warning.information[i].containment.storageId;
         message += i18nc("containments, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] <br/>").arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] <br/>",
+                         containmentname,
+                         containmentstorageid);
     }
 
     message += "<br/>";
@@ -811,7 +826,7 @@ void Views::messageForWarningOrphanedSubContainments(const Data::Warning &warnin
     QList<int> orphaned;
 
     //! construct message
-    QString message = i18nc("warning id and title", "<b>Warning #%0: %1</b> <br/><br/>").arg(warning.id).arg(warning.name);
+    QString message = i18nc("warning id and title", "<b>Warning #%1: %2</b> <br/><br/>", warning.id, warning.name);
     message += i18n("In your layout there are orphaned subcontainments that are not used by any dock or panel. Such situation is not dangerous but it is advised to remove them in order to reduce memory usage.<br/>");
 
     message += "<br/>";
@@ -825,7 +840,9 @@ void Views::messageForWarningOrphanedSubContainments(const Data::Warning &warnin
         QString containmentname = viewname.isEmpty() ? warning.information[i].containment.visibleName() : viewname;
         QString containmentstorageid = warning.information[i].containment.storageId;
         message += i18nc("orphaned subcontainments, containment name, containment id",
-                         "&nbsp;&nbsp;• <b>%0</b> [#%1] <br/>").arg(containmentname).arg(containmentstorageid);
+                         "&nbsp;&nbsp;• <b>%1</b> [#%2] <br/>",
+                         containmentname,
+                         containmentstorageid);
 
         orphaned << warning.information[i].containment.storageId.toInt();
     }
@@ -844,7 +861,7 @@ void Views::messageForWarningOrphanedSubContainments(const Data::Warning &warnin
     Latte::Data::Layout currentlayout = m_handler->currentData();
 
     connect(repairlayoutaction, &QAction::triggered, this, [&, currentlayout, orphaned]() {
-        auto centrallayout = centralLayout(currentlayout);
+        auto centrallayout = m_handler->centralLayout(currentlayout.id);
 
         for (int i=0; i<orphaned.count(); ++i) {
             centrallayout->removeOrphanedSubContainment(orphaned[i]);
@@ -866,8 +883,7 @@ void Views::save()
 
     Latte::Data::Layout originallayout = m_handler->originalData();
     Latte::Data::Layout currentlayout = m_handler->currentData();
-    Latte::CentralLayout *centralActive = m_handler->isSelectedLayoutOriginal() ? m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originallayout.name) : nullptr;
-    Latte::CentralLayout *central = centralActive ? centralActive : new Latte::CentralLayout(this, currentlayout.id);
+    Latte::CentralLayout *central = m_handler->centralLayout(currentlayout.id);
 
     //! views in model
     Latte::Data::ViewsTable originalViews = m_model->originalViewsData();
@@ -886,7 +902,7 @@ void Views::save()
     for(int i=0; i<newViews.rowCount(); ++i){
         if (newViews[i].isMoveDestination) {
             CentralLayout *originActive = originLayout(newViews[i]);
-            bool inmovebetweenactivelayouts = centralActive && originActive && centralActive != originActive && hasValidOriginView(newViews[i]);
+            bool inmovebetweenactivelayouts = central->isActive() && originActive && central != originActive && hasValidOriginView(newViews[i]);
 
             if (inmovebetweenactivelayouts) {
                 cuttedpastedactiveviews[newViews[i].id] = newViews[i];
@@ -941,10 +957,7 @@ void Views::save()
         //! Be Careful: Remove deprecated views from Cut->Paste Action
         QString origincurrentid = cuttedpastedviews[vid].originLayout();
         Data::Layout originlayout = m_handler->layoutsController()->originalData(origincurrentid);
-
-        Latte::CentralLayout *originActive = m_handler->layoutsController()->isLayoutOriginal(origincurrentid) ?
-                    m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originlayout.name) : nullptr;
-        Latte::CentralLayout *origin = originActive ? originActive : new Latte::CentralLayout(this, origincurrentid);
+        Latte::CentralLayout *origin = m_handler->centralLayout(originlayout.id);
 
         Data::ViewsTable originviews = Latte::Layouts::Storage::self()->views(origin);
 
@@ -978,7 +991,7 @@ void Views::save()
             m_handler->corona()->layoutsManager()->moveView(originlayoutname, originviewid, destinationlayoutname);
             //!is needed in order for layout to not trigger another move
             pastedactiveview.setState(Data::View::IsCreated, QString(), QString(), QString());
-            centralActive->updateView(pastedactiveview);
+            central->updateView(pastedactiveview);
         }
 
         pastedactiveview.setState(Data::View::IsCreated, QString(), QString(), QString());

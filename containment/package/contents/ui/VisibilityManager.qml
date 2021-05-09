@@ -81,7 +81,7 @@ Item{
         target: latteView
         property:"maxThickness"
         //! prevents updating window geometry during closing window in wayland and such fixes a crash
-        when: latteView && !inRelocationHiding && !inClientSideScreenEdgeSliding && !inStartup
+        when: latteView && !inRelocationHiding && !inClientSideScreenEdgeSliding //&& !inStartup
         value: root.behaveAsPlasmaPanel ? thicknessAsPanel : metrics.mask.thickness.maxZoomed
     }
 
@@ -256,10 +256,9 @@ Item{
     Binding{
         target: latteView && latteView.effects ? latteView.effects : null
         property: "drawEffects"
-        when: latteView && latteView.effects
+        when: latteView && latteView.effects && !root.inStartup
         value: LatteCore.WindowSystem.compositingActive
-               && (((root.blurEnabled && root.useThemePanel)
-                    || (root.blurEnabled && root.forceSolidPanel && LatteCore.WindowSystem.compositingActive))
+               && (((root.blurEnabled && root.useThemePanel) || (root.blurEnabled && root.forceSolidPanel))
                    && (!root.inStartup || inRelocationHiding))
     }
 
@@ -291,36 +290,19 @@ Item{
         value: {
             if (root.behaveAsPlasmaPanel
                     || (!parabolic.isEnabled && root.userShowPanelBackground && plasmoid.configuration.panelSize===100)) {
-                if (myView.alignment === LatteCore.Types.Justify) {
-                    //! Justify is using the full LayoutsContainer layout
+                var paddingtail = root.isHorizontal ? background.paddings.left : background.paddings.top;
+                var paddinghead = root.isHorizontal ? background.paddings.right : background.paddings.bottom;
 
-                    var margintail = layoutsContainer.backgroundTailLength + metrics.margin.length;
-                    var marginhead = layoutsContainer.backgroundHeadLength + metrics.margin.length;
-                    if (root.isHorizontal) {
-                        return Qt.rect(layoutsContainer.x + margintail,
-                                       layoutsContainer.y,
-                                       layoutsContainer.width - margintail - marginhead,
-                                       layoutsContainer.height);
-                    } else {
-                        return Qt.rect(layoutsContainer.x,
-                                       layoutsContainer.y + margintail,
-                                       layoutsContainer.width,
-                                       layoutsContainer.height - margintail - marginhead);
-                    }
+                if (root.isHorizontal) {
+                    return Qt.rect(latteView.localGeometry.x + paddingtail,
+                                   latteView.localGeometry.y,
+                                   latteView.localGeometry.width - paddingtail - paddinghead,
+                                   latteView.localGeometry.height);
                 } else {
-                    //! All the rest alignments are using MainLayout container
-
-                    if (root.isHorizontal) {
-                        return Qt.rect(layoutsContainer.mainLayout.x + metrics.margin.length,
-                                       layoutsContainer.mainLayout.y,
-                                       layoutsContainer.mainLayout.width - 2*metrics.margin.length,
-                                       layoutsContainer.mainLayout.height);
-                    } else {
-                        return Qt.rect(layoutsContainer.mainLayout.x,
-                                       layoutsContainer.mainLayout.y + metrics.margin.length,
-                                       layoutsContainer.mainLayout.width,
-                                       layoutsContainer.mainLayout.height - 2*metrics.margin.length);
-                    }
+                    return Qt.rect(latteView.localGeometry.x,
+                                   latteView.localGeometry.y + paddingtail,
+                                   latteView.localGeometry.width,
+                                   latteView.localGeometry.height - paddingtail - paddinghead);
                 }
             }
 
@@ -376,10 +358,10 @@ Item{
         when: latteView && latteView.visibility
         value: root.hasFloatingGapInputEventsDisabled
                && (latteView.visibility.mode === LatteCore.Types.AutoHide
-               || latteView.visibility.mode === LatteCore.Types.DodgeActive
-               || latteView.visibility.mode === LatteCore.Types.DodgeAllWindows
-               || latteView.visibility.mode === LatteCore.Types.DodgeMaximized
-               || latteView.visibility.mode === LatteCore.Types.SidebarAutoHide)
+                   || latteView.visibility.mode === LatteCore.Types.DodgeActive
+                   || latteView.visibility.mode === LatteCore.Types.DodgeAllWindows
+                   || latteView.visibility.mode === LatteCore.Types.DodgeMaximized
+                   || latteView.visibility.mode === LatteCore.Types.SidebarAutoHide)
     }
 
     //! View::WindowsTracker bindings
@@ -449,7 +431,7 @@ Item{
         onXChanged: updateMaskArea();
         onYChanged: updateMaskArea()
         onWidthChanged: updateMaskArea();
-        onHeightChanged: updateMaskArea();        
+        onHeightChanged: updateMaskArea();
     }
 
     Connections{
@@ -570,15 +552,10 @@ Item{
             return;
         }
 
-        //! prevent sliding-in on startup if the dodge modes have sent a hide signal
-        if (inStartupTimer.running && root.inStartup) {
-            root.inStartup = false;
-        }
-
         //! Normal Dodge/AutoHide case
         if (!slidingAnimationAutoHiddenOut.running
                 && !latteView.visibility.blockHiding
-                && (!latteView.visibility.containsMouse)) {
+                && !latteView.visibility.containsMouse) {
             slidingAnimationAutoHiddenOut.init();
         }
     }
@@ -699,7 +676,7 @@ Item{
                     inputThickness = metrics.mask.screenEdge + metrics.totals.thickness;
                 }
 
-                var subtractedScreenEdge = root.hasFloatingGapInputEventsDisabled ? metrics.mask.screenEdge : 0;
+                var subtractedScreenEdge = root.hasFloatingGapInputEventsDisabled && !latteView.visibility.isHidden ? metrics.mask.screenEdge : 0;
 
                 var inputGeometry = Qt.rect(0, 0, root.width, root.height);
 
@@ -712,7 +689,7 @@ Item{
                     inputGeometry.height = inputThickness ;
                 } else if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
                     inputGeometry.x = latteView.localGeometry.x;
-                    inputGeometry.y = root.height - inputThickness;
+                    inputGeometry.y = root.height - inputThickness - subtractedScreenEdge;
 
                     inputGeometry.width = latteView.localGeometry.width;
                     inputGeometry.height = inputThickness;
@@ -723,7 +700,7 @@ Item{
                     inputGeometry.width = inputThickness;
                     inputGeometry.height = latteView.localGeometry.height;
                 } else if (plasmoid.location === PlasmaCore.Types.RightEdge) {
-                    inputGeometry.x = root.width - inputThickness;
+                    inputGeometry.x = root.width - inputThickness - subtractedScreenEdge;
                     inputGeometry.y = latteView.localGeometry.y;
 
                     inputGeometry.width = inputThickness;
@@ -853,7 +830,8 @@ Item{
 
         ScriptAction{
             script: {
-                root.inStartup = false;
+                // deprecated
+                // root.inStartup = false;
             }
         }
 

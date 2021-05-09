@@ -78,6 +78,8 @@ public:
     void sortByColumn(int column, Qt::SortOrder order);
 
     bool hasSelectedView() const;
+    int selectedViewsCount() const;
+    const Latte::Data::View currentData(const QString &id);
     const Data::ViewsTable selectedViewsCurrentData() const;
 
     const Latte::Data::View appendViewFromViewTemplate(const Data::View &view);
@@ -103,7 +105,6 @@ private:
 
     bool hasValidOriginView(const Data::View &view);
     CentralLayout *originLayout(const Data::View &view);
-    CentralLayout *centralLayout(const Data::Layout &currentLayout);
 
     int rowForId(QString id) const;
     QString uniqueViewName(QString name);

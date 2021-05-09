@@ -260,12 +260,12 @@ void TabLayouts::initExportLayoutSubMenu()
         m_layoutExportSubMenu->clear();
     }
 
-    QAction *exportForBackup = m_layoutExportSubMenu->addAction(i18nc("export layout for backup","&Export For Backup..."));
+    QAction *exportForBackup = m_layoutExportSubMenu->addAction(i18nc("export for backup","&Export For Backup..."));
     exportForBackup->setIcon(QIcon::fromTheme("document-export"));
     exportForBackup->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT  + Qt::Key_E));
     connect(exportForBackup, &QAction::triggered, this, &TabLayouts::exportLayoutForBackup);
 
-    QAction *exportAsTemplate = m_layoutExportSubMenu->addAction(i18nc("export layout as layout template","Export As &Template..."));
+    QAction *exportAsTemplate = m_layoutExportSubMenu->addAction(i18nc("export as template","Export As &Template..."));
     exportAsTemplate->setIcon(QIcon::fromTheme("document-export"));
     exportAsTemplate->setShortcut(QKeySequence(Qt::CTRL + Qt::SHIFT  + Qt::Key_T));
     connect(exportAsTemplate, &QAction::triggered, this, &TabLayouts::exportLayoutAsTemplate);
@@ -379,7 +379,7 @@ void TabLayouts::switchLayout()
     }
 
     m_layoutsController->setOriginalInMultipleMode(false);
-    m_corona->layoutsManager()->switchToLayout(selectedLayoutOriginal.name, MemoryUsage::SingleLayout);    
+    m_corona->layoutsManager()->switchToLayout(selectedLayoutOriginal.name, MemoryUsage::SingleLayout);
 
     updatePerLayoutButtonsState();
 }
@@ -449,7 +449,7 @@ void TabLayouts::newLayout(const QString &templateName)
         Data::Layout newlayout = m_layoutsController->addLayoutForFile(tdata.id, tdata.name, true);
 
         if (newlayout.errors == 0 && newlayout.warnings == 0) {
-            showInlineMessage(i18nc("settings:layout added successfully","Layout <b>%0</b> added successfully...").arg(newlayout.name),
+            showInlineMessage(i18nc("settings:layout added successfully","Layout <b>%1</b> added successfully...", newlayout.name),
                               KMessageWidget::Positive);
         }
     }
@@ -464,39 +464,6 @@ void TabLayouts::duplicateLayout()
     }
 
     m_layoutsController->duplicateSelectedLayout();
-}
-
-void TabLayouts::installLayoutTemplate(Latte::Data::Layout importedLayout, QString templateFilePath, ImportedLayoutOrigin origin)
-{
-    QString layoutName = QFileInfo(templateFilePath).baseName();
-
-    QString informationText = origin == ImportedLayoutOrigin::DOWNLOADED ? i18nc("settings:layout downloaded successfully","Layout <b>%0</b> downloaded successfully...").arg(importedLayout.name) :
-                                                                           i18nc("settings:layout imported successfully","Layout <b>%0</b> imported successfully...").arg(importedLayout.name);
-
-    informationText += "<br/>";
-
-    if (m_corona->templatesManager()->hasCustomLayoutTemplate(layoutName)) {
-        informationText += i18nc("settings:layout import template", "Would you like to update your <b>%0</b> layout template?").arg(layoutName);
-    } else {
-        informationText += i18nc("settings:layout import template", "Would you like to add <b>%0</b> in your layout templates?").arg(layoutName);
-    }
-
-    QAction *yesAction = new QAction(i18n("Yes"), this);
-    yesAction->setIcon(QIcon::fromTheme("dialog-yes"));
-    QAction *noAction = new QAction(i18n("No"), this);
-    noAction->setIcon(QIcon::fromTheme("dialog-no"));
-    QList<QAction *> actions;
-    actions << yesAction;
-    actions << noAction;
-
-    connect(yesAction, &QAction::triggered, this, [&, templateFilePath]() {
-        m_corona->templatesManager()->installCustomLayoutTemplate(templateFilePath);
-    });
-
-    showInlineMessage(informationText,
-                      KMessageWidget::Positive,
-                      true,
-                      actions);
 }
 
 void TabLayouts::downloadLayout()
@@ -518,7 +485,8 @@ void TabLayouts::downloadLayout()
 
                 if (version == Latte::Layouts::Importer::LayoutVersion2) {
                     Latte::Data::Layout downloaded = m_layoutsController->addLayoutForFile(entryFile);
-                    installLayoutTemplate(downloaded, entryFile, DOWNLOADED);
+                    showInlineMessage(i18nc("settings:layout downloaded successfully","Layout <b>%1</b> downloaded successfully...", downloaded.name),
+                                      KMessageWidget::Positive);
                     break;
                 }
             }
@@ -601,7 +569,8 @@ void TabLayouts::importLayout()
 
         if (version == Latte::Layouts::Importer::LayoutVersion2) {
             Latte::Data::Layout importedlayout = m_layoutsController->addLayoutForFile(file);
-            installLayoutTemplate(importedlayout, file, LOCALLY);
+            showInlineMessage(i18nc("settings:layout imported successfully","Layout <b>%1</b> imported successfully...", importedlayout.name),
+                              KMessageWidget::Positive);
         } else if (version == Latte::Layouts::Importer::ConfigVersion1) {
             if (!m_layoutsController->importLayoutsFromV1ConfigFile(file)) {
                 showInlineMessage(i18nc("settings:deprecated layouts import failed","Import layouts from deprecated version <b>failed</b>..."),
@@ -629,7 +598,10 @@ void TabLayouts::exportLayoutAsTemplate()
     Data::Layout o_layout = m_layoutsController->selectedLayoutOriginalData();
     Data::Layout c_layout = m_layoutsController->selectedLayoutCurrentData();
 
-    Dialog::ExportTemplateDialog *exportDlg = new Dialog::ExportTemplateDialog(m_parentDialog, c_layout.name, o_layout.id);
+    Data::Layout exp_layout = o_layout;
+    exp_layout.name = c_layout.name;
+
+    Dialog::ExportTemplateDialog *exportDlg = new Dialog::ExportTemplateDialog(m_parentDialog, exp_layout);
     exportDlg->exec();
 }
 
@@ -669,7 +641,7 @@ void TabLayouts::exportLayoutForBackup()
 
     connect(exportFileDialog, &QFileDialog::fileSelected, this, [ &, selectedLayout](const QString & file) {
         auto showExportLayoutError = [this](const Latte::Data::Layout &layout) {
-            showInlineMessage(i18nc("settings:layout export fail","Layout <b>%0</b> export <b>failed</b>...").arg(layout.name),
+            showInlineMessage(i18nc("settings:layout export fail","Layout <b>%1</b> export <b>failed</b>...", layout.name),
                               KMessageWidget::Error,
                               true);
         };
@@ -708,7 +680,7 @@ void TabLayouts::exportLayoutForBackup()
                 }
             });
 
-            showInlineMessage(i18nc("settings:layout export success","Layout <b>%0</b> export succeeded...").arg(selectedLayout.name),
+            showInlineMessage(i18nc("settings:layout export success","Layout <b>%1</b> export succeeded...", selectedLayout.name),
                               KMessageWidget::Positive,
                               false,
                               actions);
@@ -764,7 +736,6 @@ void TabLayouts::showDetailsDialog()
     auto detailsDlg = new Settings::Dialog::DetailsDialog(m_parentDialog, m_layoutsController);
 
     detailsDlg->exec();
-    detailsDlg->deleteLater();
 }
 
 void TabLayouts::showViewsDialog()
@@ -785,7 +756,6 @@ void TabLayouts::showViewsDialog()
     m_isViewsDialogVisible = true;
     viewsDlg->exec();
     m_isViewsDialogVisible = false;
-    viewsDlg->deleteLater();
 }
 
 void TabLayouts::onLayoutFilesDropped(const QStringList &paths)
@@ -799,19 +769,20 @@ void TabLayouts::onLayoutFilesDropped(const QStringList &paths)
         }
     }
 
-    if (layoutNames.count() == 1) {
-        showInlineMessage(i18nc("settings:layout imported successfully","Layout <b>%0</b> imported successfully...").arg(layoutNames[0]),
+    if(layoutNames.count() > 0) {
+        showInlineMessage(i18ncp("settings:layout imported successfully",
+                                 "Layout <b>%2</b> imported successfully...",
+                                 "Layouts <b>%2</b> imported successfully...",
+                                 layoutNames.count(),
+                                 layoutNames.join(", ")),
                 KMessageWidget::Positive);
-    } else if (layoutNames.count() > 1) {
-        showInlineMessage(i18nc("settings:layouts imported successfully","Layouts <b>%0</b> imported successfully...").arg(layoutNames.join(", )")),
-                          KMessageWidget::Positive);
     }
 }
 
 void TabLayouts::onRawLayoutDropped(const QString &rawLayout)
 {
     Latte::Data::Layout importedlayout = m_layoutsController->addLayoutByText(rawLayout);
-    showInlineMessage(i18nc("settings:layout imported successfully","Layout <b>%0</b> imported successfully...").arg(importedlayout.name),
+    showInlineMessage(i18nc("settings:layout imported successfully","Layout <b>%1</b> imported successfully...", importedlayout.name),
                       KMessageWidget::Positive);
 }
 
