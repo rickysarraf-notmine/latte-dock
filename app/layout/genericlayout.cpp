@@ -795,14 +795,22 @@ void GenericLayout::destroyedChanged(bool destroyed)
         return;
     }
 
+    Latte::View *view;
+
     if (destroyed) {
-        m_waitingLatteViews[sender] = m_latteViews.take(static_cast<Plasma::Containment *>(sender));
+        view = m_latteViews.take(static_cast<Plasma::Containment *>(sender));
+        m_waitingLatteViews[sender] = view;
     } else {
-        m_latteViews[sender] = m_waitingLatteViews.take(static_cast<Plasma::Containment *>(sender));
+        view = m_waitingLatteViews.take(static_cast<Plasma::Containment *>(sender));
+        m_latteViews[sender] =view;
     }
 
-    emit viewEdgeChanged();
-    emit viewsCountChanged();
+    if (view) {
+        emit m_corona->availableScreenRectChangedFrom(view);
+        emit m_corona->availableScreenRegionChangedFrom(view);
+        emit viewEdgeChanged();
+        emit viewsCountChanged();
+    }
 }
 
 void GenericLayout::renameLayout(QString newName)
@@ -968,7 +976,7 @@ void GenericLayout::addView(Plasma::Containment *containment, bool forceOnPrimar
     emit viewsCountChanged();
 }
 
-void GenericLayout::toggleHiddenState(QString screenName, Plasma::Types::Location edge)
+void GenericLayout::toggleHiddenState(QString viewName, QString screenName, Plasma::Types::Location edge)
 {
     if (!m_corona) {
         return;
@@ -982,18 +990,19 @@ void GenericLayout::toggleHiddenState(QString screenName, Plasma::Types::Locatio
     int viewsOnEdge{0};
 
     for(const auto view : latteViews()) {
-        if (view->positioner()->currentScreenName() == validScreenName && view->location() == edge) {
+        if ((viewName.isEmpty() || (!viewName.isEmpty() && viewName == view->name()))
+                && view->positioner()->currentScreenName() == validScreenName
+                && (edge == Plasma::Types::Floating || ((edge != Plasma::Types::Floating) && view->location() == edge))) {
             viewsOnEdge++;
         }
     }
 
     if (viewsOnEdge >= 1) {
         for(const auto view : latteViews()) {
-            if (view->positioner()->currentScreenName() == validScreenName && view->location() == edge) {
-                if (viewsOnEdge == 1 || (viewsOnEdge >1 && view->visibility() && view->visibility()->isSidebar())) {
-                    view->visibility()->toggleHiddenState();
-                    return;
-                }
+            if ((viewName.isEmpty() || (!viewName.isEmpty() && viewName == view->name()))
+                    && view->positioner()->currentScreenName() == validScreenName
+                    && (edge == Plasma::Types::Floating || ((edge != Plasma::Types::Floating) && view->location() == edge))) {
+                view->visibility()->toggleHiddenState();
             }
         }
     }
@@ -1674,11 +1683,10 @@ void GenericLayout::removeOrphanedSubContainment(const int &containmentId)
 
 void GenericLayout::destroyContainment(Plasma::Containment *containment)
 {
-    if (!containment) {
+    if (!containment || !m_corona || !contains(containment)) {
         return;
     }
 
-    m_containments.removeAll(containment);
     containment->setImmutability(Plasma::Types::Mutable);
     containment->destroy();
 }

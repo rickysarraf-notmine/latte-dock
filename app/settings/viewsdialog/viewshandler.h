@@ -40,6 +40,7 @@ class ViewsDialog;
 }
 
 namespace Latte{
+class CentralLayout;
 class Corona;
 namespace Settings{
 namespace Controller{
@@ -76,6 +77,8 @@ public:
     Latte::Data::Layout currentData() const;
     Latte::Data::Layout originalData() const;
 
+    CentralLayout *centralLayout(const QString &currentLayoutId);
+
     Ui::ViewsDialog *ui() const;
     Latte::Corona *corona() const;
     Settings::Controller::Layouts *layoutsController() const;
@@ -90,8 +93,13 @@ signals:
 
 private slots:
     void initViewTemplatesSubMenu();
+    void initViewExportSubMenu();
     void removeSelectedViews();
     void updateWindowTitle();
+
+    void exportViewForBackup();
+    void exportViewAsTemplate();
+    void importView();
 
     void onCurrentLayoutIndexChanged(int row);
 
@@ -103,6 +111,8 @@ private:
     void reload();
 
     void loadLayout(const Latte::Data::Layout &data);
+
+    QString storedView(const QString &viewId);
 
     KMessageBox::ButtonCode saveChangesConfirmation();
     KMessageBox::ButtonCode removalConfirmation(const int &count);
@@ -122,9 +132,12 @@ private:
     QAction *m_newViewAction{nullptr};
     QAction *m_duplicateViewAction{nullptr};
     QAction *m_removeViewAction{nullptr};
+    QAction *m_exportViewAction{nullptr};
+    QAction *m_importViewAction{nullptr};
 
     //! Menus
     QMenu *m_viewTemplatesSubMenu{nullptr};
+    QMenu *m_viewExportSubMenu{nullptr};
 };
 
 }
