@@ -10,6 +10,8 @@ latte-dock (0.9.12-1) UNRELEASED; urgency=medium
 
   [ Scarlett Moore ]
   * New upstream bugfix release.
+  * Update my email address.
+  * 
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 18 May 2021 16:55:55 -0700
 
