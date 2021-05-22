@@ -119,9 +119,17 @@ QStringList subtracted(const QStringList &original, const QStringList &current)
 
 void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, const float textOpacity)
 {
-    painter->save();
+    drawFormattedText(painter, option, option.text, Latte::isTextCentered(option), textOpacity);
+}
 
-    bool isTextCentered = Latte::isTextCentered(option);
+void drawFormattedText(QPainter *painter, const QStyleOptionMenuItem &option, const float textOpacity)
+{
+    drawFormattedText(painter, option, option.text, false, textOpacity);
+}
+
+void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, const bool &isTextCentered, const float textOpacity)
+{
+    painter->save();
 
     QPalette::ColorRole applyColor = Latte::isSelected(option) ? QPalette::HighlightedText : QPalette::Text;
     QBrush nBrush = option.palette.brush(Latte::colorGroup(option), applyColor);
@@ -133,11 +141,7 @@ void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, co
 
     QTextDocument doc;
     doc.setDefaultStyleSheet(css);
-    doc.setHtml("<body>" + option.text + "</body>");
-
-    QStyleOptionViewItem tempOptions = option;
-    tempOptions.text = "";
-    option.widget->style()->drawControl(QStyle::CE_ItemViewItem, &tempOptions, painter);
+    doc.setHtml("<body>" + text + "</body>");
 
     //we need an offset to be in the same vertical center of TextEdit
     int offsetY = ((option.rect.height() - doc.size().height()) / 2);
@@ -159,19 +163,75 @@ void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, co
     painter->restore();
 }
 
-void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const QRect &target, const Latte::Data::LayoutIcon &icon)
-{   
+void drawBackground(QPainter *painter, const QStyleOptionViewItem &option)
+{
+    QStyleOptionViewItem backOption = option;
+    backOption.text = "";
+
+    //! Remove the focus dotted lines
+    backOption.state = (option.state & ~QStyle::State_HasFocus);
+
+    option.widget->style()->drawControl(QStyle::CE_ItemViewItem, &backOption, painter);
+}
+
+void drawBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option)
+{
+    QStyleOptionMenuItem backOption = option;
+    backOption.text = "";
+    //! Remove the focus dotted lines
+    //   iconOption.state = (option.state & ~QStyle::State_HasFocus);
+
+    style->drawControl(QStyle::CE_MenuItem, &backOption, painter);
+}
+
+QRect remainedFromLayoutIcon(const QStyleOption &option, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
+{
+    if (alignment == Qt::AlignHCenter) {
+        return option.rect;
+    }
+
+    return remainedFromIcon(option, alignment, lengthMargin, thickMargin);
+}
+
+void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &isBackgroundFile, const QString &iconName, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
+{
     bool active = Latte::isActive(option);
     bool selected = Latte::isSelected(option);
     bool focused = Latte::isFocused(option);
 
+    int lenmargin = (lengthMargin == -1 ? ICONMARGIN + MARGIN : lengthMargin);
+    int thickmargin = (thickMargin == -1 ? ICONMARGIN : thickMargin);
+
+    int iconsize = option.rect.height() - 2*thickMargin;
+    int total = iconsize + 2*lenmargin;
+
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight || alignment == Qt::AlignHCenter) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    QRect target;
+
+    if (curalign == Qt::AlignLeft) {
+        target = QRect(option.rect.x() + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    } else if (curalign == Qt::AlignRight) {
+        target = QRect(option.rect.x() + option.rect.width() - total + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    } else {
+        //! centered
+        target = QRect(option.rect.x() + ((option.rect.width() - total)/2) + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    }
+
+    painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
 
-    if (icon.isBackgroundFile) {
-        int backImageMargin = qMin(option.rect.height()/4, ICONMARGIN+2);
+    if (isBackgroundFile) {
+        int backImageMargin = qMin(target.height()/4, ICONMARGIN+1);
         QRect backTarget(target.x() + backImageMargin, target.y() + backImageMargin, target.width() - 2*backImageMargin, target.height() - 2*backImageMargin);
 
-        QPixmap backImage(icon.name);
+        QPixmap backImage(iconName);
         backImage = backImage.copy(backTarget);
 
         QPalette::ColorRole textColorRole = selected ? QPalette::HighlightedText : QPalette::Text;
@@ -187,14 +247,19 @@ void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const QRect &
     } else {
         QIcon::Mode mode = ((active && (selected || focused)) ? QIcon::Selected : QIcon::Normal);
 
-        painter->drawPixmap(target, QIcon::fromTheme(icon.name).pixmap(target.height(), target.height(), mode));
+        painter->drawPixmap(target, QIcon::fromTheme(iconName).pixmap(target.height(), target.height(), mode));
     }
+
+    painter->restore();
 }
 
-QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment)
+QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
 {
-    int iconsize = option.rect.height() - 2*MARGIN;
-    int total = iconsize + 2*ICONMARGIN + 2*MARGIN;
+    int lenmargin = (lengthMargin == -1 ? ICONMARGIN + MARGIN : lengthMargin);
+    int thickmargin = (thickMargin == -1 ? ICONMARGIN : thickMargin);
+
+    int iconsize = option.rect.height() - 2*thickMargin;
+    int total = iconsize + 2*lenmargin;
 
     Qt::AlignmentFlag curalign = alignment;
 
@@ -211,65 +276,13 @@ QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment)
     return optionRemainedRect;
 }
 
-void drawIconBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, Qt::AlignmentFlag alignment)
+void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
 {
-    int iconsize = option.rect.height() - 2*MARGIN;
-    int total = iconsize + 2*ICONMARGIN + 2*MARGIN;
+    int lenmargin = (lengthMargin == -1 ? ICONMARGIN + MARGIN : lengthMargin);
+    int thickmargin = (thickMargin == -1 ? ICONMARGIN : thickMargin);
 
-    QStyleOptionMenuItem iconOption = option;
-    iconOption.text = "";
-    //! Remove the focus dotted lines
-    //   iconOption.state = (option.state & ~QStyle::State_HasFocus);
-
-    Qt::AlignmentFlag curalign = alignment;
-
-    if (qApp->layoutDirection() == Qt::LeftToRight) {
-        curalign = alignment;
-    } else {
-        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
-    }
-
-    if (curalign == Qt::AlignLeft) {
-        iconOption.rect = QRect(option.rect.x(), option.rect.y(), total, option.rect.height());
-    } else {
-        iconOption.rect = QRect(option.rect.x() + option.rect.width() - total, option.rect.y(), total, option.rect.height());
-    }
-
-    style->drawControl(QStyle::CE_MenuItem, &iconOption, painter);
-}
-
-void drawIconBackground(QPainter *painter, const QStyleOptionViewItem &option, Qt::AlignmentFlag alignment)
-{
-    int iconsize = option.rect.height() - 2*MARGIN;
-    int total = iconsize + 2*ICONMARGIN + 2*MARGIN;
-
-    QStyleOptionViewItem iconOption = option;
-    iconOption.text = "";
-
-    //! Remove the focus dotted lines
-    iconOption.state = (option.state & ~QStyle::State_HasFocus);
-
-    Qt::AlignmentFlag curalign = alignment;
-
-    if (qApp->layoutDirection() == Qt::LeftToRight) {
-        curalign = alignment;
-    } else {
-        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
-    }
-
-    if (curalign == Qt::AlignLeft) {
-        iconOption.rect = QRect(option.rect.x(), option.rect.y(), total, option.rect.height());
-    } else {
-        iconOption.rect = QRect(option.rect.x() + option.rect.width() - total, option.rect.y(), total, option.rect.height());
-    }
-
-    option.widget->style()->drawControl(QStyle::CE_ItemViewItem, &iconOption, painter);
-}
-
-void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon, Qt::AlignmentFlag alignment)
-{
-    int iconsize = option.rect.height() - 2*MARGIN;
-    int total = iconsize + 2*ICONMARGIN + 2*MARGIN;
+    int iconsize = option.rect.height() - 2*thickMargin;
+    int total = iconsize + 2*lenmargin;
 
     bool active = Latte::isActive(option);
     bool selected = Latte::isSelected(option);
@@ -288,9 +301,9 @@ void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon
     QRect target;
 
     if (curalign == Qt::AlignLeft) {
-        target = QRect(option.rect.x() + MARGIN + ICONMARGIN, option.rect.y(), iconsize, iconsize);
+        target = QRect(option.rect.x() + lenmargin, option.rect.y(), iconsize, iconsize);
     } else {
-        target = QRect(option.rect.x() + option.rect.width() - total + ICONMARGIN + MARGIN, option.rect.y(), iconsize, iconsize);
+        target = QRect(option.rect.x() + option.rect.width() - total + lenmargin, option.rect.y(), iconsize, iconsize);
     }
 
     painter->drawPixmap(target, QIcon::fromTheme(icon).pixmap(target.height(), target.height(), mode));
@@ -304,24 +317,6 @@ QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option)
                                                                               QRect(option.rect.x(), option.rect.y(), option.rect.width() - tsize, option.rect.height());
 
     return optionRemainedRect;
-}
-
-void drawChangesIndicatorBackground(QPainter *painter, const QStyleOptionViewItem &option)
-{
-    int tsize{INDICATORCHANGESLENGTH + INDICATORCHANGESMARGIN*2};
-
-    QStyleOptionViewItem indicatorOption = option;
-    indicatorOption.text = "";
-    //! Remove the focus dotted lines
-    indicatorOption.state = (option.state & ~QStyle::State_HasFocus);
-
-    if (qApp->layoutDirection() == Qt::RightToLeft) {
-        indicatorOption.rect = QRect(option.rect.x(), option.rect.y(), tsize, option.rect.height());
-    } else {
-        indicatorOption.rect = QRect(option.rect.x() + option.rect.width() - tsize, option.rect.y(), tsize, option.rect.height());
-    }
-
-    option.widget->style()->drawControl(QStyle::CE_ItemViewItem, &indicatorOption, painter);
 }
 
 void drawChangesIndicator(QPainter *painter, const QStyleOptionViewItem &option)
@@ -369,42 +364,6 @@ QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSi
                                                                               QRect(option.rect.x() + total_length, option.rect.y(), option.rect.width() - total_length, option.rect.height());
 
     return optionRemainedRect;
-}
-
-void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionViewItem &option, const int &maxIconSize)
-{
-    int total_length = screenMaxLength(option, maxIconSize) + MARGIN * 2 + 1;
-
-    QStyleOptionViewItem screenOption = option;
-    screenOption.text = "";
-    //! Remove the focus dotted lines
-    screenOption.state = (option.state & ~QStyle::State_HasFocus);
-
-    if (qApp->layoutDirection() == Qt::RightToLeft) {
-        screenOption.rect = QRect(option.rect.x() + option.rect.width() - total_length, option.rect.y(), total_length, option.rect.height());
-    } else {
-        screenOption.rect = QRect(option.rect.x(), option.rect.y(), total_length, option.rect.height());
-    }
-
-    style->drawControl(QStyle::CE_ItemViewItem, &screenOption, painter);
-}
-
-void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, const int &maxIconSize)
-{
-    int total_length = screenMaxLength(option, maxIconSize) + MARGIN * 2 + 1;
-
-    QStyleOptionMenuItem screenOption = option;
-    screenOption.text = "";
-    //! Remove the focus dotted lines
-    screenOption.state = (option.state & ~QStyle::State_HasFocus);
-
-    if (qApp->layoutDirection() == Qt::RightToLeft) {
-        screenOption.rect = QRect(option.rect.x() + option.rect.width() - total_length, option.rect.y(), total_length, option.rect.height());
-    } else {
-        screenOption.rect = QRect(option.rect.x(), option.rect.y(), total_length, option.rect.height());
-    }
-
-    style->drawControl(QStyle::CE_MenuItem, &screenOption, painter);
 }
 
 QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeometry, const int &maxIconSize, const float brushOpacity)
@@ -476,82 +435,6 @@ QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeom
 
     return screenAvailableRect;
 }
-
-void drawView(QPainter *painter, const QStyleOption &option, const Latte::Data::View &view, const QRect &availableScreenRect, const float brushOpacity)
-{
-    int thick = 4;
-    painter->save();
-
-    bool selected = Latte::isSelected(option);
-    QPalette::ColorRole viewColorRole = !selected ? QPalette::Highlight : QPalette::Text;
-    QPen pen; pen.setWidth(thick);
-    QColor pencolor = option.palette.color(Latte::colorGroup(option), viewColorRole);
-    pencolor.setAlphaF(brushOpacity);
-    pen.setColor(pencolor);
-    painter->setPen(pen);
-
-    int x = availableScreenRect.x();
-    int y = availableScreenRect.y();
-
-    int length = view.isVertical() ? availableScreenRect.height() - thick + 1 : availableScreenRect.width() - thick + 1;
-    int max_length = length;
-
-    if (view.alignment != Latte::Types::Justify) {
-        length = 0.5 * length;
-    }
-
-    //! provide even screen length
-    if (length % 2 == 1) {
-        length = qMin(max_length, length + 1);
-    }
-
-    int screen_edge = (view.screenEdgeMargin > 0) ? 2 : 0;
-
-    if (view.edge == Plasma::Types::TopEdge) {
-        y = availableScreenRect.y() + thick/2 + screen_edge;
-    } else if (view.edge == Plasma::Types::BottomEdge) {
-        y = availableScreenRect.y() + availableScreenRect.height() - 1 - screen_edge;
-    } else if (view.edge == Plasma::Types::LeftEdge) {
-        x = availableScreenRect.x() + thick/2 + screen_edge;
-    } else if (view.edge == Plasma::Types::RightEdge) {
-        x = availableScreenRect.x() + availableScreenRect.width() - 1 - screen_edge;
-    }
-
-    if (view.isHorizontal()) {
-        if (view.alignment == Latte::Types::Left) {
-            x = availableScreenRect.x() + thick / 2;
-        } else if (view.alignment == Latte::Types::Right) {
-            x = availableScreenRect.x() + availableScreenRect.width() - length - 1;
-        } else if (view.alignment == Latte::Types::Center) {
-            int leftmargin = (availableScreenRect.width()/2) - (length/2);
-            x = availableScreenRect.x() + leftmargin + 1;
-        } else if (view.alignment == Latte::Types::Justify) {
-            x = availableScreenRect.x() + thick / 2;
-        }
-    } else if (view.isVertical()) {
-        if (view.alignment == Latte::Types::Top) {
-            y = availableScreenRect.y() + thick / 2;
-        } else if (view.alignment == Latte::Types::Bottom) {
-            y = availableScreenRect.y() + availableScreenRect.height() - length - 1;
-        } else if (view.alignment == Latte::Types::Center) {
-            int topmargin = (availableScreenRect.height()/2) - (length/2);
-            y = availableScreenRect.y() + topmargin + 1;
-        } else if (view.alignment == Latte::Types::Justify) {
-            y = availableScreenRect.y() + thick / 2;
-        }
-    }
-
-    if (view.isHorizontal()) {
-        painter->drawLine(x, y, x + length, y);
-    } else if (view.isVertical()) {
-        painter->drawLine(x, y, x, y + length);
-    }
-
-    painter->restore();
-}
-
-
-
 
 }
 

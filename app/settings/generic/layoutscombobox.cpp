@@ -23,6 +23,7 @@
 #include "generictools.h"
 
 // Qt
+#include <QApplication>
 #include <QDebug>
 #include <QPalette>
 #include <QStyleOptionComboBox>
@@ -31,8 +32,8 @@
 namespace Latte {
 namespace Settings {
 
-const int MARGIN = 4;
-const int VERTMARGIN = 4;
+const int MARGIN = 2;
+const int VERTMARGIN = 3;
 
 LayoutsComboBox::LayoutsComboBox(QWidget *parent)
     : QComboBox (parent)
@@ -62,21 +63,28 @@ void LayoutsComboBox::paintEvent(QPaintEvent *event)
     // draw the combobox frame, focusrect and selected etc.
     QStyleOptionComboBox opt;
     initStyleOption(&opt);
+
+    // background
     painter.drawComplexControl(QStyle::CC_ComboBox, opt);
 
-    //! Adjust text and layout icon accordingly
-    int thick = opt.rect.height() - 2 * VERTMARGIN;
-    int textX = opt.rect.x() + thick + 1;
-    QRect textRect(textX, opt.rect.y(), opt.rect.width() - thick - 1, opt.rect.height());
+    // icon
+    QRect remained = Latte::remainedFromLayoutIcon(opt, Qt::AlignLeft, 3, 3);
+    Latte::drawLayoutIcon(&painter, opt, m_layoutIcon.isBackgroundFile, m_layoutIcon.name, Qt::AlignLeft, 7, 4);
+    opt.rect = remained;
 
-    QStyleOptionComboBox adjOpt = opt;
-    adjOpt.rect = textRect;
-    // draw text
-    painter.drawControl(QStyle::CE_ComboBoxLabel, adjOpt);
+    // adjust text place, move it a bit to the left
+    QRect textRect;
+    int textnegativepad = MARGIN + 1;
+    if (qApp->layoutDirection() == Qt::LeftToRight) {
+        textRect = QRect(remained.x() - textnegativepad, opt.rect.y(), remained.width() + 2*textnegativepad, opt.rect.height());
+    } else {
+        textRect = QRect(remained.x(), opt.rect.y(), remained.width() + 2 * textnegativepad, opt.rect.height());
+    }
+    opt.rect = textRect;
 
-    QRect iconRect(opt.rect.x() + MARGIN, opt.rect.y() + VERTMARGIN, thick, thick);
-    // draw layout icon
-    Latte::drawLayoutIcon(&painter, opt, iconRect,  m_layoutIcon);
+    // text
+    painter.drawControl(QStyle::CE_ComboBoxLabel, opt);
+
 }
 
 

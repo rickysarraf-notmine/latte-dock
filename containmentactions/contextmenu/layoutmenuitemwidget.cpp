@@ -17,11 +17,10 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "custommenuitemwidget.h"
+#include "layoutmenuitemwidget.h"
 
 // local
-#include "../../generic/generictools.h"
-#include "../../generic/genericviewtools.h"
+#include "generictools.h"
 
 // Qt
 #include <QApplication>
@@ -31,12 +30,10 @@
 #include <QRadioButton>
 #include <QStyleOptionMenuItem>
 
-namespace Latte {
-namespace Settings {
-namespace View {
-namespace Widget {
+const int ICONMARGIN = 1;
+const int MARGIN = 2;
 
-CustomMenuItemWidget::CustomMenuItemWidget(QAction* action, QWidget *parent)
+LayoutMenuItemWidget::LayoutMenuItemWidget(QAction* action, QWidget *parent)
     : QWidget(parent),
       m_action(action)
 {
@@ -45,6 +42,7 @@ CustomMenuItemWidget::CustomMenuItemWidget(QAction* action, QWidget *parent)
     auto radiobtn = new QRadioButton(this);
     radiobtn->setCheckable(true);
     radiobtn->setChecked(action->isChecked());
+    radiobtn->setVisible(action->isVisible() && action->isCheckable());
 
     l->addWidget(radiobtn);
     setLayout(l);
@@ -52,26 +50,23 @@ CustomMenuItemWidget::CustomMenuItemWidget(QAction* action, QWidget *parent)
     setMouseTracking(true);
 }
 
-void CustomMenuItemWidget::setScreen(const Latte::Data::Screen &screen)
+void LayoutMenuItemWidget::setIcon(const bool &isBackgroundFile, const QString &iconName)
 {
-    m_screen = screen;
+    m_isBackgroundFile = isBackgroundFile;
+    m_iconName = iconName;
 }
 
-void CustomMenuItemWidget::setView(const Latte::Data::View &view)
-{
-    m_view = view;
-}
-
-QSize CustomMenuItemWidget::minimumSizeHint() const
+QSize LayoutMenuItemWidget::minimumSizeHint() const
 {
    QStyleOptionMenuItem opt;
    QSize contentSize = fontMetrics().size(Qt::TextSingleLine | Qt::TextShowMnemonic, m_action->text());
+
    contentSize.setHeight(contentSize.height() + 9);
    contentSize.setWidth(contentSize.width() + 4 * contentSize.height());
    return style()->sizeFromContents(QStyle::CT_MenuItem, &opt, contentSize, this);
 }
 
-void CustomMenuItemWidget::paintEvent(QPaintEvent* e)
+void LayoutMenuItemWidget::paintEvent(QPaintEvent* e)
 {
     QPainter painter(this);
     painter.save();
@@ -85,10 +80,11 @@ void CustomMenuItemWidget::paintEvent(QPaintEvent* e)
         opt.state |= QStyle::State_Selected;
     }
 
+    //! background
     Latte::drawBackground(&painter, style(), opt);
 
     //! radio button
-    int radiosize = opt.rect.height();
+    int radiosize = opt.rect.height() - 2*MARGIN;
     QRect remained;
 
     if (qApp->layoutDirection() == Qt::LeftToRight) {
@@ -97,39 +93,19 @@ void CustomMenuItemWidget::paintEvent(QPaintEvent* e)
         remained = QRect(opt.rect.x() , opt.rect.y(), opt.rect.width() - radiosize, opt.rect.height());
     }
 
-    opt.rect = remained;
+    opt.rect  = remained;
 
-    if (!m_screen.id.isEmpty()) {
-        int maxiconsize = 26;
-        remained = Latte::remainedFromScreenDrawing(opt, maxiconsize);
-        QRect availableScreenRect = Latte::drawScreen(&painter, opt, m_screen.geometry, maxiconsize);
-
-        if (!m_view.id.isEmpty()) {
-            Latte::drawView(&painter, opt, m_view, availableScreenRect);
-        }
-    }
-
-    opt.rect = remained;
+    //! icon
+    remained = Latte::remainedFromLayoutIcon(opt, Qt::AlignLeft, 1, 4); //add also spacing to push text a little to the right
+    Latte::drawLayoutIcon(&painter, opt, m_isBackgroundFile, m_iconName, Qt::AlignLeft, 0, 4);
+    opt.rect  = remained;
 
     //! text
     opt.text = opt.text.remove("&");
-    if (qApp->layoutDirection() == Qt::LeftToRight) {
-        //! add spacing
-        remained = QRect(opt.rect.x() + 2 , opt.rect.y(), opt.rect.width() - 2, opt.rect.height());
-    } else {
-        //! add spacing
-        remained = QRect(opt.rect.x() , opt.rect.y(), opt.rect.width() - 2, opt.rect.height());
-    }
-
-    opt.rect = remained;
-
     //style()->drawControl(QStyle::CE_MenuItem, &opt, &painter, this);
     Latte::drawFormattedText(&painter, opt);
 
     painter.restore();
 }
 
-}
-}
-}
-}
+

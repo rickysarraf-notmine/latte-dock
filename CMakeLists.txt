@@ -2,7 +2,7 @@ project(lattedock)
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
 set(CMAKE_CXX_STANDARD 14)
-set(VERSION 0.9.86)
+set(VERSION 0.9.91)
 set(AUTHOR "Michail Vourlakos, Smith Ar")
 set(EMAIL "mvourlakos@gmail.com, audoban@openmailbox.org")
 set(WEBSITE "https://userbase.kde.org/LatteDock")
@@ -90,6 +90,9 @@ configure_file(declarativeimports/coretypes.h.in app/coretypes.h)
 set(CORETYPESHEADER "LATTEGENERALCONTAINMENTTYPES_H")
 configure_file(declarativeimports/coretypes.h.in containment/plugin/lattetypes.h)
 
+# Share App::Settings::GenericTools to containment actions
+configure_file(app/settings/generic/generictools.h containmentactions/contextmenu/generictools.h)
+configure_file(app/settings/generic/generictools.cpp containmentactions/contextmenu/generictools.cpp)
 
 # subdirectories
 add_subdirectory(declarativeimports)

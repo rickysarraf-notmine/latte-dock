@@ -17,47 +17,32 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef CUSTOMMENUITEMWIDGET_H
-#define CUSTOMMENUITEMWIDGET_H
-
-// local
-#include "../../../data/screendata.h"
-#include "../../../data/viewdata.h"
+#ifndef LAYOUTMENUITEMWIDGET_H
+#define LAYOUTMENUITEMWIDGET_H
 
 // Qt
 #include <QAction>
 #include <QWidget>
 #include <QWidgetAction>
 #include <QPaintEvent>
-#include <QRadioButton>
+#include <QStyleOptionMenuItem>
 
-namespace Latte {
-namespace Settings {
-namespace View {
-namespace Widget {
 
-class CustomMenuItemWidget : public QWidget {
+class LayoutMenuItemWidget : public QWidget {
     Q_OBJECT
 
 public:
-    CustomMenuItemWidget(QAction* action, QWidget *parent);
+    LayoutMenuItemWidget(QAction* action, QWidget *parent);
 
     QSize minimumSizeHint() const override;
     void paintEvent(QPaintEvent* e) override;
 
-    void setScreen(const Latte::Data::Screen &screen);
-    void setView(const Latte::Data::View &view);
+    void setIcon(const bool &isBackgroundFile, const QString &iconName);
 
 private:
     QAction *m_action{nullptr};
-
-    Latte::Data::Screen m_screen;
-    Latte::Data::View m_view;
+    bool m_isBackgroundFile;
+    QString m_iconName;
 };
-
-}
-}
-}
-}
 
 #endif
