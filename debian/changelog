@@ -1,3 +1,9 @@
+latte-dock (0.9.11+git6.e8cc5603-1) norbert; urgency=medium
+
+  * New upstream version 0.9.11+git6.e8cc5603
+
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Sat, 22 May 2021 13:53:49 +0530
+
 latte-dock (0.9.11+git5.742987d3-1) norbert; urgency=medium
 
   * New upstream version 0.9.11+git5.742987d3
