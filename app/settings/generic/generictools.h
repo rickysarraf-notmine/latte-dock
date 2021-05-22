@@ -21,10 +21,6 @@
 #ifndef GENERICSETTINGSTOOLS_H
 #define GENERICSETTINGSTOOLS_H
 
-// local
-#include "../../data/layouticondata.h"
-#include "../../data/viewdata.h"
-
 // Qt
 #include <QPainter>
 #include <QPalette>
@@ -48,26 +44,29 @@ QPalette::ColorGroup colorGroup(const QStyleOption &option);
 QStringList subtracted(const QStringList &original, const QStringList &current);
 
 void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, const float textOpacity = 1.0);
-void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const QRect &target, const Latte::Data::LayoutIcon &icon);
+void drawFormattedText(QPainter *painter, const QStyleOptionMenuItem &option, const float textOpacity = 1.0);
+void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, const bool &isTextCentered = false, const float textOpacity = 1.0);
+
+//! background
+void drawBackground(QPainter *painter, const QStyleOptionViewItem &option);
+void drawBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option);
 
 //! simple icon
-QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
-void drawIconBackground(QPainter *painter, const QStyleOptionViewItem &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
-void drawIconBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, Qt::AlignmentFlag alignment = Qt::AlignLeft);
-void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon, Qt::AlignmentFlag alignment = Qt::AlignLeft);
+QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
+void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
+
+//! layout icon
+QRect remainedFromLayoutIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
+void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &isBackgroundFile, const QString &iconName, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
 
 //! changes indicator
 QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option);
-void drawChangesIndicatorBackground(QPainter *painter, const QStyleOptionViewItem &option);
 void drawChangesIndicator(QPainter *painter, const QStyleOptionViewItem &option);
 
 
 //! screen icon
 QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSize = -1);
 QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeometry, const int &maxIconSize = -1, const float brushOpacity = 1.0); // returns screen available rect
-void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionViewItem &option, const int &maxIconSize = -1);
-void drawScreenBackground(QPainter *painter, const QStyle *style, const QStyleOptionMenuItem &option, const int &maxIconSize = -1);
-void drawView(QPainter *painter, const QStyleOption &option, const Latte::Data::View &view, const QRect &availableScreenRect, const float brushOpacity = 1.0);
 
 int screenMaxLength(const QStyleOption &option, const int &maxIconSize = -1);
 

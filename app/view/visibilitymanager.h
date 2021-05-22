@@ -59,7 +59,9 @@ class VisibilityManager : public QObject
     Q_PROPERTY(bool raiseOnDesktop READ raiseOnDesktop WRITE setRaiseOnDesktop NOTIFY raiseOnDesktopChanged)
     Q_PROPERTY(bool raiseOnActivity READ raiseOnActivity WRITE setRaiseOnActivity NOTIFY raiseOnActivityChanged)    
     Q_PROPERTY(bool isHidden READ isHidden WRITE setIsHidden NOTIFY isHiddenChanged)
+    Q_PROPERTY(bool isShownFully READ isShownFully WRITE setIsShownFully NOTIFY isShownFullyChanged)
     Q_PROPERTY(bool isBelowLayer READ isBelowLayer NOTIFY isBelowLayerChanged)    
+    Q_PROPERTY(bool isSidebar READ isSidebar NOTIFY isSidebarChanged)
     Q_PROPERTY(bool containsMouse READ containsMouse NOTIFY containsMouseChanged)
 
     //! Floating Gap Window to identify mouse between the screenEdge and the view when it does not accept any other
@@ -98,6 +100,9 @@ public:
     bool isHidden() const;
     void setIsHidden(bool isHidden);
 
+    bool isShownFully() const;
+    void setIsShownFully(bool fully);
+
     bool hidingIsBlocked() const;
 
     bool containsMouse() const;
@@ -112,6 +117,7 @@ public:
     void setTimerHide(int msec);
 
     bool isSidebar() const;
+    bool hasBlockHidingEvent(const QString &type);
 
     //! KWin Edges Support functions
     bool enableKWinEdges() const;
@@ -152,6 +158,8 @@ signals:
     void isBelowLayerChanged();
     void isFloatingGapWindowEnabledChanged();
     void isHiddenChanged();
+    void isSidebarChanged();
+    void isShownFullyChanged();
     void hidingIsBlockedChanged();
     void containsMouseChanged();
     void strutsThicknessChanged();
@@ -176,6 +184,8 @@ private slots:
 
     //! KWin Edges Support functions
     void updateKWinEdgesSupport();
+
+    void updateSidebarState();
 
 private:
     void setContainsMouse(bool contains);
@@ -226,6 +236,8 @@ private:
     bool m_isBelowLayer{false};
     bool m_isHidden{false};
     bool m_isFloatingGapWindowEnabled{false};
+    bool m_isSidebar{false};
+    bool m_isShownFully{false};
     bool m_dragEnter{false};
     bool m_containsMouse{false};
     bool m_raiseTemporarily{false};

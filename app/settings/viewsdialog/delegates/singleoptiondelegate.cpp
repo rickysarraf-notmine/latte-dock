@@ -90,7 +90,8 @@ QWidget *SingleOption::createEditor(QWidget *parent, const QStyleOptionViewItem 
         action->setData(choices[i].id);
 
         if (choices[i].id == currentChoice) {
-            action->setIcon(QIcon::fromTheme("dialog-yes"));
+            action->setCheckable(true);
+            action->setChecked(true);
         }
 
         if (activeChoices.contains(choices[i].id)) {
@@ -185,6 +186,7 @@ void SingleOption::paint(QPainter *painter, const QStyleOptionViewItem &option, 
         textopacity = 0.25;
     }
 
+    Latte::drawBackground(painter, option);
     Latte::drawFormattedText(painter, myOptions, textopacity);
 }
 

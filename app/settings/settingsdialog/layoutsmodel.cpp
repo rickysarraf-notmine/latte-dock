@@ -404,69 +404,9 @@ Qt::ItemFlags Layouts::flags(const QModelIndex &index) const
     return flags;
 }
 
-void Layouts::setIconsPath(QString iconsPath)
-{
-    m_iconsPath = iconsPath;
-}
-
-Latte::Data::LayoutIcon Layouts::iconForCentralLayout(const int &row) const
-{
-    Latte::Data::LayoutIcon _icon;
-
-    if (!m_layoutsTable[row].icon.isEmpty()) {
-        //! if there is specific icon set from the user for this layout we draw only that icon
-        _icon.name = m_layoutsTable[row].icon;
-        _icon.isBackgroundFile = false;
-        return _icon;
-    }
-
-    if (inMultipleMode()) {
-        if (m_layoutsTable[row].activities.contains(Latte::Data::Layout::ALLACTIVITIESID)) {
-            _icon.name = m_activitiesTable[Latte::Data::Layout::ALLACTIVITIESID].icon;
-            _icon.isBackgroundFile = false;
-            return _icon;
-        } else if (m_layoutsTable[row].activities.contains(Latte::Data::Layout::FREEACTIVITIESID)) {
-            _icon.name = m_activitiesTable[Latte::Data::Layout::FREEACTIVITIESID].icon;
-            _icon.isBackgroundFile = false;
-            return _icon;
-        } else {
-            QStringList activitiesIds = m_layoutsTable[row].activities;
-
-            for(int i=0; i<activitiesIds.count(); ++i) {
-                QString id = activitiesIds[i];
-                if (m_activitiesTable.containsId(id)) {
-                    _icon.name = m_activitiesTable[id].icon;
-                    _icon.isBackgroundFile = false;
-                    //! first activity icon found
-                    return _icon;
-                }
-            }
-        }
-    }
-
-    //! fallback icon: background image
-    if (_icon.isEmpty()) {
-        QString colorPath;
-
-        if (m_layoutsTable[row].backgroundStyle == Layout::PatternBackgroundStyle && m_layoutsTable[row].background.isEmpty()) {
-            colorPath = m_iconsPath + "defaultcustomprint.jpg";
-        } else {
-            colorPath = m_layoutsTable[row].background.startsWith("/") ? m_layoutsTable[row].background : m_iconsPath + m_layoutsTable[row].color + "print.jpg";
-        }
-
-        if (QFileInfo(colorPath).exists()) {
-            _icon.isBackgroundFile = true;
-            _icon.name = colorPath;
-            return _icon;
-        }
-    }
-
-    return Latte::Data::LayoutIcon();
-}
-
 Latte::Data::LayoutIcon Layouts::icon(const int &row) const
 {
-    return iconForCentralLayout(row);
+    return m_corona->layoutsManager()->iconForLayout(m_layoutsTable[row]);
 }
 
 const Latte::Data::LayoutIcon Layouts::currentLayoutIcon(const QString &id) const

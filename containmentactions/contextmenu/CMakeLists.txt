@@ -1,6 +1,8 @@
 add_definitions(-DTRANSLATION_DOMAIN=\"plasma_containmentactions_lattecontextmenu\")
 
 set(contextmenu_SRCS
+    generictools.cpp
+    layoutmenuitemwidget.cpp
     menu.cpp
 )
 

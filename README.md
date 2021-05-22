@@ -11,6 +11,13 @@ Screenshots
 
 ![](https://cdn.kde.org/screenshots/latte-dock/latte-dock_settings.png)
 
+Development
+============
+
+- Official KDE repo in which you can also send your MRs is located at: https://invent.kde.org/plasma/latte-dock
+- Bug reports can be send at: https://bugs.kde.org/enter_bug.cgi?product=lattedock
+
+
 Installation
 ============
 
@@ -70,7 +77,6 @@ Minimum requirements:
 ### Ubuntu/Debian
 
 - [Ubuntu](https://packages.ubuntu.com/bionic/latte-dock)
-- [Rik Mills - ppa](https://launchpad.net/~rikmills/+archive/ubuntu/latte-dock)
 
 ### openSUSE
 

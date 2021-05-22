@@ -75,6 +75,7 @@ VisibilityManager::VisibilityManager(PlasmaQuick::ContainmentView *view)
 
     connect(this, &VisibilityManager::enableKWinEdgesChanged, this, &VisibilityManager::updateKWinEdgesSupport);
     connect(this, &VisibilityManager::modeChanged, this, &VisibilityManager::updateKWinEdgesSupport);
+    connect(this, &VisibilityManager::modeChanged, this, &VisibilityManager::updateSidebarState);
 
     connect(this, &VisibilityManager::isFloatingGapWindowEnabledChanged, this, &VisibilityManager::onIsFloatingGapWindowEnabledChanged);
 
@@ -379,6 +380,20 @@ void VisibilityManager::setMode(Latte::Types::Visibility mode)
     emit modeChanged();
 }
 
+void VisibilityManager::updateSidebarState()
+{
+    bool cursidebarstate = ((m_mode == Types::SidebarOnDemand)
+                            || (m_mode == Types::SidebarAutoHide));
+
+    if (m_isSidebar == cursidebarstate) {
+        return;
+    }
+
+    m_isSidebar == cursidebarstate;
+    emit isSidebarChanged();
+
+}
+
 void VisibilityManager::updateStrutsBasedOnLayoutsAndActivities(bool forceUpdate)
 {
     bool inMultipleLayoutsAndCurrent = (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts
@@ -495,6 +510,21 @@ void VisibilityManager::setIsHidden(bool isHidden)
     emit isHiddenChanged();
 }
 
+bool VisibilityManager::isShownFully() const
+{
+    return m_isShownFully;
+}
+
+void VisibilityManager::setIsShownFully(bool fully)
+{
+    if (m_isShownFully == fully) {
+        return;
+    }
+
+    m_isShownFully = fully;
+    emit isShownFullyChanged();
+}
+
 bool VisibilityManager::hidingIsBlocked() const
 {
     return (m_blockHidingEvents.count() > 0);
@@ -513,6 +543,11 @@ void VisibilityManager::setIsFloatingGapWindowEnabled(bool enabled)
 
     m_isFloatingGapWindowEnabled = enabled;
     emit isFloatingGapWindowEnabledChanged();
+}
+
+bool VisibilityManager::hasBlockHidingEvent(const QString &type)
+{
+    return (!type.isEmpty() && m_blockHidingEvents.contains(type));
 }
 
 void VisibilityManager::addBlockHidingEvent(const QString &type)
