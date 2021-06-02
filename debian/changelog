@@ -11,7 +11,10 @@ latte-dock (0.9.12-1) UNRELEASED; urgency=medium
   [ Scarlett Moore ]
   * New upstream bugfix release.
   * Update my email address.
-  * 
+  * Refresh copyright file <- 0.9.10
+    - ca* moved to same copyright as package
+      from kdeev variation.
+    - Reword KDEeV short format.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 18 May 2021 16:55:55 -0700
 
