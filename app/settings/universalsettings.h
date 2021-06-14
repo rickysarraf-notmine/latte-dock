@@ -1,21 +1,8 @@
 /*
-*  Copyright 2017  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2017 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2017 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #ifndef UNIVERSALSETTINGS_H
@@ -63,6 +50,7 @@ class UniversalSettings : public QObject
     Q_PROPERTY(QString singleModeLayoutName READ singleModeLayoutName WRITE setSingleModeLayoutName NOTIFY singleModeLayoutNameChanged)
 
     Q_PROPERTY(QStringList launchers READ launchers WRITE setLaunchers NOTIFY launchersChanged)
+    Q_PROPERTY(QStringList contextMenuActionsAlwaysShown READ contextMenuActionsAlwaysShown WRITE setContextMenuActionsAlwaysShown NOTIFY actionsChanged)
 
     Q_PROPERTY(Latte::Settings::MouseSensitivity sensitivity READ sensitivity WRITE setSensitivity NOTIFY sensitivityChanged)
 
@@ -109,6 +97,9 @@ public:
     QString singleModeLayoutName() const;
     void setSingleModeLayoutName(QString layoutName);
 
+    QStringList contextMenuActionsAlwaysShown() const;
+    void setContextMenuActionsAlwaysShown(const QStringList &actions);
+
     QStringList launchers() const;
     void setLaunchers(QStringList launcherList);
 
@@ -131,6 +122,7 @@ public slots:
     void syncSettings();
 
 signals:
+    void actionsChanged();
     void autostartChanged();
     void badges3DStyleChanged();
     void canDisableBordersChanged();
@@ -189,6 +181,7 @@ private:
     QString m_singleModeLayoutName;
 
     QStringList m_launchers;
+    QStringList m_contextMenuActionsAlwaysShown;
 
     MemoryUsage::LayoutsMemory m_memoryUsage;
     Settings::MouseSensitivity m_sensitivity{Settings::HighMouseSensitivity};

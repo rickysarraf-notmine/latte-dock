@@ -1,22 +1,7 @@
 /*
- * Copyright 2019  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #ifndef GENERICSETTINGSTOOLS_H
 #define GENERICSETTINGSTOOLS_H
@@ -38,14 +23,16 @@ bool isHovered(const QStyleOption &option);
 bool isTextCentered(const QStyleOptionViewItem &option);
 
 QPalette::ColorGroup colorGroup(const QStyleOption &option);
+Qt::AlignmentFlag horizontalAlignment(Qt::Alignment alignments);
 
 //! strings that even though they were initially at original list
 //! now they are not present to current list
 QStringList subtracted(const QStringList &original, const QStringList &current);
 
+QRect remainedFromFormattedText(const QStyleOption &option, const QString &text, Qt::AlignmentFlag alignment = Qt::AlignLeft);
 void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, const float textOpacity = 1.0);
 void drawFormattedText(QPainter *painter, const QStyleOptionMenuItem &option, const float textOpacity = 1.0);
-void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, const bool &isTextCentered = false, const float textOpacity = 1.0);
+void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, Qt::AlignmentFlag alignment = Qt::AlignLeft, const float textOpacity = 1.0);
 
 //! background
 void drawBackground(QPainter *painter, const QStyleOptionViewItem &option);
@@ -63,6 +50,9 @@ void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &i
 QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option);
 void drawChangesIndicator(QPainter *painter, const QStyleOptionViewItem &option);
 
+int primitiveCheckBoxWidth(const QStyleOptionButton &option, const QWidget *widget = nullptr);
+QRect remainedFromCheckBox(const QStyleOptionButton &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, const QWidget *widget = nullptr);
+void drawCheckBox(QPainter *painter, const QStyleOptionButton &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, const QWidget *widget = nullptr);
 
 //! screen icon
 QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSize = -1);

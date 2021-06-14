@@ -1,20 +1,6 @@
 /*
-*  Copyright 2018 Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2018 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #ifndef MENU_H
@@ -48,13 +34,13 @@ public:
     QAction *action(const QString &name);
 private Q_SLOTS:
     void makeActions();
-    void onUserConfiguringChanged(const bool &configuring);
     void populateLayouts();
     void populateMoveToLayouts();
     void populateViewTemplates();
     void quitApplication();
     void requestConfiguration();
     void requestWidgetExplorer();
+    void updateVisibleActions();
 
     void addView(QAction *action);
     void moveToLayout(QAction *action);
@@ -64,27 +50,13 @@ private:
     QStringList m_data;
     QStringList m_viewTemplates;
 
-    QList<QAction *>m_actions;
+    QStringList m_actionsAlwaysShown;
+    QStringList m_activeLayoutNames;
 
-    QAction *m_sectionAction{nullptr};
-    QAction *m_separator{nullptr};
+    QHash<QString, QAction *> m_actions;
 
-    QAction *m_addWidgetsAction{nullptr};
-    QAction *m_configureAction{nullptr};
-    QAction *m_duplicateAction{nullptr};
-    QAction *m_exportViewAction{nullptr};
-    QAction *m_preferenceAction{nullptr};
-    QAction *m_printAction{nullptr};
-    QAction *m_removeAction{nullptr};
-    QAction *m_quitApplication{nullptr};
-
-    QAction *m_addViewAction{nullptr};
     QMenu *m_addViewMenu{nullptr};
-
-    QAction *m_layoutsAction{nullptr};
     QMenu *m_switchLayoutsMenu{nullptr};
-
-    QAction *m_moveAction{nullptr};
     QMenu *m_moveToLayoutMenu{nullptr};
 };
 

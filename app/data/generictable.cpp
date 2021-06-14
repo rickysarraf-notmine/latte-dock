@@ -1,22 +1,7 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 // local
 #include "generictable.h"
@@ -288,11 +273,23 @@ QString GenericTable<T>::idForName(const QString &name) const
 }
 
 template <class T>
+QStringList GenericTable<T>::ids() const
+{
+    QStringList idlist;
+
+    for(int i=0; i<m_list.count(); ++i) {
+        idlist << m_list[i].id;
+    }
+
+    return idlist;
+}
+
+template <class T>
 QStringList GenericTable<T>::names() const
 {
     QStringList nms;
 
-    for(int  i=0; i<m_list.count(); ++i) {
+    for(int i=0; i<m_list.count(); ++i) {
         nms << m_list[i].name;
     }
 

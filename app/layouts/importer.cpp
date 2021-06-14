@@ -1,21 +1,8 @@
 /*
-*  Copyright 2017  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2017 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2017 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "importer.h"
@@ -31,6 +18,7 @@
 
 // Qt
 #include <QFile>
+#include <QLatin1String>
 
 // KDE
 #include <KArchive/KTar>
@@ -119,10 +107,10 @@ bool Importer::importOldLayout(QString oldAppletsPath, QString newName, bool alt
 
         bool shouldImport = false;
 
-        if (plugin == "org.kde.latte.containment" && session == DefaultSession && !alternative) {
+        if (plugin == QLatin1String("org.kde.latte.containment") && session == DefaultSession && !alternative) {
             qDebug() << containmentId << " - " << plugin << " - " << session;
             shouldImport = true;
-        } else if (plugin == "org.kde.latte.containment" && session == AlternativeSession && alternative) {
+        } else if (plugin == QLatin1String("org.kde.latte.containment") && session == AlternativeSession && alternative) {
             qDebug() << containmentId << " - " << plugin << " - " << session;
             shouldImport = true;
         }
@@ -329,8 +317,8 @@ bool Importer::importOldConfiguration(QString oldConfigPath, QString newName)
         for(const auto &name : rootDir->entries()) {
             auto fileEntry = rootDir->file(name);
 
-            if (fileEntry && (fileEntry->name() == "lattedockrc"
-                              || fileEntry->name() == "lattedock-appletsrc")) {
+            if (fileEntry && (fileEntry->name() == QLatin1String("lattedockrc")
+                              || fileEntry->name() == QLatin1String("lattedock-appletsrc"))) {
                 if (!fileEntry->copyTo(tempDir.absolutePath())) {
                     qInfo() << i18nc("import/export config", "The extracted file could not be copied!!!");
                     archive.close();

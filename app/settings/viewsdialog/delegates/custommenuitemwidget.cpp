@@ -1,20 +1,6 @@
 /*
-*  Copyright 2021 Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "custommenuitemwidget.h"
@@ -67,7 +53,7 @@ QSize CustomMenuItemWidget::minimumSizeHint() const
    QStyleOptionMenuItem opt;
    QSize contentSize = fontMetrics().size(Qt::TextSingleLine | Qt::TextShowMnemonic, m_action->text());
    contentSize.setHeight(contentSize.height() + 9);
-   contentSize.setWidth(contentSize.width() + 4 * contentSize.height());
+   contentSize.setWidth(contentSize.width() + 1.5 * contentSize.height());
    return style()->sizeFromContents(QStyle::CT_MenuItem, &opt, contentSize, this);
 }
 
@@ -80,6 +66,8 @@ void CustomMenuItemWidget::paintEvent(QPaintEvent* e)
     opt.text = m_action->text();
     opt.menuItemType = QStyleOptionMenuItem::Normal;
     opt.menuHasCheckableItems = false;
+
+    bool inScreensColumn = !m_view.isValid();
 
     if (rect().contains(mapFromGlobal(QCursor::pos()))) {
         opt.state |= QStyle::State_Selected;
@@ -122,6 +110,10 @@ void CustomMenuItemWidget::paintEvent(QPaintEvent* e)
     }
 
     opt.rect = remained;
+
+    if (m_screen.isActive && inScreensColumn) {
+        opt.text = "<b>" + opt.text + "</b>";
+    }
 
     //style()->drawControl(QStyle::CE_MenuItem, &opt, &painter, this);
     Latte::drawFormattedText(&painter, opt);

@@ -1,21 +1,8 @@
 /*
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "view.h"
@@ -299,6 +286,7 @@ void View::init(Plasma::Containment *plasma_containment)
     connect(this, &View::maxNormalThicknessChanged, this, &View::editThicknessChanged);
 
     connect(this, &View::activitiesChanged, this, &View::applyActivitiesToWindows);
+    connect(m_positioner, &ViewPart::Positioner::winIdChanged, this, &View::applyActivitiesToWindows);
 
     connect(this, &View::localGeometryChanged, this, [&]() {
         updateAbsoluteGeometry();
@@ -1134,10 +1122,10 @@ void View::setActivities(const QStringList &ids)
 
 void View::applyActivitiesToWindows()
 {
-    if (m_visibility && m_layout) {
+    if (m_visibility && m_positioner && m_layout) {
         QStringList runningActivities = activities();
 
-        m_windowsTracker->setWindowOnActivities(*this, runningActivities);
+        m_positioner->setWindowOnActivities(m_positioner->trackedWindowId(), runningActivities);
 
         //! config windows
         if (m_primaryConfigView) {
@@ -1145,7 +1133,15 @@ void View::applyActivitiesToWindows()
         }
 
         if (m_appletConfigView) {
-            m_windowsTracker->setWindowOnActivities(*m_appletConfigView, runningActivities);
+            Latte::WindowSystem::WindowId appletconfigviewid;
+
+            if (KWindowSystem::isPlatformX11()) {
+                appletconfigviewid = m_appletConfigView->winId();
+            } else {
+                appletconfigviewid = m_corona->wm()->winIdFor("latte-dock", m_appletConfigView->title());
+            }
+
+            m_positioner->setWindowOnActivities(appletconfigviewid, runningActivities);
         }
 
         //! hidden windows

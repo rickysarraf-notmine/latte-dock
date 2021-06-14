@@ -1,22 +1,7 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #ifndef SETTINGSLAYOUTSCONTROLLER_H
 #define SETTINGSLAYOUTSCONTROLLER_H
@@ -28,6 +13,8 @@
 #include "../../lattecorona.h"
 #include "../../data/layoutdata.h"
 #include "../../data/layoutstable.h"
+#include "../../data/screendata.h"
+#include "../../layout/centrallayout.h"
 
 // Qt
 #include <QAbstractItemModel>
@@ -110,6 +97,10 @@ public:
     const Latte::Data::Layout addLayoutForFile(QString file, QString layoutName = QString(), bool newTempDirectory = true);
     const Latte::Data::Layout addLayoutByText(QString rawLayoutText);
 
+    CentralLayout *centralLayout(const QString &currentLayoutId);
+
+    const Latte::Data::ScreensTable screensData();
+
     //! import layouts from Latte versions <= v0.7.x
     bool importLayoutsFromV1ConfigFile(QString file);
 
@@ -138,6 +129,8 @@ private:
 
     QString uniqueTempDirectory();
     QString uniqueLayoutName(QString name);
+
+    QList<int> join(const QList<int> &currentRecords, const QList<int> &newRecords);
 
     void initialMessageForErroredLayouts(const int &count);
     void initialMessageForWarningLayouts(const int &count);

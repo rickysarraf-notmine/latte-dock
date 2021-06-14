@@ -1,20 +1,6 @@
 /*
-*  Copyright 2019  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "abstractlayout.h"
@@ -23,6 +9,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QFile>
+#include <QLatin1String>
 
 // KDE
 #include <KSharedConfig>
@@ -265,27 +252,27 @@ QString AbstractLayout::defaultCustomBackground()
 QString AbstractLayout::defaultTextColor(const QString &color)
 {
     //! the user is in default layout theme
-    if (color == "blue") {
+    if (color == QLatin1String("blue")) {
         return "#D7E3FF";
-    } else if (color == "brown") {
+    } else if (color == QLatin1String("brown")) {
         return "#F1DECB";
-    } else if (color == "darkgrey") {
+    } else if (color == QLatin1String("darkgrey")) {
         return "#ECECEC";
-    } else if (color == "gold") {
+    } else if (color == QLatin1String("gold")) {
         return "#7C3636";
-    } else if (color == "green") {
+    } else if (color == QLatin1String("green")) {
         return "#4D7549";
-    } else if (color == "lightskyblue") {
+    } else if (color == QLatin1String("lightskyblue")) {
         return "#0C2A43";
-    } else if (color == "orange") {
+    } else if (color == QLatin1String("orange")) {
         return "#6F3902";
-    } else if (color == "pink") {
+    } else if (color == QLatin1String("pink")) {
         return "#743C46";
-    } else if (color == "purple") {
+    } else if (color == QLatin1String("purple")) {
         return "#ECD9FF";
-    }  else if (color == "red") {
+    }  else if (color == QLatin1String("red")) {
         return "#F3E4E4";
-    }  else if (color == "wheat") {
+    }  else if (color == QLatin1String("wheat")) {
         return "#6A4E25";
     }  else {
         return "#FCFCFC";

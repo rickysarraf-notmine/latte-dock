@@ -1,22 +1,7 @@
 /*
- * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "viewscontroller.h"
 
@@ -417,7 +402,7 @@ void Views::onCurrentLayoutChanged()
         QObject::disconnect(var);
     }
 
-    Latte::CentralLayout *currentlayout = m_handler->centralLayout(currentlayoutdata.id);
+    Latte::CentralLayout *currentlayout = m_handler->layoutsController()->centralLayout(currentlayoutdata.id);
 
     if (currentlayout && currentlayout->isActive()) {
         m_currentLayoutConnections << connect(currentlayout, &Layout::GenericLayout::viewsCountChanged, this, [&, currentlayout](){
@@ -651,7 +636,7 @@ void Views::showDefaultInlineMessageValidator()
 
     connect(validateaction, &QAction::triggered, this, [&, currentlayout]() {
 
-        auto centrallayout = m_handler->centralLayout(currentlayout.id);
+        auto centrallayout = m_handler->layoutsController()->centralLayout(currentlayout.id);
         if (centrallayout && !centrallayout->isActive()) {
             KSharedConfigPtr lFile = KSharedConfig::openConfig(centrallayout->file());
             //! update configuration with latest changes
@@ -861,7 +846,7 @@ void Views::messageForWarningOrphanedSubContainments(const Data::Warning &warnin
     Latte::Data::Layout currentlayout = m_handler->currentData();
 
     connect(repairlayoutaction, &QAction::triggered, this, [&, currentlayout, orphaned]() {
-        auto centrallayout = m_handler->centralLayout(currentlayout.id);
+        auto centrallayout = m_handler->layoutsController()->centralLayout(currentlayout.id);
 
         for (int i=0; i<orphaned.count(); ++i) {
             centrallayout->removeOrphanedSubContainment(orphaned[i]);
@@ -883,7 +868,7 @@ void Views::save()
 
     Latte::Data::Layout originallayout = m_handler->originalData();
     Latte::Data::Layout currentlayout = m_handler->currentData();
-    Latte::CentralLayout *central = m_handler->centralLayout(currentlayout.id);
+    Latte::CentralLayout *central = m_handler->layoutsController()->centralLayout(currentlayout.id);
 
     //! views in model
     Latte::Data::ViewsTable originalViews = m_model->originalViewsData();
@@ -957,7 +942,7 @@ void Views::save()
         //! Be Careful: Remove deprecated views from Cut->Paste Action
         QString origincurrentid = cuttedpastedviews[vid].originLayout();
         Data::Layout originlayout = m_handler->layoutsController()->originalData(origincurrentid);
-        Latte::CentralLayout *origin = m_handler->centralLayout(originlayout.id);
+        Latte::CentralLayout *origin = m_handler->layoutsController()->centralLayout(originlayout.id);
 
         Data::ViewsTable originviews = Latte::Layouts::Storage::self()->views(origin);
 

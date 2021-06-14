@@ -1,21 +1,7 @@
 /*
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 import QtQuick 2.0
@@ -47,6 +33,7 @@ Item{
     Binding{
         target: hiddenSpacer
         property: "nHiddenSize"
+        when: !hiddenSizeDelayer.running && itemIndex > -1 //! helps to solve BUGLOCALREF: #1
         value: {
             if (abilityItem.isHidden) {
                 return 0;
@@ -92,5 +79,22 @@ Item{
             border.color: "red"
             color: "transparent"
         }
+    }
+
+    //! Delayer
+    onSeparatorSpaceChanged: {
+        if (!hiddenSizeDelayer.running) {
+            hiddenSizeDelayer.start();
+        }
+    }
+
+    //! BUGLOCALREF: #1
+    //! Timer that helps to avoid binding loops from head/tailItemIsVisibleSeparator by delaying to update the spacer size
+    //! This solution needs confirmation. That specific binding loop is very nasty as it breaks the tasks model consistency
+    //! somehow when switching between different activities and the model contains separators that become shown and hidden
+    //! during the activity change
+    Timer {
+        id: hiddenSizeDelayer
+        interval: 400
     }
 }

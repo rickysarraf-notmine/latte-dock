@@ -1,22 +1,7 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "tabpreferenceshandler.h"
 
@@ -25,6 +10,7 @@
 #include "ui_settingsdialog.h"
 #include "settingsdialog.h"
 #include "../universalsettings.h"
+#include "../actionsdialog/actionsdialog.h"
 #include "../../apptypes.h"
 #include "../../lattecorona.h"
 #include "../../plasma/extended/theme.h"
@@ -53,6 +39,9 @@ void TabPreferences::initUi()
     m_mouseSensitivityButtons->addButton(m_ui->mediumSensitivityBtn, Latte::Settings::MediumMouseSensitivity);
     m_mouseSensitivityButtons->addButton(m_ui->highSensitivityBtn, Latte::Settings::HighMouseSensitivity);
     m_mouseSensitivityButtons->setExclusive(true);
+
+    //! Buttons
+    connect(m_ui->contextMenuActionsBtn, &QPushButton::clicked, this, &TabPreferences::onActionsBtnPressed);
 
     //! signals
     connect(m_mouseSensitivityButtons, static_cast<void(QButtonGroup::*)(int, bool)>(&QButtonGroup::buttonToggled),
@@ -102,12 +91,15 @@ void TabPreferences::initUi()
         m_preferences.borderlessMaximized = m_ui->noBordersForMaximizedChkBox->isChecked();
         emit dataChanged();
     });
+
+    connect(this, &TabPreferences::contextActionsChanged, this, &TabPreferences::dataChanged);
 }
 
 void TabPreferences::initSettings()
 {
     o_preferences.autostart = m_corona->universalSettings()->autostart();
     o_preferences.badgeStyle3D = m_corona->universalSettings()->badges3DStyle();
+    o_preferences.contextMenuAlwaysActions = m_corona->universalSettings()->contextMenuActionsAlwaysShown();
     o_preferences.layoutsInformationWindow = m_corona->universalSettings()->showInfoWindow();
     o_preferences.metaPressForAppLauncher = m_corona->universalSettings()->kwin_metaForwardedToLatte();
     o_preferences.metaHoldForBadges = m_corona->universalSettings()->metaPressAndHoldEnabled();
@@ -118,6 +110,21 @@ void TabPreferences::initSettings()
     m_preferences = o_preferences;
 
     updateUi();
+}
+
+QStringList TabPreferences::contextMenuAlwaysActions() const
+{
+    return m_preferences.contextMenuAlwaysActions;
+}
+
+void TabPreferences::setContextMenuAlwaysActions(const QStringList &actions)
+{
+    if (m_preferences.contextMenuAlwaysActions == actions) {
+        return;
+    }
+
+    m_preferences.contextMenuAlwaysActions = actions;
+    emit contextActionsChanged();
 }
 
 void TabPreferences::updateUi()
@@ -152,6 +159,12 @@ bool TabPreferences::inDefaultValues() const
     return m_preferences.inDefaultValues();
 }
 
+void TabPreferences::onActionsBtnPressed()
+{
+    auto viewsDlg = new Settings::Dialog::ActionsDialog(m_parentDialog, this);
+    viewsDlg->exec();
+}
+
 void TabPreferences::reset()
 {
     m_preferences = o_preferences;
@@ -169,6 +182,7 @@ void TabPreferences::save()
     m_corona->universalSettings()->setSensitivity(m_preferences.mouseSensitivity);
     m_corona->universalSettings()->setAutostart(m_preferences.autostart);
     m_corona->universalSettings()->setBadges3DStyle(m_preferences.badgeStyle3D);
+    m_corona->universalSettings()->setContextMenuActionsAlwaysShown(m_preferences.contextMenuAlwaysActions);
     m_corona->universalSettings()->kwin_forwardMetaToLatte(m_preferences.metaPressForAppLauncher);
     m_corona->universalSettings()->setMetaPressAndHoldEnabled(m_preferences.metaHoldForBadges);
     m_corona->universalSettings()->setShowInfoWindow(m_preferences.layoutsInformationWindow);

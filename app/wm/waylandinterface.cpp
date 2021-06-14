@@ -1,21 +1,8 @@
 /*
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "waylandinterface.h"
@@ -34,6 +21,7 @@
 #include <QApplication>
 #include <QtX11Extras/QX11Info>
 #include <QRasterWindow>
+#include <QLatin1String>
 
 // KDE
 #include <KWindowSystem>
@@ -374,10 +362,50 @@ void WaylandInterface::switchToPreviousVirtualDesktop()
 #endif
 }
 
-void WaylandInterface::setWindowOnActivities(QWindow &window, const QStringList &activities)
+void WaylandInterface::setWindowOnActivities(const WindowId &wid, const QStringList &nextactivities)
 {
-    //! needs to updated to wayland case
-    // KWindowSystem::setOnActivities(view.winId(), activities);
+#if KF5_VERSION_MINOR >= 81
+    auto winfo = requestInfo(wid);
+    auto w = windowFor(wid);
+
+    if (!w) {
+        return;
+    }
+
+    QStringList curactivities = winfo.activities();
+
+    if (!winfo.isOnAllActivities() && nextactivities.isEmpty()) {
+        //! window must be set to all activities
+        for(int i=0; i<curactivities.count(); ++i) {
+            w->requestLeaveActivity(curactivities[i]);
+        }
+    } else if (curactivities != nextactivities) {
+        QStringList requestenter;
+        QStringList requestleave;
+
+        for (int i=0; i<nextactivities.count(); ++i) {
+            if (!curactivities.contains(nextactivities[i])) {
+                requestenter << nextactivities[i];
+            }
+        }
+
+        for (int i=0; i<curactivities.count(); ++i) {
+            if (!nextactivities.contains(curactivities[i])) {
+                requestleave << curactivities[i];
+            }
+        }
+
+        //! leave afterwards from deprecated activities
+        for (int i=0; i<requestleave.count(); ++i) {
+            w->requestLeaveActivity(requestleave[i]);
+        }
+
+        //! first enter to new activities
+        for (int i=0; i<requestenter.count(); ++i) {
+            w->requestEnterActivity(requestenter[i]);
+        }
+    }
+#endif
 }
 
 void WaylandInterface::removeViewStruts(QWindow &view)
@@ -489,8 +517,8 @@ WindowInfoWrap WaylandInterface::requestInfo(WindowId wid)
     //!used to track Plasma DesktopView windows because during startup can not be identified properly
     bool plasmaBlockedWindow = w && (w->appId() == QLatin1String("org.kde.plasmashell")) && !isAcceptableWindow(w);
 
-    if (w && isValidWindow(w) && !plasmaBlockedWindow) {
-        winfoWrap.setIsValid(true);
+    if (w) {
+        winfoWrap.setIsValid(isValidWindow(w) && !plasmaBlockedWindow);
         winfoWrap.setWid(wid);
         winfoWrap.setParentId(w->parentWindow() ? w->parentWindow()->internalId() : 0);
         winfoWrap.setIsActive(w->isActive());
@@ -500,7 +528,11 @@ WindowInfoWrap WaylandInterface::requestInfo(WindowId wid)
         winfoWrap.setIsFullscreen(w->isFullscreen());
         winfoWrap.setIsShaded(w->isShaded());
         winfoWrap.setIsOnAllDesktops(w->isOnAllDesktops());
+#if KF5_VERSION_MINOR >= 81
+        winfoWrap.setIsOnAllActivities(w->plasmaActivities().isEmpty());
+#else
         winfoWrap.setIsOnAllActivities(true);
+#endif
         winfoWrap.setIsKeepAbove(w->isKeepAbove());
         winfoWrap.setIsKeepBelow(w->isKeepBelow());
         winfoWrap.setGeometry(w->geometry());
@@ -525,7 +557,12 @@ WindowInfoWrap WaylandInterface::requestInfo(WindowId wid)
 #if KF5_VERSION_MINOR >= 52
         winfoWrap.setDesktops(w->plasmaVirtualDesktops());
 #endif
+
+#if KF5_VERSION_MINOR >= 81
+        winfoWrap.setActivities(w->plasmaActivities());
+#else
         winfoWrap.setActivities(QStringList());
+#endif
     } else {
         winfoWrap.setIsValid(false);
     }
@@ -889,6 +926,12 @@ void WaylandInterface::trackWindow(KWayland::Client::PlasmaWindow *w)
     connect(w, &PlasmaWindow::virtualDesktopChanged, this, &WaylandInterface::updateWindow);
 #endif
 
+#if KF5_VERSION_MINOR >= 81
+    connect(w, &PlasmaWindow::plasmaActivityEntered, this, &WaylandInterface::updateWindow);
+    connect(w, &PlasmaWindow::plasmaActivityLeft, this, &WaylandInterface::updateWindow);
+#endif
+
+
     connect(w, &PlasmaWindow::unmapped, this, &WaylandInterface::windowUnmapped);
 }
 
@@ -916,6 +959,11 @@ void WaylandInterface::untrackWindow(KWayland::Client::PlasmaWindow *w)
     disconnect(w, &PlasmaWindow::virtualDesktopChanged, this, &WaylandInterface::updateWindow);
 #endif
 
+#if KF5_VERSION_MINOR >= 81
+    disconnect(w, &PlasmaWindow::plasmaActivityEntered, this, &WaylandInterface::updateWindow);
+    disconnect(w, &PlasmaWindow::plasmaActivityLeft, this, &WaylandInterface::updateWindow);
+#endif
+
     disconnect(w, &PlasmaWindow::unmapped, this, &WaylandInterface::windowUnmapped);
 }
 
@@ -929,7 +977,7 @@ void WaylandInterface::windowCreatedProxy(KWayland::Client::PlasmaWindow *w)
     trackWindow(w);
     emit windowAdded(w->internalId());
 
-    if (w->appId() == "latte-dock") {
+    if (w->appId() == QLatin1String("latte-dock")) {
         emit latteWindowAdded();
     }
 }

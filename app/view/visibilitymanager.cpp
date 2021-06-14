@@ -1,21 +1,8 @@
 /*
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "visibilitymanager.h"
@@ -330,11 +317,7 @@ void VisibilityManager::setMode(Latte::Types::Visibility mode)
 
     case Types::WindowsCanCover:
         m_connections[base] = connect(this, &VisibilityManager::containsMouseChanged, this, [&]() {
-            if (m_containsMouse) {
-                emit mustBeShown();
-            } else {
-                raiseView(false);
-            }
+            raiseView(m_containsMouse);
         });
 
         raiseView(m_containsMouse);
@@ -835,11 +818,11 @@ bool VisibilityManager::isValidMode() const
 void VisibilityManager::applyActivitiesToHiddenWindows(const QStringList &activities)
 {
     if (m_edgeGhostWindow) {
-        m_wm->setWindowOnActivities(*m_edgeGhostWindow, activities);
+        m_wm->setWindowOnActivities(m_edgeGhostWindow->trackedWindowId(), activities);
     }
 
     if (m_floatingGapWindow) {
-        m_wm->setWindowOnActivities(*m_floatingGapWindow, activities);
+        m_wm->setWindowOnActivities(m_floatingGapWindow->trackedWindowId(), activities);
     }
 }
 

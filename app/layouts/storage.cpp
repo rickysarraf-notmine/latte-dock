@@ -1,20 +1,6 @@
 /*
-*  Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "storage.h"
@@ -34,6 +20,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLatin1String>
 
 // KDE
 #include <KConfigGroup>
@@ -99,7 +86,7 @@ bool Storage::isLatteContainment(const Plasma::Containment *containment) const
         return false;
     }
 
-    if (containment->pluginMetaData().pluginId() == "org.kde.latte.containment") {
+    if (containment->pluginMetaData().pluginId() == QLatin1String("org.kde.latte.containment")) {
         return true;
     }
 
@@ -109,7 +96,7 @@ bool Storage::isLatteContainment(const Plasma::Containment *containment) const
 bool Storage::isLatteContainment(const KConfigGroup &group) const
 {
     QString pluginId = group.readEntry("plugin", "");
-    return pluginId == "org.kde.latte.containment";
+    return pluginId == QLatin1String("org.kde.latte.containment");
 }
 
 bool Storage::isSubContainment(const Layout::GenericLayout *layout, const Plasma::Applet *applet) const
@@ -298,7 +285,7 @@ bool Storage::appletGroupIsValid(const KConfigGroup &appletGroup)
 {
     return !( appletGroup.keyList().count() == 0
               && appletGroup.groupList().count() == 1
-              && appletGroup.groupList().at(0) == "Configuration"
+              && appletGroup.groupList().at(0) == QLatin1String("Configuration")
               && appletGroup.group("Configuration").keyList().count() == 1
               && appletGroup.group("Configuration").hasKey("PreloadWeight") );
 }

@@ -1,22 +1,7 @@
 /*
- * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "viewsmodel.h"
 
@@ -204,18 +189,22 @@ void Views::initEdges()
     int i=0;
     s_edges << Data::View(QString::number(Plasma::Types::TopEdge), i18nc("top edge", "Top"));
     s_edges[i].edge = Plasma::Types::TopEdge; s_edges[i].alignment = Latte::Types::Center;
+    s_edges[i].setState(Data::View::IsCreated);
 
     i++;
     s_edges << Data::View(QString::number(Plasma::Types::LeftEdge), i18nc("left edge", "Left"));
     s_edges[i].edge = Plasma::Types::LeftEdge; s_edges[i].alignment = Latte::Types::Center;
+    s_edges[i].setState(Data::View::IsCreated);
 
     i++;
     s_edges << Data::View(QString::number(Plasma::Types::BottomEdge), i18nc("bottom edge", "Bottom"));
     s_edges[i].edge = Plasma::Types::BottomEdge; s_edges[i].alignment = Latte::Types::Center;
+    s_edges[i].setState(Data::View::IsCreated);
 
     i++;
     s_edges << Data::View(QString::number(Plasma::Types::RightEdge), i18nc("right edge", "Right"));
     s_edges[i].edge = Plasma::Types::RightEdge; s_edges[i].alignment = Latte::Types::Center;
+    s_edges[i].setState(Data::View::IsCreated);
 }
 
 void Views::initAlignments()
@@ -226,30 +215,38 @@ void Views::initAlignments()
     int i=0; // Left / Top
     s_horizontalAlignments << Data::View(QString::number(Latte::Types::Left), i18nc("left alignment", "Left"));
     s_horizontalAlignments[i].edge = Plasma::Types::BottomEdge; s_horizontalAlignments[i].alignment = Latte::Types::Left;
+    s_horizontalAlignments[i].setState(Data::View::IsCreated);
 
     s_verticalAlignments << Data::View(QString::number(Latte::Types::Top), i18nc("top alignment", "Top"));
     s_verticalAlignments[i].edge = Plasma::Types::LeftEdge; s_verticalAlignments[i].alignment = Latte::Types::Top;
+    s_verticalAlignments[i].setState(Data::View::IsCreated);
 
     i++; // Center
     s_horizontalAlignments << Data::View(QString::number(Latte::Types::Center), i18nc("center alignment", "Center"));
     s_horizontalAlignments[i].edge = Plasma::Types::BottomEdge; s_horizontalAlignments[i].alignment = Latte::Types::Center;
+    s_horizontalAlignments[i].setState(Data::View::IsCreated);
 
     s_verticalAlignments << s_horizontalAlignments[1];
     s_verticalAlignments[i].edge = Plasma::Types::LeftEdge;
+    s_verticalAlignments[i].setState(Data::View::IsCreated);
 
     i++; // Right / Bottom
     s_horizontalAlignments << Data::View(QString::number(Latte::Types::Right), i18nc("right alignment", "Right"));
     s_horizontalAlignments[i].edge = Plasma::Types::BottomEdge; s_horizontalAlignments[i].alignment = Latte::Types::Right;
+    s_horizontalAlignments[i].setState(Data::View::IsCreated);
 
     s_verticalAlignments << Data::View(QString::number(Latte::Types::Bottom), i18nc("bottom alignment", "Bottom"));
     s_verticalAlignments[i].edge = Plasma::Types::LeftEdge; s_verticalAlignments[i].alignment = Latte::Types::Bottom;
+    s_verticalAlignments[i].setState(Data::View::IsCreated);
 
     i++; // Justify
     s_horizontalAlignments << Data::View(QString::number(Latte::Types::Justify), i18nc("justify alignment", "Justify"));
     s_horizontalAlignments[i].edge = Plasma::Types::BottomEdge; s_horizontalAlignments[i].alignment = Latte::Types::Justify;
+    s_horizontalAlignments[i].setState(Data::View::IsCreated);
 
     s_verticalAlignments << s_horizontalAlignments[3];
     s_verticalAlignments[i].edge = Plasma::Types::LeftEdge;
+    s_verticalAlignments[i].setState(Data::View::IsCreated);
 }
 
 Data::ViewsTable Views::edgesChoices(const Data::View &view) const

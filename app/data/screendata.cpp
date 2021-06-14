@@ -1,22 +1,7 @@
 /*
- * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "screendata.h"
 
@@ -29,6 +14,8 @@ Screen::Screen()
     : Generic(),
       hasExplicitViews(false),
       isActive(false),
+      isRemovable(false),
+      isSelected(false),
       geometry(QRect(0, 0, 1920, 1080))
 {
 }
@@ -37,6 +24,8 @@ Screen::Screen(Screen &&o)
     : Generic(o),
       hasExplicitViews(o.hasExplicitViews),
       isActive(o.isActive),
+      isRemovable(o.isRemovable),
+      isSelected(o.isSelected),
       geometry(o.geometry)
 {
 }
@@ -45,6 +34,8 @@ Screen::Screen(const Screen &o)
     : Generic(o),
       hasExplicitViews(o.hasExplicitViews),
       isActive(o.isActive),
+      isRemovable(o.isRemovable),
+      isSelected(o.isSelected),
       geometry(o.geometry)
 {
 }
@@ -61,6 +52,8 @@ Screen &Screen::operator=(const Screen &rhs)
     name = rhs.name;
     hasExplicitViews = rhs.hasExplicitViews;
     isActive = rhs.isActive;
+    isSelected = rhs.isSelected;
+    isRemovable = rhs.isRemovable;
     geometry = rhs.geometry;
 
     return (*this);
@@ -72,6 +65,8 @@ Screen &Screen::operator=(Screen &&rhs)
     name = rhs.name;
     hasExplicitViews = rhs.hasExplicitViews;
     isActive = rhs.isActive;
+    isRemovable = rhs.isRemovable;
+    isSelected = rhs.isSelected;
     geometry = rhs.geometry;
 
     return (*this);
@@ -83,6 +78,8 @@ bool Screen::operator==(const Screen &rhs) const
             && (name == rhs.name)
             && (hasExplicitViews == rhs.hasExplicitViews)
             //&& (isActive == rhs.isActive) /*Disabled because this is not a data but a screen state*/
+            //&& (isRemovable == rhs.isRemovable) /*Disabled because this is not a data but a screen state*/
+            && (isSelected == rhs.isSelected)
             && (geometry == rhs.geometry);
 }
 
@@ -98,6 +95,8 @@ void Screen::init(const QString &screenId, const QString &serialized)
     id = screenId;
     name = parts[0];
     isActive = false;
+    isRemovable = false;
+    isSelected = false;
 
     if (parts.count() > 1) {
         geometry = Latte::stringToRect(parts[1]);

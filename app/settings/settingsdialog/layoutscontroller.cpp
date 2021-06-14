@@ -1,22 +1,7 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "layoutscontroller.h"
 
@@ -31,6 +16,7 @@
 #include "delegates/layoutnamedelegate.h"
 #include "../universalsettings.h"
 #include "../generic/generictools.h"
+#include "../../screenpool.h"
 #include "../../data/uniqueidinfo.h"
 #include "../../layout/centrallayout.h"
 #include "../../layouts/importer.h"
@@ -302,6 +288,71 @@ const Latte::Data::Layout Layouts::originalData(const QString &currentLayoutId) 
     return m_model->originalData(currentLayoutId);
 }
 
+const Latte::Data::ScreensTable Layouts::screensData()
+{
+    Latte::Data::ScreensTable scrtable = m_handler->corona()->screenPool()->screensTable();
+
+    QList<int> expscreens;
+
+    //! update activeness
+    for (int i=1; i<scrtable.rowCount(); ++i) {
+        scrtable[i].isActive = m_handler->corona()->screenPool()->isScreenActive(scrtable[i].id.toInt());
+    }
+
+    //! update removability based on activeness
+    for (int i=0; i<scrtable.rowCount(); ++i) {
+        scrtable[i].isRemovable = !scrtable[i].isActive;
+    }
+
+    //! retrieve all layouts data
+    Latte::Data::LayoutsTable originalLayouts = m_model->originalLayoutsData();
+    Latte::Data::LayoutsTable currentLayouts = m_model->currentLayoutsData();
+    Latte::Data::LayoutsTable removedLayouts = originalLayouts.subtracted(currentLayouts);
+
+    //! temp removed layouts should be considered because they may not be deleted in the end
+    for (int i=0; i<removedLayouts.rowCount(); ++i) {
+        CentralLayout *central = centralLayout(removedLayouts[i].id);
+
+        if (!central) {
+            continue;
+        }
+
+        QList<int> newexps = central->viewsExplicitScreens();
+
+        expscreens = join(expscreens, newexps);
+    }
+
+    //! current layouts should be considered
+    for (int i=0; i<currentLayouts.rowCount(); ++i) {
+        CentralLayout *central = centralLayout(currentLayouts[i].id);
+
+        if (!central) {
+            continue;
+        }
+
+        QList<int> newexps = central->viewsExplicitScreens();
+
+        expscreens = join(expscreens, newexps);
+    }
+
+    //! discovered explicit screens should be flagged as NOREMOVABLE
+    for (int i=0; i<expscreens.count(); ++i) {
+        QString expscridstr = QString::number(expscreens[i]);
+
+        if (scrtable.containsId(expscridstr)) {
+            scrtable[expscridstr].isRemovable = false;
+        }
+    }
+
+    //! Print no-removable screens
+    /*for (int i=0; i<scrtable.rowCount(); ++i) {
+        if (!scrtable[i].isRemovable) {
+            qDebug() <<"org.kde.latte NO REMOVABLE EXP SCREEN ::: " << scrtable[i].id;
+        }
+    }*/
+
+    return scrtable;
+}
 
 bool Layouts::inMultipleMode() const
 {
@@ -311,6 +362,17 @@ bool Layouts::inMultipleMode() const
 void Layouts::setInMultipleMode(bool inMultiple)
 {
     m_model->setInMultipleMode(inMultiple);
+}
+
+CentralLayout *Layouts::centralLayout(const QString &currentLayoutId)
+{
+    Data::Layout originlayoutdata = originalData(currentLayoutId);
+    auto activelayout = isLayoutOriginal(currentLayoutId) ?
+                m_handler->corona()->layoutsManager()->synchronizer()->centralLayout(originlayoutdata.name) : nullptr;
+
+    Latte::CentralLayout *centrallayout = activelayout ? activelayout : new Latte::CentralLayout(this, currentLayoutId);
+
+    return centrallayout;
 }
 
 void Layouts::applyColumnWidths(bool storeValues)
@@ -1038,6 +1100,19 @@ void Layouts::onNameDuplicatedFrom(const QString &provenId, const QString &trial
     QTimer::singleShot(0, [this, tIndex]() {
         m_view->edit(tIndex);
     });
+}
+
+QList<int> Layouts::join(const QList<int> &currentRecords, const QList<int> &newRecords)
+{
+    QList<int> result = currentRecords;
+
+    for(int i=0; i<newRecords.count(); ++i) {
+        if (!result.contains(newRecords[i])) {
+            result << newRecords[i];
+        }
+    }
+
+    return result;
 }
 
 void Layouts::loadConfig()
