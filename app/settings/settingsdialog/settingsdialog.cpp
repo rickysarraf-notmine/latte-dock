@@ -1,23 +1,9 @@
 /*
- * Copyright 2017  Smith AR <audoban@openmailbox.org>
- *                 Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2017 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2017 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "settingsdialog.h"
 
@@ -25,6 +11,7 @@
 #include "ui_settingsdialog.h"
 #include "../universalsettings.h"
 #include "../generic/generictools.h"
+#include "../screensdialog/screensdialog.h"
 #include "../../lattecorona.h"
 #include "../../screenpool.h"
 #include "../../data/layoutdata.h"
@@ -154,9 +141,11 @@ void SettingsDialog::initFileMenu()
 
     m_fileMenu->addSeparator();
 
-    QAction *screensAction = m_fileMenu->addAction(i18n("Sc&reens..."));
+    QAction *screensAction = m_fileMenu->addAction(i18n("&Screens..."));
     screensAction->setIcon(QIcon::fromTheme("document-properties"));
-    //screensAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_R));
+    screensAction->setShortcut(QKeySequence(Qt::CTRL + Qt::ALT + Qt::Key_S));
+    screensAction->setToolTip(i18n("Examing your screens and remove deprecated references"));
+    connect(screensAction, &QAction::triggered, this, &SettingsDialog::showScreensDialog);
 
     QAction *quitAction = m_fileMenu->addAction(i18n("&Quit Latte"));
     quitAction->setIcon(QIcon::fromTheme("application-exit"));
@@ -385,6 +374,12 @@ void SettingsDialog::exportFullConfiguration()
     QString proposedName = QStringLiteral("Latte Dock (") + currentDate.toString("yyyy-MM-dd")+")";
 
     exportFileDialog->selectFile(proposedName);
+}
+
+void SettingsDialog::showScreensDialog()
+{
+    auto screensDlg = new Settings::Dialog::ScreensDialog(this, m_tabLayoutsHandler->layoutsController());
+    screensDlg->exec();
 }
 
 void SettingsDialog::accept()

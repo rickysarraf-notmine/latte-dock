@@ -1,25 +1,12 @@
 /*
-*  Copyright 2019  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "synchronizer.h"
 
 //! local
+#include <config-latte.h>
 #include "importer.h"
 #include "manager.h"
 #include "../apptypes.h"
@@ -158,7 +145,7 @@ QStringList Synchronizer::freeActivities()
 }
 
 QStringList Synchronizer::runningActivities()
-{
+{   
     return m_manager->corona()->activitiesConsumer()->runningActivities();
 }
 
@@ -240,6 +227,8 @@ QStringList Synchronizer::menuLayouts() const
             menulayouts.prepend(layout->name());
         }
     }
+
+    menulayouts.sort(Qt::CaseInsensitive);
 
     return menulayouts;
 }
@@ -890,11 +879,13 @@ void Synchronizer::syncMultipleLayoutsToActivities()
 
     //! discover layouts assigned to explicit activities based on running activities
     for (const auto &activity : runningActivities()) {
+#if KF5_VERSION_MINOR < 81
         if (KWindowSystem::isPlatformWayland() && (m_activitiesController->currentActivity() != activity)){
-            //! Wayland Protection: Plasma wayland does not support yet Activities for windows
-            //! but we can load the layouts that belong OnAllActivities + (ForFreeActivities OR SpecificActivity)
+            //! Wayland Protection: Plasma wayland does not support Activities for windows before kde frameworks 5.81
+            //! In that scenario we can load the layouts that belong OnAllActivities + (ForFreeActivities OR SpecificActivity)
             continue;
         }
+#endif
 
         if (m_assignedLayouts.contains(activity)) {
             layoutNamesToLoad << m_assignedLayouts[activity];
@@ -906,7 +897,7 @@ void Synchronizer::syncMultipleLayoutsToActivities()
         if (!layoutNamesToLoad.contains(layout->name())) {
             layoutNamesToUnload << layout->name();
         }
-    }
+    }    
 
     QString defaultForcedLayout;
 

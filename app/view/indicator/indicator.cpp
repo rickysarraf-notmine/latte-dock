@@ -1,20 +1,6 @@
 /*
-*  Copyright 2019  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "indicator.h"
@@ -29,6 +15,7 @@
 
 // Qt
 #include <QFileDialog>
+#include <QLatin1String>
 
 // KDE
 #include <KLocalizedString>
@@ -153,11 +140,11 @@ void Indicator::setPluginIsReady(bool ready)
 
 int Indicator::index(const QString &type)
 {
-    if (type == "org.kde.latte.default") {
+    if (type == QLatin1String("org.kde.latte.default")) {
         return 0;
-    } else if (type == "org.kde.latte.plasma") {
+    } else if (type == QLatin1String("org.kde.latte.plasma")) {
         return 1;
-    } else if (type == "org.kde.latte.plasmatabstyle") {
+    } else if (type == QLatin1String("org.kde.latte.plasmatabstyle")) {
         return 2;
     } else if (customPluginIds().contains(type)){
         return 3 + customPluginIds().indexOf(type);

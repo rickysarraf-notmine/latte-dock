@@ -1,22 +1,7 @@
 /*
- * Copyright 2020  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2020 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "preferencesdata.h"
 
@@ -41,6 +26,7 @@ Preferences::Preferences(Preferences &&o)
       layoutsInformationWindow(o.layoutsInformationWindow),
       autostart(o.autostart),
       borderlessMaximized(o.borderlessMaximized),
+      contextMenuAlwaysActions(o.contextMenuAlwaysActions),
       metaPressForAppLauncher(o.metaPressForAppLauncher),
       metaHoldForBadges(o.metaHoldForBadges),
       mouseSensitivity(o.mouseSensitivity),
@@ -53,6 +39,7 @@ Preferences::Preferences(const Preferences &o)
       layoutsInformationWindow(o.layoutsInformationWindow),
       autostart(o.autostart),
       borderlessMaximized(o.borderlessMaximized),
+      contextMenuAlwaysActions(o.contextMenuAlwaysActions),
       metaPressForAppLauncher(o.metaPressForAppLauncher),
       metaHoldForBadges(o.metaHoldForBadges),
       mouseSensitivity(o.mouseSensitivity),
@@ -66,6 +53,7 @@ Preferences &Preferences::operator=(const Preferences &rhs)
     layoutsInformationWindow = rhs.layoutsInformationWindow;
     autostart = rhs.autostart;
     borderlessMaximized = rhs.borderlessMaximized;
+    contextMenuAlwaysActions = rhs.contextMenuAlwaysActions;
     metaPressForAppLauncher = rhs.metaPressForAppLauncher;
     metaHoldForBadges = rhs.metaHoldForBadges;
     mouseSensitivity = rhs.mouseSensitivity;
@@ -80,6 +68,7 @@ Preferences &Preferences::operator=(Preferences &&rhs)
     layoutsInformationWindow = rhs.layoutsInformationWindow;
     autostart = rhs.autostart;
     borderlessMaximized = rhs.borderlessMaximized;
+    contextMenuAlwaysActions = rhs.contextMenuAlwaysActions;
     metaPressForAppLauncher = rhs.metaPressForAppLauncher;
     metaHoldForBadges = rhs.metaHoldForBadges;
     mouseSensitivity = rhs.mouseSensitivity;
@@ -94,6 +83,7 @@ bool Preferences::operator==(const Preferences &rhs) const
             && (layoutsInformationWindow == rhs.layoutsInformationWindow)
             && (autostart == rhs.autostart)
             && (borderlessMaximized == rhs.borderlessMaximized)
+            && (contextMenuAlwaysActions == rhs.contextMenuAlwaysActions)
             && (metaPressForAppLauncher == rhs.metaPressForAppLauncher)
             && (metaHoldForBadges == rhs.metaHoldForBadges)
             && (mouseSensitivity == rhs.mouseSensitivity)
@@ -111,6 +101,7 @@ bool Preferences::inDefaultValues() const
             && (layoutsInformationWindow == LAYOUTSINFORMATIONWINDOW)
             && (autostart == AUTOSTART)
             && (borderlessMaximized == BORDERLESSMAXIMIZED)
+            && (contextMenuAlwaysActions == Data::ContextMenu::ACTIONSALWAYSVISIBLE)
             && (metaPressForAppLauncher == METAPRESSFORAPPLAUNCHER)
             && (metaHoldForBadges == METAHOLDFORBADGES)
             && (mouseSensitivity == MOUSESENSITIVITY)
@@ -123,6 +114,7 @@ void Preferences::setToDefaults()
     layoutsInformationWindow = LAYOUTSINFORMATIONWINDOW;
     autostart = AUTOSTART;
     borderlessMaximized = BORDERLESSMAXIMIZED;
+    contextMenuAlwaysActions = Data::ContextMenu::ACTIONSALWAYSVISIBLE;
     metaPressForAppLauncher = METAPRESSFORAPPLAUNCHER;
     metaHoldForBadges = METAHOLDFORBADGES;
     mouseSensitivity = MOUSESENSITIVITY;

@@ -1,20 +1,6 @@
 /*
-*  Copyright 2021 Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "layoutmenuitemwidget.h"
@@ -62,7 +48,7 @@ QSize LayoutMenuItemWidget::minimumSizeHint() const
    QSize contentSize = fontMetrics().size(Qt::TextSingleLine | Qt::TextShowMnemonic, m_action->text());
 
    contentSize.setHeight(contentSize.height() + 9);
-   contentSize.setWidth(contentSize.width() + 4 * contentSize.height());
+   contentSize.setWidth(contentSize.width() + 9);
    return style()->sizeFromContents(QStyle::CT_MenuItem, &opt, contentSize, this);
 }
 
@@ -96,8 +82,9 @@ void LayoutMenuItemWidget::paintEvent(QPaintEvent* e)
     opt.rect  = remained;
 
     //! icon
-    remained = Latte::remainedFromLayoutIcon(opt, Qt::AlignLeft, 1, 4); //add also spacing to push text a little to the right
-    Latte::drawLayoutIcon(&painter, opt, m_isBackgroundFile, m_iconName, Qt::AlignLeft, 0, 4);
+    int thickpadding = (opt.rect.height() - qMax(16, opt.maxIconWidth)) / 2; //old value 4
+    remained = Latte::remainedFromLayoutIcon(opt, Qt::AlignLeft, 1, thickpadding);
+    Latte::drawLayoutIcon(&painter, opt, m_isBackgroundFile, m_iconName, Qt::AlignLeft, 1, thickpadding);
     opt.rect  = remained;
 
     //! text

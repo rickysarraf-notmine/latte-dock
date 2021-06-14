@@ -1,21 +1,7 @@
 /*
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 import QtQuick 2.1
@@ -72,7 +58,9 @@ BackgroundProperties{
             var solidBackgroundPadding = solidBackground.margins.top;
 
             if (root.isVertical) {
-                return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
+                return expected;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -87,7 +75,9 @@ BackgroundProperties{
             var solidBackgroundPadding = solidBackground.margins.bottom;
 
             if (root.isVertical) {
-                return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
+                return expected;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -103,7 +93,9 @@ BackgroundProperties{
             var solidBackgroundPadding = solidBackground.margins.left;
 
             if (root.isHorizontal) {
-                return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
+                return expected;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -119,7 +111,9 @@ BackgroundProperties{
             var solidBackgroundPadding = solidBackground.margins.right;
 
             if (root.isHorizontal) {
-                return customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+                expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
+                return expected;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -194,6 +188,24 @@ BackgroundProperties{
         }
 
         return Math.max(background.length + totals.shadowsLength, totals.paddingsLength + totals.shadowsLength)
+    }
+
+    readonly property int tailRoundnessMargin: {
+        //! used from contents geometry in order to remove any roundness sectors, e.g. for popups placement
+        if (root.isHorizontal) {
+            return paddings.left > metrics.margin.length ? metrics.margin.length : 0
+        } else {
+            return paddings.top > metrics.margin.length ? metrics.margin.length : 0
+        }
+    }
+
+    readonly property int headRoundnessMargin: {
+        //! used from contents geometry in order to remove any roundness sectors, e.g. for popups placement
+        if (root.isHorizontal) {
+            return paddings.right > metrics.margin.length ? metrics.margin.length : 0
+        } else {
+            return paddings.bottom > metrics.margin.length ? metrics.margin.length : 0
+        }
     }
 
     property int animationTime: 6*animations.speedFactor.current*animations.duration.small
@@ -300,16 +312,6 @@ BackgroundProperties{
             enabled: !LatteCore.WindowSystem.compositingActive
             NumberAnimation { duration: 0 }
         }
-
-        Behavior on opacity{
-            enabled: LatteCore.WindowSystem.compositingActive
-            NumberAnimation { duration: barLine.animationTime }
-        }
-
-        Behavior on opacity{
-            enabled: !LatteCore.WindowSystem.compositingActive
-            NumberAnimation { duration: 0 }
-        }
     }
 
     //! Layer 2: Provide visual solidness. Plasma themes by design may provide a panel-background svg that is not
@@ -410,7 +412,7 @@ BackgroundProperties{
 
         function updateEffectsArea() {
             if (!updateEffectsAreaTimer.running) {
-                invUpdateEffectsArea();
+               // invUpdateEffectsArea(); // disabled in order to force Timer at all cases
                 updateEffectsAreaTimer.start();
             }
         }
@@ -454,7 +456,7 @@ BackgroundProperties{
 
         Timer {
             id: updateEffectsAreaTimer
-            interval: 16 //! 60Hz or 60calls/sec
+            interval: 11 //! 90Hz or 90calls/sec
             onTriggered: solidBackground.invUpdateEffectsArea();
         }
 

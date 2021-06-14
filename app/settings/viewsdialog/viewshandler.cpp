@@ -1,22 +1,7 @@
 /*
- * Copyright 2021  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2021 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "viewshandler.h"
 
@@ -24,6 +9,7 @@
 #include "ui_viewsdialog.h"
 #include "viewscontroller.h"
 #include "viewsdialog.h"
+#include "viewstableview.h"
 #include "../exporttemplatedialog/exporttemplatedialog.h"
 #include "../settingsdialog/layoutscontroller.h"
 #include "../settingsdialog/layoutsmodel.h"
@@ -143,6 +129,10 @@ void ViewsHandler::init()
 
     //!
     connect(m_viewsController, &Settings::Controller::Views::dataChanged, this, &ViewsHandler::dataChanged);
+
+    connect(m_ui->viewsTable, &View::ViewsTableView::selectionsChanged, this, &ViewsHandler::onSelectionChanged);
+
+    onSelectionChanged();
 }
 
 void ViewsHandler::initViewTemplatesSubMenu()
@@ -277,20 +267,11 @@ void ViewsHandler::resetDefaults()
 
 void ViewsHandler::save()
 {
-    if (removalConfirmation(m_viewsController->viewsForRemovalCount()) == KMessageBox::Yes) {
+    int viewsforremoval = m_viewsController->viewsForRemovalCount();
+
+    if (viewsforremoval <=0 || removalConfirmation(viewsforremoval) == KMessageBox::Yes) {
         m_viewsController->save();
     }
-}
-
-CentralLayout *ViewsHandler::centralLayout(const QString &currentLayoutId)
-{
-    Data::Layout originlayoutdata = layoutsController()->originalData(currentLayoutId);
-    auto activelayout = layoutsController()->isLayoutOriginal(currentLayoutId) ?
-                corona()->layoutsManager()->synchronizer()->centralLayout(originlayoutdata.name) : nullptr;
-
-    Latte::CentralLayout *centrallayout = activelayout ? activelayout : new Latte::CentralLayout(this, currentLayoutId);
-
-    return centrallayout;
 }
 
 QString ViewsHandler::storedView(const QString &viewId)
@@ -302,7 +283,7 @@ QString ViewsHandler::storedView(const QString &viewId)
     }
 
     if (viewdata.isCreated()) {
-        CentralLayout *central = centralLayout(currentData().id);
+        CentralLayout *central = m_dialog->layoutsController()->centralLayout(currentData().id);
         return central->storedView(viewdata.id.toInt());
     } else if (viewdata.hasViewTemplateOrigin() || viewdata.hasLayoutOrigin()) {
         return viewdata.originFile();
@@ -515,6 +496,16 @@ void ViewsHandler::onCurrentLayoutIndexChanged(int row)
     }
 }
 
+void ViewsHandler::onSelectionChanged()
+{
+    bool hasselected = m_viewsController->hasSelectedView();
+
+    setTwinProperty(m_duplicateViewAction, TWINENABLED, hasselected);
+    setTwinProperty(m_removeViewAction, TWINENABLED, hasselected);
+    setTwinProperty(m_exportViewAction, TWINENABLED, hasselected);
+    m_viewExportSubMenu->setEnabled(hasselected);
+}
+
 void ViewsHandler::updateWindowTitle()
 {
     m_dialog->setWindowTitle(i18nc("<layout name> Docks/Panels",
@@ -525,7 +516,7 @@ void ViewsHandler::updateWindowTitle()
 KMessageBox::ButtonCode ViewsHandler::removalConfirmation(const int &viewsCount)
 {
     if (viewsCount<=0) {
-        return KMessageBox::Yes;
+        return KMessageBox::No;
     }
 
     if (hasChangedData() && viewsCount>0) {
@@ -536,7 +527,7 @@ KMessageBox::ButtonCode ViewsHandler::removalConfirmation(const int &viewsCount)
                                          i18n("Approve Removal"));
     }
 
-    return KMessageBox::Yes;
+    return KMessageBox::No;
 }
 
 KMessageBox::ButtonCode ViewsHandler::saveChangesConfirmation()

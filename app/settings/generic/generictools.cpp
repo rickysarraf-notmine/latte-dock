@@ -1,22 +1,7 @@
 /*
- * Copyright 2019  Michail Vourlakos <mvourlakos@gmail.com>
- *
- * This file is part of Latte-Dock
- *
- * Latte-Dock is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * Latte-Dock is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+    SPDX-License-Identifier: GPL-2.0-or-later
+*/
 
 #include "generictools.h"
 
@@ -87,6 +72,17 @@ bool isTextCentered(const QStyleOptionViewItem &option)
     return false;
 }
 
+Qt::AlignmentFlag horizontalAlignment(Qt::Alignment alignments)
+{
+    if (alignments & Qt::AlignHCenter) {
+        return Qt::AlignHCenter;
+    } else if (alignments & Qt::AlignRight) {
+        return Qt::AlignRight;
+    }
+
+    return Qt::AlignLeft;
+}
+
 QPalette::ColorGroup colorGroup(const QStyleOption &option)
 {
     if (!isEnabled(option)) {
@@ -119,15 +115,43 @@ QStringList subtracted(const QStringList &original, const QStringList &current)
 
 void drawFormattedText(QPainter *painter, const QStyleOptionViewItem &option, const float textOpacity)
 {
-    drawFormattedText(painter, option, option.text, Latte::isTextCentered(option), textOpacity);
+    drawFormattedText(painter, option, option.text, horizontalAlignment(option.displayAlignment), textOpacity);
 }
 
 void drawFormattedText(QPainter *painter, const QStyleOptionMenuItem &option, const float textOpacity)
 {
-    drawFormattedText(painter, option, option.text, false, textOpacity);
+    drawFormattedText(painter, option, option.text, Qt::AlignLeft, textOpacity);
 }
 
-void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, const bool &isTextCentered, const float textOpacity)
+QRect remainedFromFormattedText(const QStyleOption &option, const QString &text, Qt::AlignmentFlag alignment)
+{
+    QString css = QString("body {}");
+
+    QTextDocument doc;
+    doc.setDefaultStyleSheet(css);
+    doc.setHtml("<body>" + text + "</body>");
+
+    //we need an offset to be in the same vertical center of TextEdit
+    int textWidth = doc.size().width() + MARGIN;
+
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight || (curalign == Qt::AlignHCenter)) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    if (alignment == Qt::AlignHCenter) {
+        return option.rect;
+    } else if (curalign == Qt::AlignRight) {
+        return QRect(option.rect.x(), option.rect.y(), option.rect.width() - textWidth, option.rect.height());
+    } else {
+        return QRect(option.rect.x() + textWidth, option.rect.y(), option.rect.width() - textWidth, option.rect.height());
+    }
+}
+
+void drawFormattedText(QPainter *painter, const QStyleOption &option, const QString &text, Qt::AlignmentFlag alignment, const float textOpacity)
 {
     painter->save();
 
@@ -148,10 +172,18 @@ void drawFormattedText(QPainter *painter, const QStyleOption &option, const QStr
     int textWidth = doc.size().width();
     int textY = option.rect.top() + offsetY + 1;
 
-    if (isTextCentered) {
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight || (curalign == Qt::AlignHCenter)) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    if (alignment == Qt::AlignHCenter) {
         int textX = qMax(0, (option.rect.width() / 2) - (textWidth/2));
         painter->translate(option.rect.left() + textX, textY);
-    } else if (qApp->layoutDirection() == Qt::RightToLeft) {
+    } else if (curalign == Qt::AlignRight) {
         painter->translate(qMax(option.rect.left(), option.rect.right() - textWidth), textY);
     } else {
         painter->translate(option.rect.left(), textY);
@@ -228,7 +260,7 @@ void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &i
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     if (isBackgroundFile) {
-        int backImageMargin = qMin(target.height()/4, ICONMARGIN+1);
+        int backImageMargin = 1; //most icon themes provide 1-2px. padding around icons //OLD CALCS: ICONMARGIN; //qMin(target.height()/4, ICONMARGIN+1);
         QRect backTarget(target.x() + backImageMargin, target.y() + backImageMargin, target.width() - 2*backImageMargin, target.height() - 2*backImageMargin);
 
         QPixmap backImage(iconName);
@@ -269,7 +301,6 @@ QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment, 
         curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
     }
 
-
     QRect optionRemainedRect = (curalign == Qt::AlignLeft) ? QRect(option.rect.x() + total, option.rect.y(), option.rect.width() - total, option.rect.height()) :
                                                              QRect(option.rect.x(), option.rect.y(), option.rect.width() - total, option.rect.height());
 
@@ -301,12 +332,59 @@ void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon
     QRect target;
 
     if (curalign == Qt::AlignLeft) {
-        target = QRect(option.rect.x() + lenmargin, option.rect.y(), iconsize, iconsize);
+        target = QRect(option.rect.x() + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
     } else {
-        target = QRect(option.rect.x() + option.rect.width() - total + lenmargin, option.rect.y(), iconsize, iconsize);
+        target = QRect(option.rect.x() + option.rect.width() - total + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
     }
 
     painter->drawPixmap(target, QIcon::fromTheme(icon).pixmap(target.height(), target.height(), mode));
+}
+
+int primitiveCheckBoxWidth(const QStyleOptionButton &option, const QWidget *widget)
+{
+    QStyleOption copt;
+    copt.rect = option.rect;
+    int w = QApplication::style()->sizeFromContents(QStyle::CT_CheckBox, &copt, QSize(0, option.rect.height()), widget).width();
+    w = w > 0 ? w : option.rect.height() - 2*MARGIN;
+    return w;
+}
+
+QRect remainedFromCheckBox(const QStyleOptionButton &option, Qt::AlignmentFlag alignment, const QWidget *widget)
+{
+    int length = primitiveCheckBoxWidth(option, widget) - MARGIN;
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    QRect optionRemainedRect = (curalign == Qt::AlignLeft) ? QRect(option.rect.x() + length, option.rect.y(), option.rect.width() - length, option.rect.height()) :
+                                                             QRect(option.rect.x(), option.rect.y(), option.rect.width() - length, option.rect.height());
+
+    return optionRemainedRect;
+}
+
+void drawCheckBox(QPainter *painter, const QStyleOptionButton &option, Qt::AlignmentFlag alignment, const QWidget *widget)
+{
+    int length = primitiveCheckBoxWidth(option, widget) - MARGIN;
+    QStyleOptionButton optionbtn = option;
+
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    QRect changesrect = (curalign == Qt::AlignLeft) ? QRect(option.rect.x() + MARGIN, option.rect.y(), length - MARGIN, option.rect.height()) :
+                                                      QRect(option.rect.x() + option.rect.width() - length, option.rect.y(), length - MARGIN, option.rect.height());
+
+    optionbtn.rect = changesrect;
+
+    QApplication::style()->drawControl(QStyle::CE_CheckBox, &optionbtn, painter, widget);
 }
 
 QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option)

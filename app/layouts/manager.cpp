@@ -1,23 +1,8 @@
 /*
-*  Copyright 2017  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*            2019  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2017 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2019 Michail Vourlakos <mvourlakos@gmail.com>
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "manager.h"
@@ -39,6 +24,7 @@
 #include <QDir>
 #include <QFile>
 #include <QMessageBox>
+#include <QLatin1String>
 
 // KDE
 #include <KMessageBox>
@@ -355,7 +341,7 @@ void Manager::cleanupOnStartup(QString path)
     for (const auto &actId : actionGroups.groupList()) {
         QString pluginId = actionGroups.group(actId).readEntry("RightButton;NoModifier", "");
 
-        if (pluginId == "org.kde.contextmenu") {
+        if (pluginId == QStringLiteral("org.kde.contextmenu")) {
             deprecatedActionGroup << actId;
         }
     }
@@ -372,7 +358,7 @@ void Manager::cleanupOnStartup(QString path)
     for (const auto &cId : containmentGroups.groupList()) {
         QString pluginId = containmentGroups.group(cId).readEntry("plugin", "");
 
-        if (pluginId == "org.kde.desktopcontainment") { //!must remove ghost containments first
+        if (pluginId == QStringLiteral("org.kde.desktopcontainment")) { //!must remove ghost containments first
             removeContaimentsList << cId;
         }
     }

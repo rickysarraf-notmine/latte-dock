@@ -1,23 +1,12 @@
 /*
-*  Copyright 2012  Marco Martin <mart@kde.org>
-*  Copyright 2014  David Edmundson <davidedmudnson@kde.org>
-*  Copyright 2016  Smith AR <audoban@openmailbox.org>
-*                  Michail Vourlakos <mvourlakos@gmail.com>
-*
-*  This file is part of Latte-Dock and is a Fork of PlasmaCore::IconItem
-*
-*  Latte-Dock is free software; you can redistribute it and/or
-*  modify it under the terms of the GNU General Public License as
-*  published by the Free Software Foundation; either version 2 of
-*  the License, or (at your option) any later version.
-*
-*  Latte-Dock is distributed in the hope that it will be useful,
-*  but WITHOUT ANY WARRANTY; without even the implied warranty of
-*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*  GNU General Public License for more details.
-*
-*  You should have received a copy of the GNU General Public License
-*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    SPDX-FileCopyrightText: 2012 Marco Martin <mart@kde.org>
+    SPDX-FileCopyrightText: 2014 David Edmundson <davidedmudnson@kde.org>
+    SPDX-FileCopyrightText: 2016 Smith AR <audoban@openmailbox.org>
+    SPDX-FileCopyrightText: 2016 Michail Vourlakos <mvourlakos@gmail.com>
+
+    This file is part of Latte-Dock and is a Fork of PlasmaCore::IconItem
+
+    SPDX-License-Identifier: GPL-2.0-or-later
 */
 
 #include "iconitem.h"
@@ -33,6 +22,7 @@
 #include <QPixmap>
 #include <QSGSimpleTextureNode>
 #include <QuickAddons/ManagedTextureNode>
+#include <QLatin1String>
 
 // KDE
 #include <KIconTheme>
@@ -43,12 +33,12 @@ namespace Latte {
 
 IconItem::IconItem(QQuickItem *parent)
     : QQuickItem(parent),
-      m_lastValidSourceName(QString()),
-      m_smooth(false),
       m_active(false),
+      m_smooth(false),
       m_textureChanged(false),
       m_sizeChanged(false),
       m_usesPlasmaTheme(false),
+      m_lastValidSourceName(QString()),
       m_colorGroup(Plasma::Theme::NormalColorGroup)
 {
     setFlag(ItemHasContents, true);
@@ -214,7 +204,7 @@ QString IconItem::lastValidSourceName()
 
 void IconItem::setLastValidSourceName(QString name)
 {
-    if (m_lastValidSourceName == name || name == "" || name == "application-x-executable") {
+    if (m_lastValidSourceName == name || name.isEmpty() || name == QLatin1String("application-x-executable")) {
         return;
     }
 
