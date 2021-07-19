@@ -1,4 +1,4 @@
-latte-dock (0.9.97-1) UNRELEASED; urgency=medium
+latte-dock (0.9.98-1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * Switch the transitional libxcb-util0-dev build dependency to
@@ -17,7 +17,7 @@ latte-dock (0.9.97-1) UNRELEASED; urgency=medium
     - Reword KDEeV short format.
 
   [ Norbert Preining ]
-  * New upstream release (0.9.97).
+  * New upstream releases (0.9.97, .98).
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 18 May 2021 16:55:55 -0700
 
