@@ -18,6 +18,7 @@ latte-dock (0.10.0-1) UNRELEASED; urgency=medium
 
   [ Norbert Preining ]
   * New upstream releases (0.9.97, .98, 0.10.0).
+  * Add myself to uploaders.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 18 May 2021 16:55:55 -0700
 
