@@ -1,4 +1,4 @@
-latte-dock (0.10.0-1) UNRELEASED; urgency=medium
+latte-dock (0.10.0-1) experimental; urgency=medium
 
   [ Pino Toscano ]
   * Switch the transitional libxcb-util0-dev build dependency to
@@ -20,7 +20,7 @@ latte-dock (0.10.0-1) UNRELEASED; urgency=medium
   * New upstream releases (0.9.97, .98, 0.10.0).
   * Add myself to uploaders.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 18 May 2021 16:55:55 -0700
+ -- Norbert Preining <norbert@preining.info>  Sat, 07 Aug 2021 16:18:19 +0900
 
 latte-dock (0.9.11-1) unstable; urgency=medium
 
