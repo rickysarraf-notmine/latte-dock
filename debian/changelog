@@ -1,10 +1,10 @@
-latte-dock (0.10.1-1) UNRELEASED; urgency=medium
+latte-dock (0.10.1-1) unstable; urgency=medium
 
   [ Norbert Preining ]
   * New upstream version (0.10.1).
   * Bump standards version to 4.6.0, no changes necessary.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 26 Aug 2021 01:01:32 +0900
+ -- Norbert Preining <norbert@preining.info>  Thu, 26 Aug 2021 01:05:24 +0900
 
 latte-dock (0.10.0-1) experimental; urgency=medium
 
