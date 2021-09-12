@@ -2,6 +2,7 @@ latte-dock (0.10.2-0r1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * New upstream release.
+  * Drop removal of COPYING files, as they are no more installed.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sun, 12 Sep 2021 14:44:21 +0200
 
