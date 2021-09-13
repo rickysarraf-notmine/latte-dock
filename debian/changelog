@@ -1,4 +1,4 @@
-latte-dock (0.10.2-0r1) UNRELEASED; urgency=medium
+latte-dock (0.10.2-1) unstable; urgency=medium
 
   [ Pino Toscano ]
   * New upstream release.
@@ -6,7 +6,7 @@ latte-dock (0.10.2-0r1) UNRELEASED; urgency=medium
   * CI: disable the blhc job.
   * Small fixes in copyright.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Sun, 12 Sep 2021 14:44:21 +0200
+ -- Norbert Preining <norbert@preining.info>  Mon, 13 Sep 2021 15:14:54 +0900
 
 latte-dock (0.10.1-1) unstable; urgency=medium
 
