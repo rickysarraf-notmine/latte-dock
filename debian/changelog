@@ -2,6 +2,7 @@ latte-dock (0.10.5-0r1) UNRELEASED; urgency=medium
 
   [ Pino Toscano ]
   * New upstream release.
+  * debian/upstream/metadata: fix references to the upstream Git repository.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 16 Dec 2021 21:42:21 +0100
 
