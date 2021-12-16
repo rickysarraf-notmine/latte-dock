@@ -1,3 +1,10 @@
+latte-dock (0.10.5-0r1) UNRELEASED; urgency=medium
+
+  [ Pino Toscano ]
+  * New upstream release.
+
+ -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Thu, 16 Dec 2021 21:42:21 +0100
+
 latte-dock (0.10.4-1) unstable; urgency=medium
 
   * Team upload.
