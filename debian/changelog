@@ -1,9 +1,9 @@
-latte-dock (0.10.7-0r1) UNRELEASED; urgency=medium
+latte-dock (0.10.7-1) unstable; urgency=medium
 
-  [ Pino Toscano ]
+  * Team upload.
   * New upstream release.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Tue, 11 Jan 2022 19:23:11 +0100
+ -- Pino Toscano <pino@debian.org>  Tue, 11 Jan 2022 19:48:28 +0100
 
 latte-dock (0.10.6-1) unstable; urgency=medium
 
