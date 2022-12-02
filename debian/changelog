@@ -4,6 +4,8 @@ latte-dock (0.10.9-0r1) UNRELEASED; urgency=medium
   * New upstream release.
   * Update standards version to 4.6.1, no changes needed.
   * Update the GPG signing key.
+  * Remove inactive Uploaders, adding myself as one to avoid leaving the source
+    with no human maintainers.
 
  -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Fri, 02 Dec 2022 21:43:38 +0100
 
