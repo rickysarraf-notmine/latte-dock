@@ -1,13 +1,13 @@
-latte-dock (0.10.9-0r1) UNRELEASED; urgency=medium
+latte-dock (0.10.9-1) unstable; urgency=medium
 
-  [ Pino Toscano ]
+  * Team upload.
   * New upstream release.
   * Update standards version to 4.6.1, no changes needed.
   * Update the GPG signing key.
   * Remove inactive Uploaders, adding myself as one to avoid leaving the source
     with no human maintainers.
 
- -- Debian Qt/KDE Maintainers <debian-qt-kde@lists.debian.org>  Fri, 02 Dec 2022 21:43:38 +0100
+ -- Pino Toscano <pino@debian.org>  Fri, 02 Dec 2022 22:09:16 +0100
 
 latte-dock (0.10.8-1) unstable; urgency=medium
 
