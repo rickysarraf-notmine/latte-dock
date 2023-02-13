@@ -236,7 +236,7 @@ const Latte::Data::ViewsTable Layouts::selectedLayoutViews()
         central = new CentralLayout(this, selectedCurrentData.id);
     }
 
-    selectedCurrentData.views = central->viewsTable();
+    selectedCurrentData.views = central->viewsTable().onlyOriginals();
     selectedCurrentData.views.isInitialized = true;
 
     if (!islayoutactive) {
@@ -951,6 +951,9 @@ void Layouts::save()
 
         //! Icon
         central->setIcon(iLayoutCurrentData.icon);
+
+        //! Custom Scheme
+        central->setSchemeFile(iLayoutCurrentData.schemeFile);
 
         //! Backgrounds
         central->setBackgroundStyle(iLayoutCurrentData.backgroundStyle);

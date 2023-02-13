@@ -14,6 +14,7 @@ AbilityDefinition.MyView {
     readonly property bool isBridgeActive: bridge !== null
 
     isReady: ref.myView.isReady
+    groupId: ref.myView.groupId
 
     inNormalState: ref.myView.inNormalState
 
@@ -55,7 +56,7 @@ AbilityDefinition.MyView {
 
     Item {
         id: ref
-        readonly property Item myView: bridge ? bridge.myView.host : local
+        readonly property Item myView: bridge && bridge.myView ? bridge.myView.host : local
     }
 
     //! Bridge - Client assignment

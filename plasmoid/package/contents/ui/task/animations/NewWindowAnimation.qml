@@ -21,6 +21,7 @@ Item{
     property bool inDelayedStartup: false
 
     readonly property bool running: newWindowAnimationLoader.active ? newWindowAnimationLoader.item.running : false
+    readonly property bool paused: newWindowAnimationLoader.active ? newWindowAnimationLoader.item.paused : false
     readonly property string needThicknessEvent: newWindowAnimation + "_newwindow"
 
     Loader {
@@ -37,21 +38,21 @@ Item{
         }
     }
 
-    function clear(){
-        newWindowAnimationLoader.item.stop();
+    Connections{
+        target: taskItem
 
-        taskItem.parabolicItem.zoomLength = 1.0;
-        taskItem.parabolicItem.zoomThickness = 1.0;
-
-        taskItem.setBlockingAnimation(false);
-        taskItem.inAttentionAnimation = false;
-        taskItem.inNewWindowAnimation = false;
+        onInAttentionChanged:{
+            if (!taskItem.inAttention && newWindowAnimation.running && taskItem.inAttentionBuiltinAnimation) {
+                clear();
+            }
+        }
     }
 
-    function pause() {
-        if (running) {
-            newWindowAnimationLoader.item.pause();
-        }
+    function clear(){
+        newWindowAnimationLoader.item.stop();
+        taskItem.setBlockingAnimation(false);
+        taskItem.inAttentionBuiltinAnimation = false;
+        taskItem.inNewWindowBuiltinAnimation = false;
     }
 
     function stop() {
@@ -68,17 +69,18 @@ Item{
 
     function init(){
         taskItem.setBlockingAnimation(true);
-        taskItem.inNewWindowAnimation = true;
-
-        taskItem.parabolicItem.zoomLength = taskItem.parabolicItem.zoom;
-        taskItem.parabolicItem.zoomThickness = taskItem.parabolicItem.zoom;
-
-        taskItem.inAttentionAnimation = isDemandingAttention;
-
+        taskItem.inNewWindowBuiltinAnimation = true;
+        taskItem.inAttentionBuiltinAnimation = isDemandingAttention;
         taskItem.abilities.animations.needThickness.addEvent(needThicknessEvent);
     }
 
     function startNewWindowAnimation(){
+        if (isDemandingAttention && taskItem.abilities.indicators.info.providesInAttentionAnimation) {
+            return;
+        } else if (!isDemandingAttention && taskItem.abilities.indicators.info.providesGroupedWindowAddedAnimation) {
+            return;
+        }
+
         if (!taskItem.abilities.myView.isHidden
                 && ((root.windowInAttentionEnabled && isDemandingAttention)
                     || root.windowAddedInGroupEnabled)){
@@ -92,11 +94,11 @@ Item{
     }
 
     Component.onCompleted: {
-        taskItem.groupWindowAdded.connect(startNewWindowAnimation);
+        taskItem.taskGroupedWindowAdded.connect(startNewWindowAnimation);
     }
 
     Component.onDestruction: {
-        taskItem.groupWindowAdded.disconnect(startNewWindowAnimation);
+        taskItem.taskGroupedWindowAdded.disconnect(startNewWindowAnimation);
         taskItem.abilities.animations.needThickness.removeEvent(needThicknessEvent);
     }
 }

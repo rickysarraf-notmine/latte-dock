@@ -40,6 +40,7 @@ Effects::~Effects()
 void Effects::init()
 {
     connect(this, &Effects::backgroundOpacityChanged, this, &Effects::updateEffects);
+    connect(this, &Effects::backgroundOpacityChanged, this, &Effects::updateBackgroundContrastValues);
     connect(this, &Effects::backgroundCornersMaskChanged, this, &Effects::updateEffects);
     connect(this, &Effects::backgroundRadiusEnabledChanged, this, &Effects::updateEffects);
     connect(this, &Effects::drawEffectsChanged, this, &Effects::updateEffects);
@@ -91,17 +92,6 @@ void Effects::init()
     connect(m_view, &Latte::View::layoutChanged, this, &Effects::onPopUpMarginChanged);
 
     connect(&m_theme, &Plasma::Theme::themeChanged, this, [&]() {
-        auto background = m_background;
-        m_background = new Plasma::FrameSvg(this);
-
-        if (background) {
-            background->deleteLater();
-        }
-
-        if (m_background->imagePath() != "widgets/panel-background") {
-            m_background->setImagePath(QStringLiteral("widgets/panel-background"));
-        }
-
         updateBackgroundContrastValues();
         updateEffects();
     });
@@ -318,6 +308,15 @@ void Effects::setInputMask(QRect area)
     m_inputMask = area;
 
     if (KWindowSystem::isPlatformX11()) {
+        if (m_view->devicePixelRatio() != 1.0) {
+            //!Fix for X11 Global Scale
+            auto ratio = m_view->devicePixelRatio();
+            area = QRect(qRound(area.x() * ratio),
+                         qRound(area.y() * ratio),
+                         qRound(area.width()*ratio),
+                         qRound(area.height() * ratio));
+        }
+
         m_corona->wm()->setInputMask(m_view, area);
     } else {
         //under wayland mask() is providing the Input Area
@@ -344,6 +343,21 @@ void Effects::setAppletsLayoutGeometry(const QRect &geom)
     emit appletsLayoutGeometryChanged();
 }
 
+QQuickItem *Effects::panelBackgroundSvg() const
+{
+    return m_panelBackgroundSvg;
+}
+
+void Effects::setPanelBackgroundSvg(QQuickItem *quickitem)
+{
+    if (m_panelBackgroundSvg == quickitem) {
+        return;
+    }
+
+    m_panelBackgroundSvg = quickitem;
+    emit panelBackgroundSvgChanged();
+}
+
 void Effects::onPopUpMarginChanged()
 {
     m_view->setProperty("_applets_popup_margin", QVariant(popUpMargin()));
@@ -351,14 +365,6 @@ void Effects::onPopUpMarginChanged()
 
 void Effects::forceMaskRedraw()
 {
-    if (m_background) {
-        delete m_background;
-    }
-
-    m_background = new Plasma::FrameSvg(this);
-    m_background->setImagePath(QStringLiteral("widgets/panel-background"));
-    m_background->setEnabledBorders(m_enabledBorders);
-
     updateMask();
 }
 
@@ -452,7 +458,7 @@ QRegion Effects::maskCombinedRegion()
 
 void Effects::updateBackgroundCorners()
 {
-    if (m_backgroundRadius<=0) {
+    if (m_backgroundRadius<0) {
         return;
     }
 
@@ -490,21 +496,14 @@ void Effects::updateMask()
             //! rounded corners to be shown correctly
             //! the enabledBorders check was added because there was cases
             //! that the mask region wasn't calculated correctly after location changes
-            if (!m_background) {
-                if (m_background && m_background->enabledBorders() != m_enabledBorders) {
-                    delete m_background;
-                }
-
-                m_background = new Plasma::FrameSvg(this);
+            if (!m_panelBackgroundSvg) {
+                return;
             }
 
-            if (m_background->imagePath() != "widgets/panel-background") {
-                m_background->setImagePath(QStringLiteral("widgets/panel-background"));
+            const QVariant maskProperty = m_panelBackgroundSvg->property("mask");
+            if (static_cast<QMetaType::Type>(maskProperty.type()) == QMetaType::QRegion) {
+                fixedMask = maskProperty.value<QRegion>();
             }
-
-            m_background->setEnabledBorders(m_enabledBorders);
-            m_background->resizeFrame(maskRect.size());
-            fixedMask = m_background->mask();
         }
 
         fixedMask.translate(maskRect.x(), maskRect.y());
@@ -544,7 +543,7 @@ void Effects::updateEffects()
 
     if (m_drawEffects) {
         if (!m_view->behaveAsPlasmaPanel()) {
-            if (!m_rect.isNull() && !m_rect.isEmpty()) {
+            if (!m_rect.isNull() && !m_rect.isEmpty() && m_rect != VisibilityManager::ISHIDDENMASK) {
                 QRegion backMask;
 
                 if (m_backgroundRadiusEnabled) {
@@ -555,36 +554,33 @@ void Effects::updateEffects()
                     //! this is used when compositing is disabled and provides
                     //! the correct way for the mask to be painted in order for
                     //! rounded corners to be shown correctly
-                    if (!m_background) {
-                        m_background = new Plasma::FrameSvg(this);
+                    if (!m_panelBackgroundSvg) {
+                        return;
                     }
 
-                    if (m_background->imagePath() != "widgets/panel-background") {
-                        m_background->setImagePath(QStringLiteral("widgets/panel-background"));
+                    if (m_rect == VisibilityManager::ISHIDDENMASK) {
+                        clearEffects = true;
+                    } else {
+                        const QVariant maskProperty = m_panelBackgroundSvg->property("mask");
+                        if (static_cast<QMetaType::Type>(maskProperty.type()) == QMetaType::QRegion) {
+                            backMask = maskProperty.value<QRegion>();
+                        }
                     }
-
-                    m_background->setEnabledBorders(m_enabledBorders);
-                    m_background->resizeFrame(m_rect.size());
-
-                    backMask = m_background->mask();
                 }
 
                 //! adjust mask coordinates based on local coordinates
                 int fX = m_rect.x(); int fY = m_rect.y();
 
-
-#if KF5_VERSION_MINOR >= 65
                 //! Latte is now using GtkFrameExtents so Effects geometries must be adjusted
                 //! windows that use GtkFrameExtents and apply Effects on them they take GtkFrameExtents
                 //! as granted
-                if (KWindowSystem::isPlatformX11()) {
+                if (KWindowSystem::isPlatformX11() && !m_view->byPassWM()) {
                     if (m_view->location() == Plasma::Types::BottomEdge) {
                         fY = qMax(0, fY - m_view->headThicknessGap());
                     } else if (m_view->location() == Plasma::Types::RightEdge) {
                         fX = qMax(0, fX - m_view->headThicknessGap());
                     }
                 }
-#endif
 
                 //! There are cases that mask is NULL even though it should not
                 //! Example: SidebarOnDemand from v0.10 that BEHAVEASPLASMAPANEL in EditMode
@@ -657,15 +653,21 @@ qreal Effects::currentMidValue(const qreal &max, const qreal &factor, const qrea
 void Effects::updateBackgroundContrastValues()
 {
     if (!m_theme.backgroundContrastEnabled()) {
-        m_backEffectContrast = 1;
-        m_backEffectIntesity = 1;
-        m_backEffectSaturation = 1;
+        m_backEffectContrast = 1.0;
+        m_backEffectIntesity = 1.0;
+        m_backEffectSaturation = 1.0;
         return;
     }
 
-    m_backEffectContrast = currentMidValue(m_theme.backgroundContrast(), m_backgroundOpacity, 1);
-    m_backEffectIntesity = currentMidValue(m_theme.backgroundIntensity(), m_backgroundOpacity, 1);
-    m_backEffectSaturation = currentMidValue(m_theme.backgroundSaturation(), m_backgroundOpacity, 1);
+    if (m_backgroundOpacity == -1 /*Default plasma opacity option*/) {
+        m_backEffectContrast = m_theme.backgroundContrast();
+        m_backEffectIntesity = m_theme.backgroundIntensity();
+        m_backEffectSaturation = m_theme.backgroundSaturation();
+    } else {
+        m_backEffectContrast = currentMidValue(m_theme.backgroundContrast(), m_backgroundOpacity, 1);
+        m_backEffectIntesity = currentMidValue(m_theme.backgroundIntensity(), m_backgroundOpacity, 1);
+        m_backEffectSaturation = currentMidValue(m_theme.backgroundSaturation(), m_backgroundOpacity, 1);
+    }
 }
 
 void Effects::updateEnabledBorders()

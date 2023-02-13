@@ -21,6 +21,7 @@
 // Qt
 #include <QObject>
 #include <QWindow>
+#include <QDBusServiceWatcher>
 #include <QDialog>
 #include <QMap>
 #include <QRect>
@@ -101,7 +102,10 @@ public:
     virtual WindowId winIdFor(QString appId, QString title) = 0;
     virtual AppData appDataFor(WindowId wid) = 0;
 
+    bool isKWinRunning() const;
+
     bool inCurrentDesktopActivity(const WindowInfoWrap &winfo);
+    bool isShowingDesktop() const;
 
     bool hasBlockedTracking(const WindowId &wid) const;
 
@@ -137,6 +141,8 @@ signals:
     void windowRemoved(WindowId wid);
     void currentDesktopChanged();
     void currentActivityChanged();
+
+    void isShowingDesktopChanged();
 
     void latteWindowAdded();
 
@@ -174,13 +180,27 @@ protected:
     bool isPlasmaPanel(const QRect &wGeometry) const;
     bool isSidepanel(const QRect &wGeometry) const;
 
+    bool isVirtualDesktopNavigationWrappingAround() const;
+
 private slots:
+    void initKWinInterface();
     void windowRemovedSlot(WindowId wid);
 
+    void setIsShowingDesktop(const bool &showing);
+
+    void onVirtualDesktopNavigationWrappingAroundChanged(bool navigationWrappingAround);
+
 private:
+    bool m_isShowingDesktop{false};
+
+    bool m_isKWinInterfaceAvailable{false};
+    bool m_isVirtualDesktopNavigationWrappingAround{true};
+
     Latte::Corona *m_corona;
     Tracker::Schemes *m_schemesTracker;
     Tracker::Windows *m_windowsTracker;
+
+    QDBusServiceWatcher *m_kwinServiceWatcher{nullptr};
 };
 
 }

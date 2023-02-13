@@ -58,10 +58,6 @@ namespace Latte {
 class Corona;
 class Interfaces;
 class GenericLayout;
-
-namespace ViewPart {
-class ContextMenu;
-}
 }
 
 namespace Latte {
@@ -70,13 +66,13 @@ class View : public PlasmaQuick::ContainmentView
 {
     Q_OBJECT
 
+    Q_PROPERTY(int groupId READ groupId NOTIFY groupIdChanged)
     Q_PROPERTY(Latte::Types::ViewType type READ type WRITE setType NOTIFY typeChanged)
 
     Q_PROPERTY(bool alternativesIsShown READ alternativesIsShown NOTIFY alternativesIsShownChanged)
     Q_PROPERTY(bool behaveAsPlasmaPanel READ behaveAsPlasmaPanel WRITE setBehaveAsPlasmaPanel NOTIFY behaveAsPlasmaPanelChanged)
     Q_PROPERTY(bool byPassWM READ byPassWM WRITE setByPassWM NOTIFY byPassWMChanged)
     Q_PROPERTY(bool containsDrag READ containsDrag NOTIFY containsDragChanged)
-    Q_PROPERTY(bool contextMenuIsShown READ contextMenuIsShown NOTIFY contextMenuIsShownChanged)
     Q_PROPERTY(bool inSettingsAdvancedMode READ inSettingsAdvancedMode NOTIFY inSettingsAdvancedModeChanged)
 
     Q_PROPERTY(bool inEditMode READ inEditMode NOTIFY inEditModeChanged)
@@ -128,7 +124,7 @@ class View : public PlasmaQuick::ContainmentView
     Q_PROPERTY(QRect screenGeometry READ screenGeometry NOTIFY screenGeometryChanged)
 
 public:
-    View(Plasma::Corona *corona, QScreen *targetScreen = nullptr, bool byPassWM = false);
+    View(Plasma::Corona *corona, QScreen *targetScreen = nullptr, bool byPassX11WM = false);
     virtual ~View();
 
     void init(Plasma::Containment *plasma_containment = nullptr);
@@ -151,8 +147,6 @@ public:
     bool containsDrag() const;
     bool containsMouse() const;
 
-    bool contextMenuIsShown() const;
-
     bool byPassWM() const;
     void setByPassWM(bool bypass);
 
@@ -160,7 +154,7 @@ public:
 
     bool isFloatingPanel() const;
 
-    bool isPreferredForShortcuts() const;
+    virtual bool isPreferredForShortcuts() const;
     void setIsPreferredForShortcuts(bool preferred);
 
     bool inSettingsAdvancedMode() const;
@@ -173,6 +167,8 @@ public:
 
     bool screenEdgeMarginEnabled() const;
     void setScreenEdgeMarginEnabled(bool enabled); 
+
+    virtual int groupId() const;
 
     int fontPixelSize() const;
     void setFontPixelSize(int size);
@@ -229,16 +225,20 @@ public:
     QQuickItem *metrics() const;
     void setMetrics(QQuickItem *metrics);
 
+    virtual bool isCloned() const = 0; //means that this view is a clone of an original view
+    virtual bool isOriginal() const = 0; //means that this view is an original view that can be autocloned to other screens
+    virtual bool isSingle() const = 0; //means that this view is not related to clones and screen groups in any way
+    virtual Latte::Types::ScreensGroup screensGroup() const = 0;
+
     QVariantList containmentActions() const;
 
     QQuickView *configView();
 
-    Latte::Data::View data() const;
+    virtual Latte::Data::View data() const;
 
     ViewPart::Effects *effects() const;   
-    ViewPart::ContextMenu *contextMenu() const;
     ViewPart::ContainmentInterface *extendedInterface() const;
-    ViewPart::Indicator *indicator() const;
+    virtual ViewPart::Indicator *indicator() const;
     ViewPart::Parabolic *parabolic() const;
     ViewPart::Positioner *positioner() const;
     ViewPart::EventsSink *sink() const;
@@ -256,7 +256,7 @@ public:
     //! release grab and restore mouse state
     void unblockMouse(int x, int y);
 
-    void reconsiderScreen();
+    virtual void reconsiderScreen();
 
     //! these are signals that create crashes, such a example is the availableScreenRectChanged from corona
     //! when its containment is destroyed
@@ -284,7 +284,6 @@ protected slots:
 
 protected:
     bool event(QEvent *ev) override;
-    void mousePressEvent(QMouseEvent *event) override;
 
 signals:
     void eventTriggered(QEvent *ev);
@@ -301,7 +300,6 @@ signals:
     void configWindowGeometryChanged(); // is called from config windows
     void containmentActionsChanged();
     void containsDragChanged();
-    void contextMenuIsShownChanged();
     void dockLocationChanged();
     void editThicknessChanged();
     void effectsChanged();
@@ -309,6 +307,7 @@ signals:
     void fontPixelSizeChanged();
     void forcedShown(); //[workaround] forced shown to avoid a KWin issue that hides windows when closing activities
     void geometryChanged();
+    void groupIdChanged();
     void widthChanged();
     void headThicknessGapChanged();
     void heightChanged();
@@ -334,6 +333,7 @@ signals:
     void screenEdgeMarginChanged();
     void screenEdgeMarginEnabledChanged();
     void screenGeometryChanged();
+
     void sinkChanged();
     void typeChanged();
     void visibilityChanged();
@@ -351,6 +351,9 @@ signals:
     //! way we can disable any such signaling all together, e.g. through disconnectSensitiveSignals()
     void availableScreenRectChangedFrom(Latte::View *origin);
     void availableScreenRegionChangedFrom(Latte::View *origin);
+
+protected:
+    QPointer<Latte::Corona> m_corona;
 
 private slots:
     void applyActivitiesToWindows();
@@ -391,7 +394,6 @@ private:
     bool m_containsDrag{false};
     bool m_containsMouse{false};
     bool m_inDelete{false};
-    bool m_inStartup{true};
     bool m_isPreferredForShortcuts{false};
     bool m_onPrimary{true};
     bool m_screenEdgeMarginEnabled{false};
@@ -440,7 +442,6 @@ private:
     QPointer<PlasmaQuick::ConfigView> m_appletConfigView;
     QPointer<ViewPart::PrimaryConfigView> m_primaryConfigView;
 
-    QPointer<ViewPart::ContextMenu> m_contextMenu;
     QPointer<ViewPart::Effects> m_effects;
     QPointer<ViewPart::Indicator> m_indicator;
     QPointer<ViewPart::ContainmentInterface> m_interface;
@@ -457,8 +458,6 @@ private:
 
     //! track transientWindows
     QList<QWindow *> m_transientWindows;
-
-    QPointer<Latte::Corona> m_corona;
 
     KWayland::Client::PlasmaShellSurface *m_shellSurface{nullptr};
 };

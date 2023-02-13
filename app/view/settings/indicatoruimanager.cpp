@@ -14,6 +14,7 @@
 
 // Qt
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QTimer>
 
 // KDE
@@ -29,11 +30,7 @@ IndicatorUiManager::IndicatorUiManager(ViewPart::PrimaryConfigView *parent)
     : QObject(parent),
       m_primary(parent)
 {
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    qmlRegisterType<Latte::ViewPart::Config::IndicatorUiManager>();
-#else
     qmlRegisterAnonymousType<Latte::ViewPart::Config::IndicatorUiManager>("latte-dock", 1);
-#endif
 }
 
 IndicatorUiManager::~IndicatorUiManager()
@@ -116,7 +113,7 @@ void IndicatorUiManager::ui(const QString &type, Latte::View *view)
     }
 
     //! type needs to be created again
-    KPluginMetaData metadata = m_primary->corona()->indicatorFactory()->metadata(type);;
+    KPluginMetaData metadata = m_primary->corona()->indicatorFactory()->metadata(type);
 
     if (metadata.isValid()) {
         QString uiPath = metadata.value("X-Latte-ConfigUi");
@@ -125,13 +122,13 @@ void IndicatorUiManager::ui(const QString &type, Latte::View *view)
             IndicatorUiData uidata;
 
             uidata.ui = new KDeclarative::QmlObjectSharedEngine(this);
-            uidata.pluginPath = metadata.fileName().remove("metadata.desktop");
+            uidata.pluginPath = QFileInfo(metadata.fileName()).absolutePath();
             uidata.type = type;
             uidata.view = view;
 
             uidata.ui->setTranslationDomain(QLatin1String("latte_indicator_") + metadata.pluginId());
             uidata.ui->setInitializationDelayed(true);
-            uiPath = uidata.pluginPath + "package/" + uiPath;
+            uiPath = uidata.pluginPath + "/package/" + uiPath;
             uidata.ui->setSource(QUrl::fromLocalFile(uiPath));
             uidata.ui->rootContext()->setContextProperty(QStringLiteral("dialog"), m_parentItem);
             uidata.ui->rootContext()->setContextProperty(QStringLiteral("indicator"), view->indicator());

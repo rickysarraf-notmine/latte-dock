@@ -4,20 +4,23 @@
     SPDX-License-Identifier: GPL-2.0-or-later
 */
 
-import QtQuick 2.0
+import QtQuick 2.7
 
 import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 
 Item{
     id: visual
+    //used from LatteCore.Dialog Tooltips in order to be anchored properly to their visual parent
+    signal anchoredTooltipPositionChanged();
+
     width: root.isVertical ?  thickness : size
     height: root.isVertical ? size : thickness
 
     property int size: 1
     property int thickness: Math.min(Math.max(minimumThickness, preferredThickness), maximumThickness)
     property int minimumThickness: 0
-    readonly property int preferredThickness: (parabolic.factor.zoom * metrics.totals.thickness) + metrics.margin.screenEdge
+    readonly property int preferredThickness: (parabolic.factor.zoom * metrics.iconSize) + (parabolic.factor.marginThicknessZoom * metrics.totals.thicknessEdges) + metrics.margin.screenEdge
     property int maximumThickness: 9999
 
     property Item metrics: null
@@ -25,6 +28,12 @@ Item{
     //border.width: 1
     //border.color: "green"
     //color: "transparent"
+
+    Connections {
+        target: appletItem.layouts
+        enabled: parabolic.isEnabled && appletItem.containsMouse
+        onCurrentSpotChanged: visual.anchoredTooltipPositionChanged();
+    }
 
     states:[
         State{

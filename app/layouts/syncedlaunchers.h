@@ -6,6 +6,9 @@
 #ifndef SYNCEDLAUNCHERS_H
 #define SYNCEDLAUNCHERS_H
 
+// local
+#include <coretypes.h>
+
 // Qt
 #include <QList>
 #include <QObject>
@@ -42,15 +45,17 @@ public slots:
     Q_INVOKABLE void addAbilityClient(QQuickItem *client);
     Q_INVOKABLE void removeAbilityClient(QQuickItem *client);
 
-    Q_INVOKABLE void addLauncher(QString layoutName, int launcherGroup, QString launcher);
-    Q_INVOKABLE void removeLauncher(QString layoutName, int launcherGroup, QString launcher);
-    Q_INVOKABLE void addLauncherToActivity(QString layoutName, int launcherGroup, QString launcher, QString activity);
-    Q_INVOKABLE void removeLauncherFromActivity(QString layoutName, int launcherGroup, QString launcher, QString activity);
-    Q_INVOKABLE void urlsDropped(QString layoutName, int launcherGroup, QStringList urls);
-    Q_INVOKABLE void validateLaunchersOrder(QString layoutName, uint senderId, int launcherGroup, QStringList launchers);
+    Q_INVOKABLE void addLauncher(QString layoutName, uint senderId, int launcherGroup, QString launcherGroupId, QString launcher);
+    Q_INVOKABLE void removeLauncher(QString layoutName, uint senderId, int launcherGroup, QString launcherGroupId, QString launcher);
+    Q_INVOKABLE void addLauncherToActivity(QString layoutName, uint senderId, int launcherGroup,QString launcherGroupId, QString launcher, QString activity);
+    Q_INVOKABLE void removeLauncherFromActivity(QString layoutName, uint senderId, int launcherGroup, QString launcherGroupId, QString launcher, QString activity);
+    Q_INVOKABLE void urlsDropped(QString layoutName, uint senderId, int launcherGroup, QString launcherGroupId, QStringList urls);
+    Q_INVOKABLE void validateLaunchersOrder(QString layoutName, uint senderId, int launcherGroup, QString launcherGroupId, QStringList launchers);
 
 private:
-    QList<QQuickItem *> clients(QString layoutName = QString());
+    QList<QQuickItem *> clients(QString layoutName, QString groupId);
+    QList<QQuickItem *> clients(QString layoutName, uint senderId, Latte::Types::LaunchersGroup launcherGroup, QString launcherGroupId);
+    QQuickItem *client(const int &id);
 
 private slots:
     void removeClientObject(QObject *obj);

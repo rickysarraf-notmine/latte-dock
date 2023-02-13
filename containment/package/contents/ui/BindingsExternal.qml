@@ -23,7 +23,7 @@ Item {
         property:"maxThickness"
         //! prevents updating window geometry during closing window in wayland and such fixes a crash
         when: latteView && !visibilityManager.inRelocationHiding && !visibilityManager.inClientSideScreenEdgeSliding //&& !inStartup
-        value: root.behaveAsPlasmaPanel ? visibilityManager.thicknessAsPanel : metrics.mask.thickness.maxZoomed
+        value: root.behaveAsPlasmaPanel ? visibilityManager.thicknessAsPanel : metrics.maxThicknessForView
     }
 
     Binding{
@@ -49,7 +49,7 @@ Item {
                 return 0;
             }
 
-            return metrics.mask.thickness.maxZoomed - metrics.mask.thickness.maxNormalForItems;
+            return metrics.maxThicknessForView - metrics.mask.thickness.maxNormalForItems;
         }
     }
 
@@ -191,7 +191,7 @@ Item {
         target: latteView && latteView.effects ? latteView.effects : null
         property: "backgroundOpacity"
         when: latteView && latteView.effects
-        value: background.currentOpacity
+        value: plasmoid.configuration.panelTransparency===-1 /*Default option*/ ? -1 : background.currentOpacity
     }
 
     Binding{
@@ -226,14 +226,21 @@ Item {
 
     Binding{
         target: latteView && latteView.effects ? latteView.effects : null
+        property: "panelBackgroundSvg"
+        when: latteView && latteView.effects
+        value: background.panelBackgroundSvg
+    }
+
+    Binding{
+        target: latteView && latteView.effects ? latteView.effects : null
         property:"appletsLayoutGeometry"
         when: latteView && latteView.effects && visibilityManager.inNormalState
         value: {
             if (root.behaveAsPlasmaPanel
                     || !LatteCore.WindowSystem.compositingActive
                     || (!parabolic.isEnabled && root.userShowPanelBackground && plasmoid.configuration.panelSize===100)) {
-                var paddingtail = (root.isHorizontal ? background.paddings.left : background.paddings.top) + background.tailRoundnessMargin;
-                var paddinghead = (root.isHorizontal ? background.paddings.right : background.paddings.bottom) + background.headRoundnessMargin;
+                var paddingtail = background.tailRoundness + background.tailRoundnessMargin;
+                var paddinghead = background.headRoundness + background.headRoundnessMargin;
 
                 if (root.isHorizontal) {
                     return Qt.rect(latteView.localGeometry.x + paddingtail,
@@ -319,7 +326,10 @@ Item {
     Binding{
         target: latteView && latteView.windowsTracker ? latteView.windowsTracker : null
         property: "enabled"
-        when: latteView && latteView.windowsTracker && latteView.visibility
+        //! During startup phase windows tracking is not enabled and does not
+        //! influence startup sequence at all. At the same time no windows tracking
+        //! takes place during startup and as such startup time is reduced
+        when: latteView && latteView.windowsTracker && latteView.visibility && !root.inStartup
         value: (latteView && latteView.visibility
                 && !(latteView.visibility.mode === LatteCore.Types.AlwaysVisible /* Visibility */
                      || latteView.visibility.mode === LatteCore.Types.WindowsGoBelow
@@ -334,5 +344,18 @@ Item {
                    && plasmoid.configuration.hideFloatingGapForMaximized)
     }
 
+    //! View::ExtendedInterface bindings
+    Binding{
+        target: latteView && latteView.extendedInterface ? latteView.extendedInterface : null
+        property: "plasmoid"
+        when: latteView && latteView.extendedInterface
+        value: plasmoid
+    }
 
+    Binding{
+        target: latteView && latteView.extendedInterface ? latteView.extendedInterface : null
+        property: "layoutManager"
+        when: latteView && latteView.extendedInterface
+        value: fastLayoutManager
+    }
 }

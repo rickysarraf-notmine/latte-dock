@@ -1,21 +1,34 @@
 project(lattedock)
-cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
 
-set(CMAKE_CXX_STANDARD 14)
-set(VERSION 0.9.91)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(VERSION 0.10.77)
 set(AUTHOR "Michail Vourlakos, Smith Ar")
 set(EMAIL "mvourlakos@gmail.com, audoban@openmailbox.org")
 set(WEBSITE "https://userbase.kde.org/LatteDock")
 set(BUG_ADDRESS "https://bugs.kde.org/enter_bug.cgi?product=lattedock")
 set(FAQS "https://userbase.kde.org/LatteDock/FAQ")
 
-set(QT_MIN_VERSION "5.9.0")
-set(KF5_MIN_VERSION "5.48.0")
+set(QT_MIN_VERSION "5.15.0")
+set(KF5_MIN_VERSION "5.88.0")
+set(KDE_COMPILERSETTINGS_LEVEL "5.84.0")
 
 set(KF5_LOCALE_PREFIX "")
 
-find_package(ECM ${KF5_MIN_VER} REQUIRED NO_MODULE)
-set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH} ${ECM_KDE_MODULE_DIR})
+find_package(ECM ${KF5_MIN_VERSION} REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+
+include(KDEInstallDirs)
+include(CheckIncludeFiles)
+include(CMakePackageConfigHelpers)
+include(ECMOptionalAddSubdirectory)
+include(ECMQtDeclareLoggingCategory)
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+include(KDEPackageAppTemplates)
+include(WriteBasicConfigVersionFile)
+
 
 find_package(Qt5 ${QT_MIN_VERSION} CONFIG REQUIRED NO_MODULE COMPONENTS DBus Gui Qml Quick)
 
@@ -45,17 +58,20 @@ if(X11_FOUND AND XCB_XCB_FOUND)
     set(HAVE_X11 ON)
 endif()
 
+
+find_package(QtWaylandScanner REQUIRED)
+find_package(Qt${QT_MAJOR_VERSION}WaylandClient)
+find_package(PlasmaWaylandProtocols 1.6 REQUIRED)
+find_package(Wayland REQUIRED COMPONENTS Client)
+
 string(REGEX MATCH "\\.([^]]+)\\." KF5_VERSION_MINOR ${KF5_VERSION})
 string(REGEX REPLACE "\\." "" KF5_VERSION_MINOR ${KF5_VERSION_MINOR})
 
 message(STATUS "KF5 VERSION : ${KF5_VERSION}")
 message(STATUS "KF5 VERSION MINOR : ${KF5_VERSION_MINOR}")
 
-if(${KF5_VERSION_MINOR} LESS "62")
-find_package(KF5 REQUIRED COMPONENTS SysGuard)
-endif()
 
-include(ECMQMLModules)
+include(ECMFindQmlModule)
 ecm_find_qmlmodule(QtQuick 2.7)
 ecm_find_qmlmodule(QtQuick.Layouts 1.3)
 ecm_find_qmlmodule(QtQuick.Controls 1.4)
@@ -65,20 +81,18 @@ ecm_find_qmlmodule(org.kde.kquickcontrolsaddons 2.0)
 ecm_find_qmlmodule(org.kde.plasma.core 2.0)
 ecm_find_qmlmodule(org.kde.plasma.components 2.0)
 
-include(CheckIncludeFiles)
-include(CMakePackageConfigHelpers)
-include(ECMOptionalAddSubdirectory)
-include(ECMQtDeclareLoggingCategory)
-include(KDECMakeSettings)
-include(KDECompilerSettings NO_POLICY_SCOPE)
-include(KDEInstallDirs)
-include(KDEPackageAppTemplates)
-include(WriteBasicConfigVersionFile)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/app/config-latte.h.cmake
+               ${CMAKE_CURRENT_BINARY_DIR}/app/config-latte.h)
 
-include(Definitions.cmake)
-
+#hide warnings
 string(REPLACE "-Wall" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-string(REPLACE "-Wformat-security" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+string(REPLACE "-Wdeprecated-declarations" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+string(REPLACE "-Wreorder" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+string(REPLACE "-Wunused-variable" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+string(REPLACE "-Wunused-parameter" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+
+#add format security check
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat -Werror=format-security")
 
 message(STATUS "COMPILER FLAGS : ${CMAKE_CXX_FLAGS}")
 

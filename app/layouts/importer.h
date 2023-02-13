@@ -8,6 +8,9 @@
 #ifndef IMPORTER_H
 #define IMPORTER_H
 
+// local
+#include "../apptypes.h"
+
 // Qt
 #include <QObject>
 #include <QTemporaryDir>
@@ -61,8 +64,11 @@ public:
     QString storageTmpDir() const;
     //! imports the specific layout and return the new layout name.
     //! if the function didn't succeed returns an empty string
-    QString importLayout(QString fileName);
+    QString importLayout(const QString &fileName, const QString &suggestedName = QString());
 
+    static void enableAutostart();
+    static void disableAutostart();
+    static bool isAutostartEnabled();
 
     static Importer::LatteFileVersion fileVersion(QString file);
 
@@ -80,22 +86,32 @@ public:
     static bool layoutExists(QString layoutName);
     //! imports the specific layout and return the new layout name.
     //! if the function didn't succeed returns an empty string
-    static QString importLayoutHelper(QString fileName);
+    static QString importLayoutHelper(const QString &fileName, const QString &suggestedName = QString());
 
     //! returns the file path of a layout either existing or not
     static QString layoutUserFilePath(QString layoutName);
     //! returns the layouts user directory
     static QString layoutUserDir();
+    //! returns the system path for latte shell data
+    static QString systemShellDataPath();
 
     static QString nameOfConfigFile(const QString &fileName);
     static QString uniqueLayoutName(QString name);
 
+    static bool hasViewTemplate(const QString &name);
+    static QString layoutTemplateSystemFilePath(const QString &name);
+
     static QStringList availableLayouts();
+    static QStringList availableLayoutTemplates();
+    static QStringList availableViewTemplates();
     //! it checks the linked file if there are Containments in it that belong
     //! to Original Layouts and moves them accordingly. This is used mainly on
     //! startup and if such state occurs, it basically means that the app didn't
     //! close correctly, e.g. there was a crash.
     static QStringList checkRepairMultipleLayoutsLinkedFile();
+
+    static Latte::MultipleLayouts::Status multipleLayoutsStatus();
+    static void setMultipleLayoutsStatus(const Latte::MultipleLayouts::Status &status);
 
 signals:
     void newLayoutAdded(const QString &path);

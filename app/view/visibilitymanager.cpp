@@ -79,12 +79,6 @@ VisibilityManager::VisibilityManager(PlasmaQuick::ContainmentView *view)
 
         connect(m_latteView, &Latte::View::inEditModeChanged, this, &VisibilityManager::initViewFlags);
 
-        connect(m_latteView, &Latte::View::absoluteGeometryChanged, this, [&]() {
-            if (m_mode == Types::AlwaysVisible) {
-                updateStrutsBasedOnLayoutsAndActivities();
-            }
-        });
-
         //! Frame Extents
         connect(m_latteView, &Latte::View::headThicknessGapChanged, this, &VisibilityManager::onHeadThicknessChanged);
         connect(m_latteView, &Latte::View::locationChanged, this, [&]() {
@@ -113,10 +107,13 @@ VisibilityManager::VisibilityManager(PlasmaQuick::ContainmentView *view)
         connect(this, &VisibilityManager::modeChanged, this, [&]() {
             emit m_latteView->availableScreenRectChangedFrom(m_latteView);
         });
+
+        //! Send frame extents on startup, this is really necessary when recreating a view.
+        //! Such a case is when toggling byPassWM and a view is recreated after disabling editing mode
+        const bool forceUpdate{true};
+        publishFrameExtents(forceUpdate);
     }
 
-    m_timerStartUp.setInterval(4000);
-    m_timerStartUp.setSingleShot(true);
     m_timerShow.setSingleShot(true);
     m_timerHide.setSingleShot(true);
 
@@ -142,7 +139,19 @@ VisibilityManager::VisibilityManager(PlasmaQuick::ContainmentView *view)
     m_timerPublishFrameExtents.setSingleShot(true);
     connect(&m_timerPublishFrameExtents, &QTimer::timeout, this, [&]() { publishFrameExtents(); });
 
+    m_timerBlockStrutsUpdate.setInterval(1000);
+    m_timerBlockStrutsUpdate.setSingleShot(true);
+    connect(&m_timerBlockStrutsUpdate, &QTimer::timeout, this, [&]() { updateStrutsBasedOnLayoutsAndActivities(); });
+
     restoreConfig();
+
+    //! connect save values after they have been restored
+    connect(this, &VisibilityManager::enableKWinEdgesChanged, this, &VisibilityManager::saveConfig);
+    connect(this, &VisibilityManager::modeChanged, this, &VisibilityManager::saveConfig);
+    connect(this, &VisibilityManager::raiseOnDesktopChanged, this, &VisibilityManager::saveConfig);
+    connect(this, &VisibilityManager::raiseOnActivityChanged, this, &VisibilityManager::saveConfig);
+    connect(this, &VisibilityManager::timerShowChanged, this, &VisibilityManager::saveConfig);
+    connect(this, &VisibilityManager::timerHideChanged, this, &VisibilityManager::saveConfig);
 }
 
 VisibilityManager::~VisibilityManager()
@@ -206,8 +215,11 @@ void VisibilityManager::setViewOnFrontLayer()
 
 void VisibilityManager::setMode(Latte::Types::Visibility mode)
 {
-    if (m_mode == mode)
+    if (m_mode == mode) {
         return;
+    }
+
+    qDebug() << "Updating visibility mode to  :::: " << mode;
 
     Q_ASSERT_X(mode != Types::None, staticMetaObject.className(), "set visibility to Types::None");
 
@@ -254,17 +266,23 @@ void VisibilityManager::setMode(Latte::Types::Visibility mode)
             updateStrutsBasedOnLayoutsAndActivities();
         }
 
-        m_connections[base] = connect(this, &VisibilityManager::strutsThicknessChanged, this, [&]() {
-            updateStrutsBasedOnLayoutsAndActivities();
-        });
+        m_connections[base] = connect(this, &VisibilityManager::strutsThicknessChanged, &VisibilityManager::updateStrutsAfterTimer);
 
-        m_connections[base+1] = connect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, [&]() {
+        // disabling this call because it was creating too many struts calls and   ???
+        // could create reduced responsiveness for DynamicStruts Scenario(for example ??
+        // when dragging active window from a floating dock/panel) ???
+        m_connections[base+1] = connect(m_latteView, &Latte::View::absoluteGeometryChanged, this, &VisibilityManager::updateStrutsAfterTimer);
+
+        m_connections[base+2] = connect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, [&]() {
             if (m_corona && m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
                 updateStrutsBasedOnLayoutsAndActivities(true);
             }
         });
 
-        m_connections[base+2] = connect(m_latteView, &Latte::View::activitiesChanged, this, [&]() {
+        //! respect canSetStrut that must be disabled under x11 when an alwaysvisible screen edge is common between two or more screens
+        m_connections[base+3] = connect(m_corona->screenPool(), &Latte::ScreenPool::screenGeometryChanged, this, &VisibilityManager::updateStrutsAfterTimer);
+
+        m_connections[base+4] = connect(m_latteView, &Latte::View::activitiesChanged, this, [&]() {
             updateStrutsBasedOnLayoutsAndActivities(true);
         });
 
@@ -358,9 +376,18 @@ void VisibilityManager::setMode(Latte::Types::Visibility mode)
         break;
     }
 
-    m_latteView->containment()->config().writeEntry("visibility", static_cast<int>(m_mode));
-
     emit modeChanged();
+}
+
+void VisibilityManager::updateStrutsAfterTimer()
+{
+    bool execute = !m_timerBlockStrutsUpdate.isActive();
+
+    m_timerBlockStrutsUpdate.start();
+
+    if (execute) {
+        updateStrutsBasedOnLayoutsAndActivities();
+    }
 }
 
 void VisibilityManager::updateSidebarState()
@@ -380,10 +407,10 @@ void VisibilityManager::updateSidebarState()
 void VisibilityManager::updateStrutsBasedOnLayoutsAndActivities(bool forceUpdate)
 {
     bool inMultipleLayoutsAndCurrent = (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts
-                                      && m_latteView->layout() && !m_latteView->positioner()->inRelocationAnimation()
-                                      && m_latteView->layout()->isCurrent());
+                                        && m_latteView->layout() && !m_latteView->positioner()->inRelocationAnimation()
+                                        && m_latteView->layout()->isCurrent());
 
-    if (m_strutsThickness>0 && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout || inMultipleLayoutsAndCurrent)) {
+    if (m_strutsThickness>0 && canSetStrut() && (m_corona->layoutsManager()->memoryUsage() == MemoryUsage::SingleLayout || inMultipleLayoutsAndCurrent)) {
         QRect computedStruts = acceptableStruts();
         if (m_publishedStruts != computedStruts || forceUpdate) {
             //! Force update is needed when very important events happen in DE and there is a chance
@@ -398,6 +425,63 @@ void VisibilityManager::updateStrutsBasedOnLayoutsAndActivities(bool forceUpdate
         m_publishedStruts = QRect();
         m_wm->removeViewStruts(*m_latteView);
     }
+}
+
+bool VisibilityManager::canSetStrut() const
+{
+    if (m_latteView->positioner()->isOffScreen()) {
+        return false;
+    }
+
+    if (!KWindowSystem::isPlatformX11() || m_wm->isKWinRunning()) {
+        // we always trust wayland and kwin to provide proper struts
+        return true;
+    }
+
+    if (qGuiApp->screens().count() < 2) {
+        return true;
+    }
+
+    /*Alternative DEs*/
+
+    const QRect thisScreen = m_latteView->screen()->geometry();
+
+    // Extended struts against a screen edge near to another screen are really harmful, so windows maximized under the panel is a lesser pain
+    // TODO: force "windows can cover" in those cases?
+    for (QScreen *screen : qGuiApp->screens()) {
+        if (!screen || m_latteView->screen() == screen) {
+            continue;
+        }
+
+        const QRect otherScreen = screen->geometry();
+
+        switch (m_latteView->location()) {
+        case Plasma::Types::TopEdge:
+            if (otherScreen.bottom() <= thisScreen.top()) {
+                return false;
+            }
+            break;
+        case Plasma::Types::BottomEdge:
+            if (otherScreen.top() >= thisScreen.bottom()) {
+                return false;
+            }
+            break;
+        case Plasma::Types::RightEdge:
+            if (otherScreen.left() >= thisScreen.right()) {
+                return false;
+            }
+            break;
+        case Plasma::Types::LeftEdge:
+            if (otherScreen.right() <= thisScreen.left()) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+    }
+
+    return true;
 }
 
 QRect VisibilityManager::acceptableStruts()
@@ -591,6 +675,11 @@ void VisibilityManager::publishFrameExtents(bool forceUpdate)
         m_frameExtentsLocation = m_latteView->location();
         m_frameExtentsHeadThicknessGap = m_latteView->headThicknessGap();
 
+        if (KWindowSystem::isPlatformX11() && m_latteView->devicePixelRatio()!=1.0) {
+            //!Fix for X11 Global Scale
+            m_frameExtentsHeadThicknessGap = qRound(m_frameExtentsHeadThicknessGap * m_latteView->devicePixelRatio());
+        }
+
         QMargins frameExtents(0, 0, 0, 0);
 
         if (m_latteView->location() == Plasma::Types::LeftEdge) {
@@ -603,14 +692,16 @@ void VisibilityManager::publishFrameExtents(bool forceUpdate)
             frameExtents.setTop(m_frameExtentsHeadThicknessGap);
         }
 
-        qDebug() << " -> Frame Extents :: " << m_frameExtentsLocation << " __ " << " extents :: " << frameExtents;
+        bool bypasswm{m_latteView->byPassWM() && KWindowSystem::isPlatformX11()};
 
-        if (!frameExtents.isNull() && !m_latteView->behaveAsPlasmaPanel()) {
+        qDebug() << " -> Frame Extents :: " << m_frameExtentsLocation << " __ " << " extents :: " << frameExtents << " bypasswm :: " << bypasswm;
+
+        if (!frameExtents.isNull() && !m_latteView->behaveAsPlasmaPanel() && !bypasswm) {
             //! When a view returns its frame extents to zero then that triggers a compositor
             //! strange behavior that moves/hides the view totally and freezes entire Latte
             //! this is why we have blocked that setting
             m_wm->setFrameExtents(m_latteView, frameExtents);
-        } else if (m_latteView->behaveAsPlasmaPanel()) {
+        } else if (m_latteView->behaveAsPlasmaPanel() || bypasswm) {
             QMargins panelExtents(0, 0, 0, 0);
             m_wm->setFrameExtents(m_latteView, panelExtents);
             emit frameExtentsCleared();
@@ -701,9 +792,9 @@ void VisibilityManager::toggleHiddenState()
 {
     if (!m_latteView->inEditMode()) {
         if (isSidebar()) {
-           // if (m_blockHidingEvents.contains(Q_FUNC_INFO)) {
+            // if (m_blockHidingEvents.contains(Q_FUNC_INFO)) {
             //    removeBlockHidingEvent(Q_FUNC_INFO);
-           // }
+            // }
 
             if (m_mode == Latte::Types::SidebarOnDemand) {
                 m_isRequestedShownSidebarOnDemand = !m_isRequestedShownSidebarOnDemand;
@@ -717,7 +808,7 @@ void VisibilityManager::toggleHiddenState()
                 }
             }
         } else {
-        /*    if (!m_isHidden && !m_blockHidingEvents.contains(Q_FUNC_INFO)) {
+            /*    if (!m_isHidden && !m_blockHidingEvents.contains(Q_FUNC_INFO)) {
                 addBlockHidingEvent(Q_FUNC_INFO);
             } else if (m_isHidden) {
                 removeBlockHidingEvent(Q_FUNC_INFO);
@@ -888,8 +979,9 @@ void VisibilityManager::dodgeAllWindows()
 
 void VisibilityManager::saveConfig()
 {
-    if (!m_latteView->containment())
+    if (!m_latteView->containment()) {
         return;
+    }
 
     auto config = m_latteView->containment()->config();
 
@@ -898,58 +990,20 @@ void VisibilityManager::saveConfig()
     config.writeEntry("timerHide", m_timerHideInterval);
     config.writeEntry("raiseOnDesktopChange", m_raiseOnDesktopChange);
     config.writeEntry("raiseOnActivityChange", m_raiseOnActivityChange);
+    config.writeEntry("visibility", static_cast<int>(m_mode));
 
-    m_latteView->containment()->configNeedsSaving();
 }
 
 void VisibilityManager::restoreConfig()
 {
-    if (!m_latteView || !m_latteView->containment()){
-        return;
-    }
-
     auto config = m_latteView->containment()->config();
-    m_timerShow.setInterval(config.readEntry("timerShow", 0));
-    m_timerHideInterval = qMax(HIDEMINIMUMINTERVAL, config.readEntry("timerHide", 700));
-    emit timerShowChanged();
-    emit timerHideChanged();
-
-    m_enableKWinEdgesFromUser = config.readEntry("enableKWinEdges", true);
-    emit enableKWinEdgesChanged();
-
+    setTimerHide(qMax(HIDEMINIMUMINTERVAL, config.readEntry("timerHide", 700)));
+    setTimerShow(config.readEntry("timerShow", 0));
+    setEnableKWinEdges(config.readEntry("enableKWinEdges", true));
     setRaiseOnDesktop(config.readEntry("raiseOnDesktopChange", false));
     setRaiseOnActivity(config.readEntry("raiseOnActivityChange", false));
 
-    auto storedMode = (Types::Visibility)(m_latteView->containment()->config().readEntry("visibility", (int)(Types::DodgeActive)));
-
-    if (storedMode == Types::AlwaysVisible) {
-        qDebug() << "Loading visibility mode: Always Visible , on startup...";
-        setMode(Types::AlwaysVisible);
-    } else {
-        connect(&m_timerStartUp, &QTimer::timeout, this, [&]() {
-            if (!m_latteView || !m_latteView->containment()) {
-                return;
-            }
-
-            Types::Visibility fMode = (Types::Visibility)(m_latteView->containment()->config().readEntry("visibility", (int)(Types::DodgeActive)));
-            qDebug() << "Loading visibility mode:" << fMode << " on startup...";
-            setMode(fMode);
-        });
-        connect(m_latteView->containment(), &Plasma::Containment::userConfiguringChanged
-                , this, [&](bool configuring) {
-            if (configuring && m_timerStartUp.isActive())
-                m_timerStartUp.start(100);
-        });
-
-        m_timerStartUp.start();
-    }
-
-    connect(m_latteView->containment(), &Plasma::Containment::userConfiguringChanged
-            , this, [&](bool configuring) {
-        if (!configuring) {
-            saveConfig();
-        }
-    });
+    setMode((Types::Visibility)(config.readEntry("visibility", (int)(Types::DodgeActive))));
 }
 
 bool VisibilityManager::containsMouse() const

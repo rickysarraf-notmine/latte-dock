@@ -100,10 +100,8 @@ MouseArea {
             if(currentApplet){
                 if (plasmoid.formFactor === PlasmaCore.Types.Vertical) {
                     currentApplet.y += (mouse.y - lastY);
-                    //    handle.y = currentApplet.y;
                 } else {
                     currentApplet.x += (mouse.x - lastX);
-                    //     handle.x = currentApplet.x;
                 }
             }
 
@@ -122,7 +120,6 @@ MouseArea {
             var item = hoveredItem(mousesink.x, mousesink.y);
 
             if (item && item !== placeHolder) {
-                placeHolder.parent = configurationArea;
                 var posInItem = mapToItem(item, mousesink.x, mousesink.y);
 
                 if ((plasmoid.formFactor === PlasmaCore.Types.Vertical && posInItem.y < item.height/2) ||
@@ -136,7 +133,7 @@ MouseArea {
         } else {
             var item = hoveredItem(mouse.x, mouse.y);
 
-            if (root.dragOverlay) {
+            if (root.dragOverlay && item && !item.isParabolicEdgeSpacer) {
                 root.dragOverlay.currentApplet = item;
             } else {
                 currentApplet = null;
@@ -168,15 +165,8 @@ MouseArea {
             return;
         }
 
-        handle.x = relevantLayout.x + currentApplet.x;
-        handle.y = relevantLayout.y + currentApplet.y;
-        handle.width = currentApplet.width;
-        handle.height = currentApplet.height;
-
         lockButton.checked = currentApplet.lockZoom;
         colorizingButton.checked = !currentApplet.userBlocksColorizing;
-
-        repositionHandler.restart();
     }
 
     onPressed: {
@@ -192,10 +182,6 @@ MouseArea {
 
         lastX = mouse.x;
         lastY = mouse.y;
-        placeHolder.width = root.isVertical ? currentApplet.width : Math.min(root.maxLength / 2, currentApplet.width);
-        placeHolder.height = !root.isVertical? currentApplet.height : Math.min(root.maxLength / 2, currentApplet.height);
-        handle.width = placeHolder.width;
-        handle.height = placeHolder.height;
         fastLayoutManager.insertBefore(currentApplet, placeHolder);
         currentApplet.parent = root;
         currentApplet.x = root.isHorizontal ? lastX - currentApplet.width/2 : lastX-appletX;
@@ -226,13 +212,6 @@ MouseArea {
         fastLayoutManager.insertBefore(placeHolder, currentApplet);
         placeHolder.parent = configurationArea;
         currentApplet.z = 1;
-
-        var relevantLayout = mapFromItem(layoutsContainer.mainLayout, 0, 0);
-
-        handle.x = relevantLayout.x + currentApplet.x;
-        handle.y = relevantLayout.y + currentApplet.y;
-        //     handle.width = currentApplet.width;
-        //    handle.height = currentApplet.height;
 
         if (root.myView.alignment === LatteCore.Types.Justify) {
             fastLayoutManager.moveAppletsBasedOnJustifyAlignment();
@@ -273,18 +252,11 @@ MouseArea {
     Item {
         id: placeHolder
         visible: configurationArea.pressed
+        width: currentApplet !== null ? (root.isVertical ? currentApplet.width : Math.min(root.maxLength / 2, currentApplet.width)) : 0
+        height: currentApplet !== null ? (!root.isVertical ? currentApplet.height : Math.min(root.maxLength / 2, currentApplet.height)) : 0
 
         readonly property bool isPlaceHolder: true
         readonly property int length: root.isVertical ? height : width
-    }
-
-    //Because of the animations for the applets the handler can not catch up to
-    //reposition itself when the currentApplet position or size changes.
-    //This timer fixes that situation
-    Timer {
-        id: repositionHandler
-        interval: 100
-        onTriggered: handle.updatePlacement();
     }
 
     Timer {
@@ -298,16 +270,10 @@ MouseArea {
         }
     }
 
-    Connections {
-        target: currentApplet
-        onXChanged: handle.updatePlacement();
-        onYChanged: handle.updatePlacement();
-        onWidthChanged: handle.updatePlacement();
-        onHeightChanged: handle.updatePlacement()
-    }
-
     Item {
         id: handle
+        parent: currentApplet ? currentApplet : configurationArea
+        anchors.fill: parent
         visible: currentApplet && (configurationArea.containsMouse || tooltipMouseArea.containsMouse)
 
         Loader {
@@ -321,25 +287,6 @@ MouseArea {
         }
 
         //BEGIN functions
-        function updatePlacement(){
-            if(currentApplet){
-                var transformChoords = configurationArea.mapFromItem(currentApplet, 0, 0)
-
-                if (handle.x !== transformChoords.x
-                        || handle.y !== transformChoords.y
-                        || handle.width !== currentApplet.width
-                        || handle.height !== currentApplet.height) {
-
-                    handle.x = transformChoords.x;
-                    handle.y = transformChoords.y;
-                    handle.width = currentApplet.width;
-                    handle.height = currentApplet.height;
-
-                    repositionHandler.restart();
-                }
-            }
-        }
-
         //END functions
 
         Item {
@@ -358,7 +305,7 @@ MouseArea {
 
             PlasmaCore.IconItem {
                 source: "transform-move"
-                width: Math.min(144, parent.width, parent.height)
+                width: Math.min(144, root.metrics.iconSize)
                 height: width
                 anchors.centerIn: parent
                 opacity: 0.9
@@ -465,6 +412,7 @@ MouseArea {
                 closeButton.visible = !currentApplet.isInternalViewSplitter && currentApplet.applet.action("remove") && currentApplet.applet.action("remove").enabled;
                 lockButton.visible = !currentApplet.isInternalViewSplitter
                         && !currentApplet.communicator.indexerIsSupported
+                        && !currentApplet.communicator.appletBlocksParabolicEffect
                         && !currentApplet.isSeparator;
 
                 colorizingButton.visible = root.colorizerEnabled && !currentApplet.appletBlocksColorizing && !currentApplet.isInternalViewSplitter;
@@ -520,8 +468,8 @@ MouseArea {
                             iconSource: "color-picker"
                             tooltip: i18n("Enable painting  for this applet")
 
-                            onCheckedChanged: {
-                                currentApplet.userBlocksColorizing = !checked;
+                            onClicked: {
+                                fastLayoutManager.setOption(currentApplet.applet.id, "userBlocksColorizing", !checked);
                             }
                         }
 
@@ -531,8 +479,8 @@ MouseArea {
                             iconSource: checked ? "lock" : "unlock"
                             tooltip: i18n("Disable parabolic effect for this applet")
 
-                            onCheckedChanged: {
-                                currentApplet.lockZoom = checked;
+                            onClicked: {
+                                fastLayoutManager.setOption(currentApplet.applet.id, "lockZoom", checked);
                             }
                         }
 

@@ -42,6 +42,18 @@ Ability.IndicatorsPrivate {
         providesClickedAnimation: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("providesClickedAnimation")
                                   && indicatorLevel.item.providesClickedAnimation
 
+        providesInAttentionAnimation: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("providesInAttentionAnimation")
+                                      && indicatorLevel.item.providesInAttentionAnimation
+
+        providesGroupedWindowAddedAnimation: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("providesGroupedWindowAddedAnimation")
+                                             && indicatorLevel.item.providesGroupedWindowAddedAnimation
+
+        providesGroupedWindowRemovedAnimation: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("providesGroupedWindowRemovedAnimation")
+                                               && indicatorLevel.item.providesGroupedWindowRemovedAnimation
+
+        providesTaskLauncherAnimation: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("providesTaskLauncherAnimation")
+                                       && indicatorLevel.item.providesTaskLauncherAnimation
+
         extraMaskThickness: {
             if (indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("extraMaskThickness")) {
                 return indicatorLevel.item.extraMaskThickness;
@@ -80,6 +92,14 @@ Ability.IndicatorsPrivate {
             }
 
             return -1;
+        }
+
+        backgroundCornerMargin: {
+            if (indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("backgroundCornerMargin")) {
+                return indicatorLevel.item.backgroundCornerMargin;
+            }
+
+            return 1.00;
         }
 
         svgPaths: indicatorLevel.isLoaded && indicatorLevel.item.hasOwnProperty("svgImagePaths") ?

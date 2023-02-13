@@ -46,13 +46,17 @@ UniversalSettings::UniversalSettings(KSharedConfig::Ptr config, QObject *parent)
     connect(this, &UniversalSettings::badges3DStyleChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::canDisableBordersChanged, this, &UniversalSettings::saveConfig);  
     connect(this, &UniversalSettings::inAdvancedModeForEditSettingsChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::inConfigureAppletsModeChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::isAvailableGeometryBroadcastedToPlasmaChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::launchersChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::layoutsMemoryUsageChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::metaPressAndHoldEnabledChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::parabolicSpreadChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::sensitivityChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::screenTrackerIntervalChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::showInfoWindowChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::singleModeLayoutNameChanged, this, &UniversalSettings::saveConfig);
+    connect(this, &UniversalSettings::thicknessMarginInfluenceChanged, this, &UniversalSettings::saveConfig);
     connect(this, &UniversalSettings::versionChanged, this, &UniversalSettings::saveConfig);
 
     connect(this, &UniversalSettings::screenScalesChanged, this, &UniversalSettings::saveScalesConfig);
@@ -77,7 +81,11 @@ void UniversalSettings::load()
     bool autostartUserSet = m_universalGroup.readEntry("userConfiguredAutostart", false);
 
     if (!autostartUserSet && !autostart()) {
+        //! the first time the application is running and autostart is not set, autostart is enabled
+        //! and from now own it will not be recreated in the beginning
+
         setAutostart(true);
+        m_universalGroup.writeEntry("userConfiguredAutostart", true);
     }
 
     //! init screen scales
@@ -126,6 +134,36 @@ void UniversalSettings::setInAdvancedModeForEditSettings(const bool &inAdvanced)
     emit inAdvancedModeForEditSettingsChanged();
 }
 
+bool UniversalSettings::inConfigureAppletsMode() const
+{
+    return m_inConfigureAppletsMode;
+}
+
+void UniversalSettings::setInConfigureAppletsMode(const bool enabled)
+{
+    if (m_inConfigureAppletsMode == enabled) {
+        return;
+    }
+
+    m_inConfigureAppletsMode = enabled;
+    emit inConfigureAppletsModeChanged();
+}
+
+bool UniversalSettings::isAvailableGeometryBroadcastedToPlasma() const
+{
+    return m_isAvailableGeometryBroadcastedToPlasma;
+}
+
+void UniversalSettings::setIsAvailableGeometryBroadcastedToPlasma(const bool &isBroadcasted)
+{
+    if (m_isAvailableGeometryBroadcastedToPlasma == isBroadcasted) {
+        return;
+    }
+
+    m_isAvailableGeometryBroadcastedToPlasma = isBroadcasted;
+    emit isAvailableGeometryBroadcastedToPlasmaChanged();
+}
+
 bool UniversalSettings::showInfoWindow() const
 {
     return m_showInfoWindow;
@@ -171,6 +209,36 @@ void UniversalSettings::setScreenTrackerInterval(int duration)
 
     m_screenTrackerInterval = duration;
     emit screenTrackerIntervalChanged();
+}
+
+int UniversalSettings::parabolicSpread() const
+{
+    return m_parabolicSpread;
+}
+
+void UniversalSettings::setParabolicSpread(const int &spread)
+{
+    if (m_parabolicSpread == spread) {
+        return;
+    }
+
+    m_parabolicSpread = spread;
+    emit parabolicSpreadChanged();
+}
+
+float UniversalSettings::thicknessMarginInfluence() const
+{
+    return m_thicknessMarginInfluence;
+}
+
+void UniversalSettings::setThicknessMarginInfluence(const float &influence)
+{
+    if (m_thicknessMarginInfluence == influence) {
+        return;
+    }
+
+    m_thicknessMarginInfluence = influence;
+    emit thicknessMarginInfluenceChanged();
 }
 
 QString UniversalSettings::singleModeLayoutName() const
@@ -221,47 +289,22 @@ void UniversalSettings::setLaunchers(QStringList launcherList)
 
 bool UniversalSettings::autostart() const
 {
-    QFile autostartFile(Latte::configPath() + "/autostart/org.kde.latte-dock.desktop");
-    return autostartFile.exists();
+    return Layouts::Importer::isAutostartEnabled();
 }
 
 void UniversalSettings::setAutostart(bool state)
 {
-    //! remove old autostart file
-    QFile oldAutostartFile(Latte::configPath() + "/autostart/latte-dock.desktop");
-
-    if (oldAutostartFile.exists()) {
-        oldAutostartFile.remove();
+    if (autostart() == state) {
+        return;
     }
 
-    //! end of removal of old autostart file
-
-    QFile autostartFile(Latte::configPath() + "/autostart/org.kde.latte-dock.desktop");
-    QFile metaFile(Layouts::Importer::standardPath("applications/org.kde.latte-dock.desktop", false));
-
-    if (!state && autostartFile.exists()) {
-        //! the first time that the user disables the autostart, this is recorded
-        //! and from now own it will not be recreated it in the beginning
-        if (!m_universalGroup.readEntry("userConfiguredAutostart", false)) {
-            m_universalGroup.writeEntry("userConfiguredAutostart", true);
-        }
-
-        autostartFile.remove();
-        emit autostartChanged();
-    } else if (state && metaFile.exists()) {
-        //! check if autostart folder exists and create otherwise
-        QDir autostartDir(Latte::configPath() + "/autostart");
-        if (!autostartDir.exists()) {
-            QDir configDir(Latte::configPath());
-            configDir.mkdir("autostart");
-        }
-
-        metaFile.copy(autostartFile.fileName());
-        //! I haven't added the flag "OnlyShowIn=KDE;" into the autostart file
-        //! because I fall onto a Plasma 5.8 case that this flag
-        //! didn't let the plasma desktop to start
-        emit autostartChanged();
+    if (state) {
+        Layouts::Importer::enableAutostart();
+    } else {
+        Layouts::Importer::disableAutostart();
     }
+
+    emit autostartChanged();
 }
 
 bool UniversalSettings::badges3DStyle() const
@@ -354,11 +397,12 @@ void UniversalSettings::kwin_forwardMetaToLatte(bool forward)
     m_kwinrcModifierOnlyShortcutsGroup.writeEntry("Meta", forwardStr);
     m_kwinrcModifierOnlyShortcutsGroup.sync();
 
-    QDBusInterface iface("org.kde.KWin", "/KWin", "", QDBusConnection::sessionBus());
+    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+                                                          QStringLiteral("/KWin"),
+                                                          QStringLiteral("org.kde.KWin"),
+                                                          QStringLiteral("reconfigure"));
 
-    if (iface.isValid()) {
-        iface.call("reconfigure");
-    }
+    QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
 }
 
 void UniversalSettings::kwin_setDisabledMaximizedBorders(bool disable)
@@ -373,13 +417,22 @@ void UniversalSettings::kwin_setDisabledMaximizedBorders(bool disable)
         return;
     }
 
-    m_kwinrcWindowsGroup.writeEntry("BorderlessMaximizedWindows", disable);
-    m_kwinrcWindowsGroup.sync();
+    bool serviceavailable{false};
 
-    QDBusInterface iface("org.kde.KWin", "/KWin", "", QDBusConnection::sessionBus());
+    if (QDBusConnection::sessionBus().interface()) {
+        serviceavailable = QDBusConnection::sessionBus().interface()->isServiceRegistered("org.kde.KWin").value();
+    }
 
-    if (iface.isValid()) {
-        iface.call("reconfigure");
+    if (serviceavailable) {
+        m_kwinrcWindowsGroup.writeEntry("BorderlessMaximizedWindows", disable);
+        m_kwinrcWindowsGroup.sync();
+
+        QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
+                                                              QStringLiteral("/KWin"),
+                                                              QStringLiteral("org.kde.KWin"),
+                                                              QStringLiteral("reconfigure"));
+
+        QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
         m_kwinBorderlessMaximizedWindows = disable;
     }
 }
@@ -429,7 +482,9 @@ void UniversalSettings::setLayoutsMemoryUsage(MemoryUsage::LayoutsMemory layouts
 
 Settings::MouseSensitivity UniversalSettings::sensitivity()
 {
-    return m_sensitivity;
+    //! return always default option as the users have not shown any interest in that option
+    return Latte::Settings::HighMouseSensitivity;
+ //   return m_sensitivity;
 }
 
 void UniversalSettings::setSensitivity(Settings::MouseSensitivity sense)
@@ -439,7 +494,7 @@ void UniversalSettings::setSensitivity(Settings::MouseSensitivity sense)
     }
 
     m_sensitivity = sense;
-    emit sensitivityChanged();
+ //   emit sensitivityChanged();
 }
 
 float UniversalSettings::screenWidthScale(QString screenName) const
@@ -514,16 +569,19 @@ void UniversalSettings::loadConfig()
     m_version = m_universalGroup.readEntry("version", 1);
     m_badges3DStyle = m_universalGroup.readEntry("badges3DStyle", false);
     m_canDisableBorders = m_universalGroup.readEntry("canDisableBorders", false);
-    m_contextMenuActionsAlwaysShown = m_universalGroup.readEntry("contextMenuActionsAlwaysShown", QStringList());
-    m_contextMenuActionsAlwaysShown = m_contextMenuActionsAlwaysShown.isEmpty() ? Latte::Data::ContextMenu::ACTIONSALWAYSVISIBLE : m_contextMenuActionsAlwaysShown;
+    m_contextMenuActionsAlwaysShown = m_universalGroup.readEntry("contextMenuActionsAlwaysShown", Latte::Data::ContextMenu::ACTIONSALWAYSVISIBLE);
     m_inAdvancedModeForEditSettings = m_universalGroup.readEntry("inAdvancedModeForEditSettings", false);
+    m_inConfigureAppletsMode = m_universalGroup.readEntry("inConfigureAppletsMode", false);
+    m_isAvailableGeometryBroadcastedToPlasma = m_universalGroup.readEntry("isAvailableGeometryBroadcastedToPlasma", true);
     m_launchers = m_universalGroup.readEntry("launchers", QStringList());
     m_metaPressAndHoldEnabled = m_universalGroup.readEntry("metaPressAndHoldEnabled", true);
     m_screenTrackerInterval = m_universalGroup.readEntry("screenTrackerInterval", 2500);
     m_showInfoWindow = m_universalGroup.readEntry("showInfoWindow", true);
     m_singleModeLayoutName = m_universalGroup.readEntry("singleModeLayoutName", QString());
+    m_parabolicSpread = m_universalGroup.readEntry("parabolicSpread", Data::Preferences::PARABOLICSPREAD);
+    m_thicknessMarginInfluence = m_universalGroup.readEntry("parabolicThicknessMarginInfluence", Data::Preferences::THICKNESSMARGININFLUENCE);
     m_memoryUsage = static_cast<MemoryUsage::LayoutsMemory>(m_universalGroup.readEntry("memoryUsage", (int)MemoryUsage::SingleLayout));
-    m_sensitivity = static_cast<Settings::MouseSensitivity>(m_universalGroup.readEntry("mouseSensitivity", (int)Settings::HighMouseSensitivity));
+    //m_sensitivity = static_cast<Settings::MouseSensitivity>(m_universalGroup.readEntry("mouseSensitivity", (int)Settings::HighMouseSensitivity));
 
     loadScalesConfig();
 
@@ -537,16 +595,19 @@ void UniversalSettings::saveConfig()
     m_universalGroup.writeEntry("version", m_version);
     m_universalGroup.writeEntry("badges3DStyle", m_badges3DStyle);
     m_universalGroup.writeEntry("canDisableBorders", m_canDisableBorders);
-    m_universalGroup.writeEntry("contextMenuActionsAlwaysShown", (m_contextMenuActionsAlwaysShown == Data::ContextMenu::ACTIONSALWAYSVISIBLE ?
-                                    QStringList() : m_contextMenuActionsAlwaysShown));
+    m_universalGroup.writeEntry("contextMenuActionsAlwaysShown", m_contextMenuActionsAlwaysShown);
     m_universalGroup.writeEntry("inAdvancedModeForEditSettings", m_inAdvancedModeForEditSettings);
+    m_universalGroup.writeEntry("inConfigureAppletsMode", m_inConfigureAppletsMode);
+    m_universalGroup.writeEntry("isAvailableGeometryBroadcastedToPlasma", m_isAvailableGeometryBroadcastedToPlasma);
     m_universalGroup.writeEntry("launchers", m_launchers);
     m_universalGroup.writeEntry("metaPressAndHoldEnabled", m_metaPressAndHoldEnabled);
     m_universalGroup.writeEntry("screenTrackerInterval", m_screenTrackerInterval);
     m_universalGroup.writeEntry("showInfoWindow", m_showInfoWindow);
     m_universalGroup.writeEntry("singleModeLayoutName", m_singleModeLayoutName);
+    m_universalGroup.writeEntry("parabolicSpread", m_parabolicSpread);
+    m_universalGroup.writeEntry("parabolicThicknessMarginInfluence", m_thicknessMarginInfluence);
     m_universalGroup.writeEntry("memoryUsage", (int)m_memoryUsage);
-    m_universalGroup.writeEntry("mouseSensitivity", (int)m_sensitivity);
+    //m_universalGroup.writeEntry("mouseSensitivity", (int)m_sensitivity);
     syncSettings();
 }
 

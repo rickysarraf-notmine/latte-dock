@@ -14,6 +14,11 @@ Item{
     property bool providesHoveredAnimation: false
     property bool providesClickedAnimation: false
 
+    property bool providesTaskLauncherAnimation: false
+    property bool providesInAttentionAnimation: false
+    property bool providesGroupedWindowAddedAnimation: false
+    property bool providesGroupedWindowRemovedAnimation: false
+
     property int extraMaskThickness: 0
 
     property real minThicknessPadding: 0
@@ -21,6 +26,7 @@ Item{
 
     property real lengthPadding: 0.08
     property real appletLengthPadding: -1
+    property real backgroundCornerMargin: 1.00
 
     property variant svgPaths: []
 }

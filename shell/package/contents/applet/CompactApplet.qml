@@ -6,6 +6,7 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.1
 import QtQuick.Window 2.0
+import QtGraphicalEffects 1.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
@@ -25,19 +26,31 @@ PlasmaCore.ToolTipArea {
     textFormat: plasmoid.toolTipTextFormat
     mainItem: plasmoid.toolTipItem ? plasmoid.toolTipItem : null
 
-    property Item fullRepresentation
-    property Item compactRepresentation
+    property Item fullRepresentation: null
+    property Item compactRepresentation: null
     /*Discover real visual parent - the following code points to Applet::ItemWrapper*/
-    property Item originalCompactRepresenationParent
+    property Item originalCompactRepresenationParent: null
     property Item compactRepresentationVisualParent: originalCompactRepresenationParent && originalCompactRepresenationParent.parent
                                                      ? originalCompactRepresenationParent.parent.parent : null
+
+    property Item appletItem: compactRepresentationVisualParent
+                              && compactRepresentationVisualParent.parent
+                              && compactRepresentationVisualParent.parent.parent ? compactRepresentationVisualParent.parent.parent.parent : null
 
     onCompactRepresentationChanged: {
         if (compactRepresentation) {
             originalCompactRepresenationParent = compactRepresentation.parent;
 
             compactRepresentation.parent = root;
-            compactRepresentation.anchors.fill = root;
+            compactRepresentation.anchors.centerIn = root;
+            compactRepresentation.width = Qt.binding(function() {
+                return root.width;
+            });
+
+            compactRepresentation.height = Qt.binding(function() {
+                return root.height;
+            });
+
             compactRepresentation.visible = true;
         }
         root.visible = true;
@@ -124,9 +137,11 @@ PlasmaCore.ToolTipArea {
         }
     }*/
 
+    //! This timer is needed in order for the applet popup to not reshow instantly and faulty after the user
+    //! clicks compact representation to hide it
     Timer {
         id: expandedSync
-        interval: 100
+        interval: 500
         onTriggered: plasmoid.expanded = popupWindow.visible;
     }
 
@@ -194,6 +209,91 @@ PlasmaCore.ToolTipArea {
                 popupWindow.requestActivate();
             }
         }
-
     }
+
+    ////Indicators API ////
+    Binding {
+        target: compactRepresentation ? compactRepresentation.anchors : null
+        property: "horizontalCenterOffset"
+        when: compactRepresentation
+        value: appletItem ? appletItem.iconOffsetX : 0
+    }
+
+    Binding {
+        target: compactRepresentation ? compactRepresentation.anchors : null
+        property: "verticalCenterOffset"
+        when: compactRepresentation
+        value: appletItem ? appletItem.iconOffsetY : 0
+    }
+
+    Binding {
+        target: root
+        property: "transformOrigin"
+        value: appletItem && compactRepresentation ? appletItem.iconTransformOrigin : Item.Center
+    }
+
+    Binding {
+        target: root
+        property: "opacity"
+        value: appletItem && compactRepresentation ? appletItem.iconOpacity : 1.0
+    }
+
+    Binding {
+        target: root
+        property: "rotation"
+        value: appletItem && compactRepresentation ? appletItem.iconRotation : 0
+    }
+
+    Binding {
+        target: root
+        property: "scale"
+        value: appletItem && compactRepresentation ? appletItem.iconScale : 1.0
+    }
+
+    ////Clicked Effect ////
+    BrightnessContrast {
+        id: _clickedEffect
+        anchors.centerIn: parent
+        anchors.horizontalCenterOffset: compactRepresentation ? compactRepresentation.anchors.horizontalCenterOffset : 0
+        anchors.verticalCenterOffset: compactRepresentation ? compactRepresentation.anchors.verticalCenterOffset : 0
+        source: compactRepresentation
+        width: root.width
+        height: root.height
+        visible: appletItem && clickedAnimation.running && !appletItem.indicators.info.providesClickedAnimation
+        z:1000
+    }
+
+    /////Clicked Animation/////
+    SequentialAnimation{
+        id: clickedAnimation
+        alwaysRunToEnd: true
+        running: appletItem
+                 && appletItem.animations
+                 && appletItem.indicators
+                 && appletItem.isSquare
+                 && appletItem.pressed
+                 && !appletItem.originalAppletBehavior
+                 && (appletItem.animations.speedFactor.current > 0)
+                 && !appletItem.indicators.info.providesClickedAnimation
+
+        ParallelAnimation{
+            PropertyAnimation {
+                target: _clickedEffect
+                property: "brightness"
+                to: -0.35
+                duration: appletItem && appletItem.animations ? appletItem.animations.duration.large : 0
+                easing.type: Easing.OutQuad
+            }
+        }
+        ParallelAnimation{
+            PropertyAnimation {
+                target: _clickedEffect
+                property: "brightness"
+                to: 0
+                duration: appletItem && appletItem.animations ? appletItem.animations.duration.large : 0
+                easing.type: Easing.OutQuad
+            }
+        }
+    }
+    //END animations
 }

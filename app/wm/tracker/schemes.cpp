@@ -34,7 +34,7 @@ Schemes::~Schemes()
     m_windowScheme.clear();
     //! it is just a reference to a real scheme file
     m_schemes.take("kdeglobals");
-    qDeleteAll(m_schemes);
+    qDeleteAll(m_schemes.values());
     m_schemes.clear();
 }
 
@@ -89,6 +89,20 @@ void Schemes::updateDefaultScheme()
     if (!m_schemes.contains("kdeglobals") || m_schemes["kdeglobals"]->schemeFile() != defaultSchemePath) {
         m_schemes["kdeglobals"] = dScheme;
     }
+
+    emit defaultSchemeChanged();
+}
+
+SchemeColors *Schemes::schemeForFile(const QString &scheme)
+{
+    QString schemeFile = SchemeColors::possibleSchemeFile(scheme);
+
+    if (!schemeFile.isEmpty() && !m_schemes.contains(schemeFile)) {
+        //! when this scheme file has not been loaded yet
+        m_schemes[schemeFile] = new SchemeColors(this, schemeFile);
+    }
+
+    return m_schemes.contains(schemeFile) ? m_schemes[schemeFile] : nullptr;
 }
 
 SchemeColors *Schemes::schemeForWindow(WindowId wid)

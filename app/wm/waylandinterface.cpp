@@ -20,7 +20,7 @@
 #include <QTimer>
 #include <QApplication>
 #include <QtX11Extras/QX11Info>
-#include <QRasterWindow>
+#include <QQuickView>
 #include <QLatin1String>
 
 // KDE
@@ -28,9 +28,8 @@
 #include <KWindowInfo>
 #include <KWayland/Client/surface.h>
 
-#if KF5_VERSION_MINOR >= 52
 #include <KWayland/Client/plasmavirtualdesktop.h>
-#endif
+
 
 // X11
 #include <NETWM>
@@ -39,7 +38,7 @@ using namespace KWayland::Client;
 
 namespace Latte {
 
-class Private::GhostWindow : public QRasterWindow
+class Private::GhostWindow : public QQuickView
 {
     Q_OBJECT
 
@@ -52,6 +51,9 @@ public:
                  | Qt::WindowStaysOnTopHint
                  | Qt::NoDropShadowWindowHint
                  | Qt::WindowDoesNotAcceptFocus);
+
+        setColor(QColor(Qt::transparent));
+        setClearBeforeRendering(true);
 
         connect(m_waylandInterface, &WindowSystem::AbstractWindowInterface::latteWindowAdded, this, &GhostWindow::identifyWinId);
 
@@ -147,7 +149,6 @@ void WaylandInterface::initWindowManagement(KWayland::Client::PlasmaWindowManage
     }, Qt::QueuedConnection);
 }
 
-#if KF5_VERSION_MINOR >= 52
 void WaylandInterface::initVirtualDesktopManagement(KWayland::Client::PlasmaVirtualDesktopManagement *virtualDesktopManagement)
 {
     if (m_virtualDesktopManagement == virtualDesktopManagement) {
@@ -201,7 +202,6 @@ void WaylandInterface::setCurrentDesktop(QString desktop)
     m_currentDesktop = desktop;
     emit currentDesktopChanged();
 }
-#endif
 
 KWayland::Client::PlasmaShell *WaylandInterface::waylandCoronaInterface() const
 {
@@ -253,9 +253,7 @@ void WaylandInterface::setViewExtraFlags(QObject *view, bool isPanelWindow, Latt
     }
 
     surface->setSkipTaskbar(true);
-#if KF5_VERSION_MINOR >= 47
     surface->setSkipSwitcher(true);
-#endif
 
     bool atBottom{!isPanelWindow && (mode == Latte::Types::WindowsCanCover || mode == Latte::Types::WindowsAlwaysCover)};
 
@@ -305,12 +303,12 @@ void WaylandInterface::setViewStruts(QWindow &view, const QRect &rect, Plasma::T
     switch (location) {
     case Plasma::Types::TopEdge:
     case Plasma::Types::BottomEdge:
-        w->setGeometry({rect.x() + rect.width() / 2, rect.y(), 1, rect.height()});
+        w->setGeometry({rect.x() + rect.width() / 2 - rect.height(), rect.y(), rect.height() + 1, rect.height()});
         break;
 
     case Plasma::Types::LeftEdge:
     case Plasma::Types::RightEdge:
-        w->setGeometry({rect.x(), rect.y() + rect.height() / 2, rect.width(), 1});
+        w->setGeometry({rect.x(), rect.y() + rect.height() / 2 - rect.width(), rect.width(), rect.width() + 1});
         break;
 
     default:
@@ -320,7 +318,6 @@ void WaylandInterface::setViewStruts(QWindow &view, const QRect &rect, Plasma::T
 
 void WaylandInterface::switchToNextVirtualDesktop()
 {
-#if KF5_VERSION_MINOR >= 52
     if (!m_virtualDesktopManagement || m_desktops.count() <= 1) {
         return;
     }
@@ -328,8 +325,12 @@ void WaylandInterface::switchToNextVirtualDesktop()
     int curPos = m_desktops.indexOf(m_currentDesktop);
     int nextPos = curPos + 1;
 
-    if (curPos == m_desktops.count()-1) {
-        nextPos = 0;
+    if (curPos >= m_desktops.count()-1) {
+        if (isVirtualDesktopNavigationWrappingAround()) {
+            nextPos = 0;
+        } else {
+            return;
+        }
     }
 
     KWayland::Client::PlasmaVirtualDesktop *desktopObj = m_virtualDesktopManagement->getVirtualDesktop(m_desktops[nextPos]);
@@ -337,12 +338,10 @@ void WaylandInterface::switchToNextVirtualDesktop()
     if (desktopObj) {
         desktopObj->requestActivate();
     }
-#endif
 }
 
 void WaylandInterface::switchToPreviousVirtualDesktop()
 {
-#if KF5_VERSION_MINOR >= 52
     if (!m_virtualDesktopManagement || m_desktops.count() <= 1) {
         return;
     }
@@ -350,8 +349,12 @@ void WaylandInterface::switchToPreviousVirtualDesktop()
     int curPos = m_desktops.indexOf(m_currentDesktop);
     int nextPos = curPos - 1;
 
-    if (curPos == 0) {
-        nextPos = m_desktops.count()-1;
+    if (curPos <= 0) {
+        if (isVirtualDesktopNavigationWrappingAround()) {
+            nextPos = m_desktops.count()-1;
+        } else {
+            return;
+        }
     }
 
     KWayland::Client::PlasmaVirtualDesktop *desktopObj = m_virtualDesktopManagement->getVirtualDesktop(m_desktops[nextPos]);
@@ -359,12 +362,10 @@ void WaylandInterface::switchToPreviousVirtualDesktop()
     if (desktopObj) {
         desktopObj->requestActivate();
     }
-#endif
 }
 
 void WaylandInterface::setWindowOnActivities(const WindowId &wid, const QStringList &nextactivities)
 {
-#if KF5_VERSION_MINOR >= 81
     auto winfo = requestInfo(wid);
     auto w = windowFor(wid);
 
@@ -405,7 +406,6 @@ void WaylandInterface::setWindowOnActivities(const WindowId &wid, const QStringL
             w->requestEnterActivity(requestenter[i]);
         }
     }
-#endif
 }
 
 void WaylandInterface::removeViewStruts(QWindow &view)
@@ -528,18 +528,11 @@ WindowInfoWrap WaylandInterface::requestInfo(WindowId wid)
         winfoWrap.setIsFullscreen(w->isFullscreen());
         winfoWrap.setIsShaded(w->isShaded());
         winfoWrap.setIsOnAllDesktops(w->isOnAllDesktops());
-#if KF5_VERSION_MINOR >= 81
         winfoWrap.setIsOnAllActivities(w->plasmaActivities().isEmpty());
-#else
-        winfoWrap.setIsOnAllActivities(true);
-#endif
         winfoWrap.setIsKeepAbove(w->isKeepAbove());
         winfoWrap.setIsKeepBelow(w->isKeepBelow());
         winfoWrap.setGeometry(w->geometry());
-
-#if KF5_VERSION_MINOR >= 47
         winfoWrap.setHasSkipSwitcher(w->skipSwitcher());
-#endif
         winfoWrap.setHasSkipTaskbar(w->skipTaskbar());
 
         //! BEGIN:Window Abilities
@@ -554,15 +547,9 @@ WindowInfoWrap WaylandInterface::requestInfo(WindowId wid)
         //! END:Window Abilities
 
         winfoWrap.setDisplay(w->title());
-#if KF5_VERSION_MINOR >= 52
         winfoWrap.setDesktops(w->plasmaVirtualDesktops());
-#endif
-
-#if KF5_VERSION_MINOR >= 81
         winfoWrap.setActivities(w->plasmaActivities());
-#else
-        winfoWrap.setActivities(QStringList());
-#endif
+
     } else {
         winfoWrap.setIsValid(false);
     }
@@ -705,7 +692,6 @@ void WaylandInterface::requestMoveWindow(WindowId wid, QPoint from)
 
 void WaylandInterface::requestToggleIsOnAllDesktops(WindowId wid)
 {
-#if KF5_VERSION_MINOR >= 52
     auto w = windowFor(wid);
 
     if (w && isValidWindow(w) && m_desktops.count() > 1) {
@@ -719,7 +705,6 @@ void WaylandInterface::requestToggleIsOnAllDesktops(WindowId wid)
             }
         }
     }
-#endif
 }
 
 void WaylandInterface::requestToggleKeepAbove(WindowId wid)
@@ -771,11 +756,9 @@ void WaylandInterface::requestToggleMinimized(WindowId wid)
     WindowInfoWrap wInfo = requestInfo(wid);
 
     if (w && isValidWindow(w) && inCurrentDesktopActivity(wInfo)) {
-#if KF5_VERSION_MINOR >= 52
         if (!m_currentDesktop.isEmpty()) {
             w->requestEnterVirtualDesktop(m_currentDesktop);
         }
-#endif
         w->requestToggleMinimized();
     }
 }
@@ -786,11 +769,9 @@ void WaylandInterface::requestToggleMaximized(WindowId wid)
     WindowInfoWrap wInfo = requestInfo(wid);
 
     if (w && isValidWindow(w) && windowCanBeMaximized(wid) && inCurrentDesktopActivity(wInfo)) {
-#if KF5_VERSION_MINOR >= 52
         if (!m_currentDesktop.isEmpty()) {
             w->requestEnterVirtualDesktop(m_currentDesktop);
         }
-#endif
         w->requestToggleMaximized();
     }
 }
@@ -854,11 +835,8 @@ bool WaylandInterface::isAcceptableWindow(const KWayland::Client::PlasmaWindow *
     //! Window Checks
     bool hasSkipTaskbar = w->skipTaskbar();
     bool isSkipped = hasSkipTaskbar;
-
-#if KF5_VERSION_MINOR >= 47
     bool hasSkipSwitcher = w->skipSwitcher();
     isSkipped = hasSkipTaskbar && hasSkipSwitcher;
-#endif
 
     if (isSkipped
             && ((w->appId() == QLatin1String("yakuake")
@@ -918,20 +896,10 @@ void WaylandInterface::trackWindow(KWayland::Client::PlasmaWindow *w)
     connect(w, &PlasmaWindow::skipTaskbarChanged, this, &WaylandInterface::updateWindow);
     connect(w, &PlasmaWindow::onAllDesktopsChanged, this, &WaylandInterface::updateWindow);
     connect(w, &PlasmaWindow::parentWindowChanged, this, &WaylandInterface::updateWindow);
-
-#if KF5_VERSION_MINOR >= 52
     connect(w, &PlasmaWindow::plasmaVirtualDesktopEntered, this, &WaylandInterface::updateWindow);
     connect(w, &PlasmaWindow::plasmaVirtualDesktopLeft, this, &WaylandInterface::updateWindow);
-#else
-    connect(w, &PlasmaWindow::virtualDesktopChanged, this, &WaylandInterface::updateWindow);
-#endif
-
-#if KF5_VERSION_MINOR >= 81
     connect(w, &PlasmaWindow::plasmaActivityEntered, this, &WaylandInterface::updateWindow);
     connect(w, &PlasmaWindow::plasmaActivityLeft, this, &WaylandInterface::updateWindow);
-#endif
-
-
     connect(w, &PlasmaWindow::unmapped, this, &WaylandInterface::windowUnmapped);
 }
 
@@ -951,19 +919,10 @@ void WaylandInterface::untrackWindow(KWayland::Client::PlasmaWindow *w)
     disconnect(w, &PlasmaWindow::skipTaskbarChanged, this, &WaylandInterface::updateWindow);
     disconnect(w, &PlasmaWindow::onAllDesktopsChanged, this, &WaylandInterface::updateWindow);
     disconnect(w, &PlasmaWindow::parentWindowChanged, this, &WaylandInterface::updateWindow);
-
-#if KF5_VERSION_MINOR >= 52
     disconnect(w, &PlasmaWindow::plasmaVirtualDesktopEntered, this, &WaylandInterface::updateWindow);
     disconnect(w, &PlasmaWindow::plasmaVirtualDesktopLeft, this, &WaylandInterface::updateWindow);
-#else
-    disconnect(w, &PlasmaWindow::virtualDesktopChanged, this, &WaylandInterface::updateWindow);
-#endif
-
-#if KF5_VERSION_MINOR >= 81
     disconnect(w, &PlasmaWindow::plasmaActivityEntered, this, &WaylandInterface::updateWindow);
     disconnect(w, &PlasmaWindow::plasmaActivityLeft, this, &WaylandInterface::updateWindow);
-#endif
-
     disconnect(w, &PlasmaWindow::unmapped, this, &WaylandInterface::windowUnmapped);
 }
 

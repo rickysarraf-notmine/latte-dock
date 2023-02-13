@@ -17,6 +17,7 @@
 #include "../layouts/synchronizer.h"
 #include "../settings/universalsettings.h"
 #include "../view/view.h"
+#include "../wm/tracker/schemes.h"
 
 // KDE
 #include <KConfigGroup>
@@ -45,12 +46,20 @@ void CentralLayout::init()
     connect(this, &CentralLayout::showInMenuChanged, this, &CentralLayout::saveConfig);
 }
 
-void CentralLayout::initToCorona(Latte::Corona *corona)
+bool CentralLayout::initCorona()
 {
-    if (GenericLayout::initToCorona(corona)) {
+    if (GenericLayout::initCorona()) {
+        onSchemeFileChanged();
+
         connect(this, &CentralLayout::disableBordersForMaximizedWindowsChanged,
                 m_corona->layoutsManager()->synchronizer(), &Layouts::Synchronizer::updateKWinDisabledBorders);
+
+        connect(this, &Layout::AbstractLayout::schemeFileChanged, this, &CentralLayout::onSchemeFileChanged);
+        connect(m_corona->wm()->schemesTracker(), &WindowSystem::Tracker::Schemes::defaultSchemeChanged, this, &CentralLayout::onSchemeFileChanged);
+        return true;
     }
+
+    return false;
 }
 
 bool CentralLayout::disableBordersForMaximizedWindows() const
@@ -123,6 +132,21 @@ void CentralLayout::setActivities(QStringList activities)
     emit activitiesChanged();
 }
 
+Latte::WindowSystem::SchemeColors *CentralLayout::scheme() const
+{
+    return m_scheme;
+}
+
+void CentralLayout::setScheme(Latte::WindowSystem::SchemeColors *_scheme)
+{
+    if (m_scheme == _scheme) {
+        return;
+    }
+
+    m_scheme = _scheme;
+    emit schemeChanged();
+}
+
 Data::Layout CentralLayout::data() const
 {
     Data::Layout cdata;
@@ -139,6 +163,7 @@ Data::Layout CentralLayout::data() const
     cdata.isShownInMenu = showInMenu();
     cdata.hasDisabledBorders = disableBordersForMaximizedWindows();
     cdata.popUpMargin = popUpMargin();
+    cdata.schemeFile = schemeFile();
     cdata.activities = activities();
     cdata.lastUsedActivity = lastUsedActivity();
 
@@ -146,6 +171,11 @@ Data::Layout CentralLayout::data() const
     cdata.warnings = warnings().count();
 
     return cdata;
+}
+
+void CentralLayout::onSchemeFileChanged()
+{
+    setScheme(m_corona->wm()->schemesTracker()->schemeForFile(schemeFile()));
 }
 
 void CentralLayout::loadConfig()

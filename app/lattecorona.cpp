@@ -16,6 +16,7 @@
 #include "data/generictable.h"
 #include "data/layouticondata.h"
 #include "declarativeimports/interfaces.h"
+#include "declarativeimports/contextmenulayerquickitem.h"
 #include "indicator/factory.h"
 #include "layout/abstractlayout.h"
 #include "layout/centrallayout.h"
@@ -32,6 +33,7 @@
 #include "plasma/extended/theme.h"
 #include "settings/universalsettings.h"
 #include "templates/templatesmanager.h"
+#include "view/originalview.h"
 #include "view/view.h"
 #include "view/settings/viewsettingsfactory.h"
 #include "view/windowstracker/windowstracker.h"
@@ -81,9 +83,10 @@
 
 namespace Latte {
 
-Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, int userSetMemoryUsage, QObject *parent)
+Corona::Corona(bool defaultLayoutOnStartup, QString layoutNameOnStartUp, QString addViewTemplateName, int userSetMemoryUsage, QObject *parent)
     : Plasma::Corona(parent),
       m_defaultLayoutOnStartup(defaultLayoutOnStartup),
+      m_startupAddViewTemplateName(addViewTemplateName),
       m_userSetMemoryUsage(userSetMemoryUsage),
       m_layoutNameOnStartUp(layoutNameOnStartUp),
       m_activitiesConsumer(new KActivities::Consumer(this)),
@@ -205,6 +208,10 @@ void Corona::onAboutToQuit()
         cleanConfig();
     }
 
+    if (m_layoutsManager->memoryUsage() == Latte::MemoryUsage::MultipleLayouts) {
+        m_layoutsManager->importer()->setMultipleLayoutsStatus(Latte::MultipleLayouts::Paused);
+    }
+
     qDebug() << "Latte Corona - unload: containments ...";
     m_layoutsManager->unload();
 }
@@ -219,10 +226,9 @@ void Corona::load()
         m_templatesManager->init();
         m_layoutsManager->init();
 
-        connect(this, &Corona::availableScreenRectChangedFrom, this, &Plasma::Corona::availableScreenRectChanged);
-        connect(this, &Corona::availableScreenRegionChangedFrom, this, &Plasma::Corona::availableScreenRegionChanged);
-        connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &Corona::primaryOutputChanged, Qt::UniqueConnection);
-        connect(m_screenPool, &ScreenPool::primaryPoolChanged, this, &Corona::screenCountChanged);
+        connect(this, &Corona::availableScreenRectChangedFrom, this, &Plasma::Corona::availableScreenRectChanged, Qt::UniqueConnection);
+        connect(this, &Corona::availableScreenRegionChangedFrom, this, &Plasma::Corona::availableScreenRegionChanged, Qt::UniqueConnection);
+        connect(m_screenPool, &ScreenPool::primaryScreenChanged, this, &Corona::onScreenCountChanged, Qt::UniqueConnection);
 
         QString loadLayoutName = "";
 
@@ -264,11 +270,22 @@ void Corona::load()
         //! load screens signals such screenGeometryChanged in order to support
         //! plasmoid.screenGeometry properly
         for (QScreen *screen : qGuiApp->screens()) {
-            addOutput(screen);
+            onScreenAdded(screen);
         }
 
-        connect(qGuiApp, &QGuiApplication::screenAdded, this, &Corona::addOutput, Qt::UniqueConnection);
-        connect(qGuiApp, &QGuiApplication::screenRemoved, this, &Corona::screenRemoved, Qt::UniqueConnection);
+        connect(m_layoutsManager->synchronizer(), &Layouts::Synchronizer::initializationFinished, [this]() {
+            if (!m_startupAddViewTemplateName.isEmpty()) {
+                //! user requested through cmd startup to add view from specific view template and we can add it after the startup
+                //! sequence has loaded all required layouts properly
+                addView(0, m_startupAddViewTemplateName);
+                m_startupAddViewTemplateName = "";
+            }
+        });
+
+        m_inStartup = false;
+
+        connect(qGuiApp, &QGuiApplication::screenAdded, this, &Corona::onScreenAdded, Qt::UniqueConnection);
+        connect(qGuiApp, &QGuiApplication::screenRemoved, this, &Corona::onScreenRemoved, Qt::UniqueConnection);
     }
 }
 
@@ -316,7 +333,7 @@ void Corona::setupWaylandIntegration()
         }
     });
 
-#if KF5_VERSION_MINOR >= 52
+
     QObject::connect(registry, &KWayland::Client::Registry::plasmaVirtualDesktopManagementAnnounced,
                      [this, registry] (quint32 name, quint32 version) {
         KWayland::Client::PlasmaVirtualDesktopManagement *vdm = registry->createPlasmaVirtualDesktopManagement(name, version, this);
@@ -327,7 +344,7 @@ void Corona::setupWaylandIntegration()
             wI->initVirtualDesktopManagement(vdm);
         }
     });
-#endif
+
 
     registry->setup();
     connection->roundtrip();
@@ -477,7 +494,7 @@ int Corona::numScreens() const
 QRect Corona::screenGeometry(int id) const
 {
     const auto screens = qGuiApp->screens();
-    const QScreen *screen{qGuiApp->primaryScreen()};
+    const QScreen *screen{m_screenPool->primaryScreen()};
 
     QString screenName;
 
@@ -518,8 +535,17 @@ Layout::GenericLayout *Corona::layout(QString name) const
 }
 
 QRegion Corona::availableScreenRegion(int id) const
-{
-    return availableScreenRegionWithCriteria(id);
+{   
+    //! ignore modes are added in order for notifications to be placed
+    //! in better positioning and not overlap with sidebars or usually hidden views
+    QList<Types::Visibility> ignoremodes({Latte::Types::AutoHide,
+                                          Latte::Types::SidebarOnDemand,
+                                          Latte::Types::SidebarAutoHide});
+
+
+    return availableScreenRegionWithCriteria(id,
+                                             QString(),
+                                             ignoremodes);
 }
 
 QRegion Corona::availableScreenRegionWithCriteria(int id,
@@ -562,7 +588,9 @@ QRegion Corona::availableScreenRegionWithCriteria(int id,
     bool allEdges = ignoreEdges.isEmpty();
 
     for (const auto *view : views) {
-        if (view && view->containment() && view->screen() == screen
+        bool inDesktopOffScreenStartup = desktopUse && view && view->positioner() && view->positioner()->isOffScreen();
+
+        if (view && view->containment() && view->screen() == screen && !inDesktopOffScreenStartup
                 && ((allEdges || !ignoreEdges.contains(view->location()))
                     && (view->visibility() && !ignoreModes.contains(view->visibility()->mode())))) {
             int realThickness = view->normalThickness();
@@ -585,11 +613,11 @@ QRegion Corona::availableScreenRegionWithCriteria(int id,
 
                     case Latte::Types::Center:
                     case Latte::Types::Justify:
-                        x = (view->geometry().center().x() - w/2) + offsetW;
+                        x = (view->geometry().center().x() - w/2) + 1 + offsetW;
                         break;
 
                     case Latte::Types::Right:
-                        x = view->geometry().right() - w - offsetW;
+                        x = view->geometry().right() + 1 - w - offsetW;
                         break;
                     }
                 }
@@ -609,7 +637,7 @@ QRegion Corona::availableScreenRegionWithCriteria(int id,
 
                     case Latte::Types::Center:
                     case Latte::Types::Justify:
-                        y = (view->geometry().center().y() - h/2) + offsetH;
+                        y = (view->geometry().center().y() - h/2) + 1 + offsetH;
                         break;
 
                     case Latte::Types::Bottom:
@@ -713,7 +741,15 @@ QRegion Corona::availableScreenRegionWithCriteria(int id,
 
 QRect Corona::availableScreenRect(int id) const
 {
-    return availableScreenRectWithCriteria(id);
+    //! ignore modes are added in order for notifications to be placed
+    //! in better positioning and not overlap with sidebars or usually hidden views
+    QList<Types::Visibility> ignoremodes({Latte::Types::AutoHide,
+                                          Latte::Types::SidebarOnDemand,
+                                          Latte::Types::SidebarAutoHide});
+
+    return availableScreenRectWithCriteria(id,
+                                           QString(),
+                                           ignoremodes);
 }
 
 QRect Corona::availableScreenRectWithCriteria(int id,
@@ -756,7 +792,9 @@ QRect Corona::availableScreenRectWithCriteria(int id,
     bool allEdges = ignoreEdges.isEmpty();
 
     for (const auto *view : views) {
-        if (view && view->containment() && view->screen() == screen
+        bool inDesktopOffScreenStartup = desktopUse && view && view->positioner() && view->positioner()->isOffScreen();
+
+        if (view && view->containment() && view->screen() == screen && !inDesktopOffScreenStartup
                 && ((allEdges || !ignoreEdges.contains(view->location()))
                     && (view->visibility() && !ignoreModes.contains(view->visibility()->mode())))) {
 
@@ -813,7 +851,7 @@ QRect Corona::availableScreenRectWithCriteria(int id,
     return available;
 }
 
-void Corona::addOutput(QScreen *screen)
+void Corona::onScreenAdded(QScreen *screen)
 {
     Q_ASSERT(screen);
 
@@ -823,35 +861,42 @@ void Corona::addOutput(QScreen *screen)
         m_screenPool->insertScreenMapping(screen->name());
     }
 
-    connect(screen, &QScreen::geometryChanged, this, [ = ]() {
-        const int id = m_screenPool->id(screen->name());
-
-        if (id >= 0) {
-            emit screenGeometryChanged(id);
-            emit availableScreenRegionChanged();
-            emit availableScreenRectChanged();
-        }
-    });
+    connect(screen, &QScreen::geometryChanged, this, &Corona::onScreenGeometryChanged);
 
     emit availableScreenRectChanged();
     emit screenAdded(m_screenPool->id(screen->name()));
 
-    screenCountChanged();
+    onScreenCountChanged();
 }
 
-void Corona::primaryOutputChanged()
+void Corona::onScreenRemoved(QScreen *screen)
+{
+    disconnect(screen, &QScreen::geometryChanged, this, &Corona::onScreenGeometryChanged);
+    onScreenCountChanged();
+}
+
+void Corona::onScreenCountChanged()
 {
     m_viewsScreenSyncTimer.start();
 }
 
-void Corona::screenRemoved(QScreen *screen)
+void Corona::onScreenGeometryChanged(const QRect &geometry)
 {
-    screenCountChanged();
-}
+    Q_UNUSED(geometry);
 
-void Corona::screenCountChanged()
-{
-    m_viewsScreenSyncTimer.start();
+    QScreen *screen = qobject_cast<QScreen *>(sender());
+
+    if (!screen) {
+        return;
+    }
+
+    const int id = m_screenPool->id(screen->name());
+
+    if (id >= 0) {
+        emit screenGeometryChanged(id);
+        emit availableScreenRegionChanged();
+        emit availableScreenRectChanged();
+    }
 }
 
 //! the central functions that updates loading/unloading latteviews
@@ -863,7 +908,7 @@ void Corona::syncLatteViewsToScreens()
 
 int Corona::primaryScreenId() const
 {
-    return m_screenPool->id(qGuiApp->primaryScreen()->name());
+    return m_screenPool->primaryScreenId();
 }
 
 void Corona::quitApplication()
@@ -1063,43 +1108,63 @@ void Corona::updateDockItemBadge(QString identifier, QString value)
     m_globalShortcuts->updateViewItemBadge(identifier, value);
 }
 
+void Corona::setAutostart(const bool &enabled)
+{
+    m_universalSettings->setAutostart(enabled);
+}
 
 void Corona::switchToLayout(QString layout)
 {
     if ((layout.startsWith("file:/") || layout.startsWith("/")) && layout.endsWith(".layout.latte")) {
-        //! Import and load runtime a layout through dbus interface
-        //! It can be used from external programs that want to update runtime
-        //! the Latte shown layout
-        QString layoutPath = layout;
-
-        //! cleanup layout path
-        if (layoutPath.startsWith("file:///")) {
-            layoutPath = layout.remove("file://");
-        } else if (layoutPath.startsWith("file://")) {
-            layoutPath = layout.remove("file:/");
-        }
-
-        //! check out layoutpath existence
-        if (QFileInfo(layoutPath).exists()) {
-            qDebug() << " Layout is going to be imported and loaded from file :: " << layoutPath;
-
-            QString importedLayout = m_layoutsManager->importer()->importLayout(layoutPath);
-
-            if (importedLayout.isEmpty()) {
-                qDebug() << i18n("The layout cannot be imported from file :: ") << layoutPath;
-            } else {
-               m_layoutsManager->switchToLayout(importedLayout);
-            }
-        } else {
-            qDebug() << " Layout from missing file can not be imported and loaded :: " << layoutPath;
-        }
+        importLayoutFile(layout);
     } else {
         m_layoutsManager->switchToLayout(layout);
     }
 }
 
+void Corona::importLayoutFile(const QString &filepath, const QString &suggestedLayoutName)
+{
+    bool isFilepathValid = (filepath.startsWith("file:/") || filepath.startsWith("/")) && filepath.endsWith(".layout.latte");
+
+    if (!isFilepathValid) {
+        qDebug() << i18n("The layout cannot be imported from file :: ") << filepath;
+        return;
+    }
+
+    //! Import and load runtime a layout through dbus interface
+    //! It can be used from external programs that want to update runtime
+    //! the Latte shown layout
+    QString layoutPath = filepath;
+
+    //! cleanup layout path
+    if (layoutPath.startsWith("file:///")) {
+        layoutPath = layoutPath.remove("file://");
+    } else if (layoutPath.startsWith("file://")) {
+        layoutPath = layoutPath.remove("file:/");
+    }
+
+    //! check out layoutpath existence
+    if (QFileInfo(layoutPath).exists()) {
+        qDebug() << " Layout is going to be imported and loaded from file :: " << layoutPath << " with suggested name :: " << suggestedLayoutName;
+
+        QString importedLayout = m_layoutsManager->importer()->importLayout(layoutPath, suggestedLayoutName);
+
+        if (importedLayout.isEmpty()) {
+            qDebug() << i18n("The layout cannot be imported from file :: ") << layoutPath;
+        } else {
+           m_layoutsManager->switchToLayout(importedLayout, MemoryUsage::SingleLayout);
+        }
+    } else {
+        qDebug() << " Layout from missing file can not be imported and loaded :: " << layoutPath;
+    }
+}
+
 void Corona::showSettingsWindow(int page)
 {
+    if (m_inStartup) {
+        return;
+    }
+
     Settings::Dialog::ConfigurationPage p = Settings::Dialog::LayoutPage;
 
     if (page >= Settings::Dialog::LayoutPage && page <= Settings::Dialog::PreferencesPage) {
@@ -1139,8 +1204,24 @@ QStringList Corona::contextMenuData(const uint &containmentId)
     }
 
     data << layoutsmenu.join(";;");
-    data << QString::number((int)viewType); //Selected View type
     data << (view ? view->layout()->name() : QString());   //Selected View layout*/
+
+    QStringList viewtype;
+    viewtype << QString::number((int)viewType); //Selected View type
+
+    if (view && view->isOriginal()) { /*View*/
+        auto originalview = qobject_cast<Latte::OriginalView *>(view);
+        viewtype << "0";              //original view
+        viewtype <<  QString::number(originalview->clonesCount());
+    } else if (view && view->isCloned()) {
+        viewtype << "1";              //cloned view
+        viewtype << "0";              //has no clones
+    } else {
+        viewtype << "0";              //original view
+        viewtype << "0";              //has no clones
+    }
+
+    data << viewtype.join(";;");
 
     return data;
 }
@@ -1161,9 +1242,16 @@ QStringList Corona::viewTemplatesData()
 
 void Corona::addView(const uint &containmentId, const QString &templateId)
 {
-    auto view = m_layoutsManager->synchronizer()->viewForContainment((int)containmentId);
-    if (view) {
-        view->newView(templateId);
+    if (containmentId <= 0) {
+        auto currentlayouts = m_layoutsManager->currentLayouts();
+        if (currentlayouts.count() > 0) {
+            currentlayouts[0]->newView(templateId);
+        }
+    } else {
+        auto view = m_layoutsManager->synchronizer()->viewForContainment((int)containmentId);
+        if (view) {
+            view->newView(templateId);
+        }
     }
 }
 
@@ -1187,7 +1275,14 @@ void Corona::moveViewToLayout(const uint &containmentId, const QString &layoutNa
 {
     auto view = m_layoutsManager->synchronizer()->viewForContainment((int)containmentId);
     if (view && !layoutName.isEmpty() && view->layout()->name() != layoutName) {
-        view->positioner()->setNextLocation(layoutName, "", Plasma::Types::Floating, Latte::Types::NoneAlignment);
+        Latte::Types::ScreensGroup screensgroup{Latte::Types::SingleScreenGroup};
+
+        if (view->isOriginal()) {
+            auto originalview = qobject_cast<Latte::OriginalView *>(view);
+            screensgroup = originalview->screensGroup();
+        }
+
+        view->positioner()->setNextLocation(layoutName, screensgroup, "", Plasma::Types::Floating, Latte::Types::NoneAlignment);
     }
 }
 
@@ -1244,18 +1339,7 @@ inline void Corona::qmlRegisterTypes() const
 
     qmlRegisterType<Latte::BackgroundTracker>("org.kde.latte.private.app", 0, 1, "BackgroundTracker");
     qmlRegisterType<Latte::Interfaces>("org.kde.latte.private.app", 0, 1, "Interfaces");
-
-
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    qmlRegisterType<QScreen>();
-    qmlRegisterType<Latte::View>();
-    qmlRegisterType<Latte::ViewPart::WindowsTracker>();
-    qmlRegisterType<Latte::ViewPart::TrackerPart::CurrentScreenTracker>();
-    qmlRegisterType<Latte::ViewPart::TrackerPart::AllScreensTracker>();
-    qmlRegisterType<Latte::WindowSystem::SchemeColors>();
-    qmlRegisterType<Latte::WindowSystem::Tracker::LastActiveWindow>();
-    qmlRegisterType<Latte::Types>();
-#else
+    qmlRegisterType<Latte::ContextMenuLayerQuickItem>("org.kde.latte.private.app", 0, 1, "ContextMenuLayer");
     qmlRegisterAnonymousType<QScreen>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::View>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::ViewPart::WindowsTracker>("latte-dock", 1);
@@ -1264,7 +1348,7 @@ inline void Corona::qmlRegisterTypes() const
     qmlRegisterAnonymousType<Latte::WindowSystem::SchemeColors>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::WindowSystem::Tracker::LastActiveWindow>("latte-dock", 1);
     qmlRegisterAnonymousType<Latte::Types>("latte-dock", 1);
-#endif
+
 }
 
 }

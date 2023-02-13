@@ -204,20 +204,29 @@ private slots:
     void dodgeMaximized();
     void updateHiddenState();
 
+    void updateStrutsAfterTimer();
+
     bool isValidMode() const;
 
 private:
     void startTimerHide(const int &msec = 0);
 
+    bool canSetStrut() const;
+
 private:
     WindowSystem::AbstractWindowInterface *m_wm;
     Types::Visibility m_mode{Types::None};
-    std::array<QMetaObject::Connection, 5> m_connections;
+    std::array<QMetaObject::Connection, 6> m_connections;
 
     QTimer m_timerShow;
     QTimer m_timerHide;
-    QTimer m_timerStartUp;
     QTimer m_timerPublishFrameExtents;
+    //! This timer is very important because it blocks how fast struts are updated.
+    //! By using this timer we help the window manager in order to correspond to new
+    //! struts (for example changing windows maximized state or geometry) without
+    //! createing binding loops between the app and the window manager.
+    //! That was reproducable in a floating panel when we were dragging the active window.
+    QTimer m_timerBlockStrutsUpdate;
 
     bool m_isBelowLayer{false};
     bool m_isHidden{false};

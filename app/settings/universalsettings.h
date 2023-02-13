@@ -12,6 +12,7 @@
 #include <coretypes.h>
 #include "../apptypes.h"
 #include "../lattecorona.h"
+#include "../data/preferencesdata.h"
 
 // Qt
 #include <QObject>
@@ -44,8 +45,12 @@ class UniversalSettings : public QObject
     Q_PROPERTY(bool autostart READ autostart WRITE setAutostart NOTIFY autostartChanged)
     Q_PROPERTY(bool badges3DStyle READ badges3DStyle WRITE setBadges3DStyle NOTIFY badges3DStyleChanged)
     Q_PROPERTY(bool inAdvancedModeForEditSettings READ inAdvancedModeForEditSettings WRITE setInAdvancedModeForEditSettings NOTIFY inAdvancedModeForEditSettingsChanged)
+    Q_PROPERTY(bool inConfigureAppletsMode READ inConfigureAppletsMode WRITE setInConfigureAppletsMode NOTIFY inConfigureAppletsModeChanged)
     Q_PROPERTY(bool colorsScriptIsPresent READ colorsScriptIsPresent NOTIFY colorsScriptIsPresentChanged)
     Q_PROPERTY(bool showInfoWindow READ showInfoWindow WRITE setShowInfoWindow NOTIFY showInfoWindowChanged)
+
+    Q_PROPERTY(int parabolicSpread READ parabolicSpread WRITE setParabolicSpread NOTIFY parabolicSpreadChanged)
+    Q_PROPERTY(float thicknessMarginInfluence READ thicknessMarginInfluence WRITE setThicknessMarginInfluence NOTIFY thicknessMarginInfluenceChanged)
 
     Q_PROPERTY(QString singleModeLayoutName READ singleModeLayoutName WRITE setSingleModeLayoutName NOTIFY singleModeLayoutNameChanged)
 
@@ -76,6 +81,12 @@ public:
     bool inAdvancedModeForEditSettings() const;
     void setInAdvancedModeForEditSettings(const bool &inAdvanced);
 
+    bool inConfigureAppletsMode() const;
+    void setInConfigureAppletsMode(const bool enabled);
+
+    bool isAvailableGeometryBroadcastedToPlasma() const;
+    void setIsAvailableGeometryBroadcastedToPlasma(const bool &isBroadcasted);
+
     bool kwin_metaForwardedToLatte() const;
     void kwin_forwardMetaToLatte(bool forward);
 
@@ -88,11 +99,17 @@ public:
     bool showInfoWindow() const;
     void setShowInfoWindow(bool show);
 
+    int parabolicSpread() const;
+    void setParabolicSpread(const int &spread);
+
     int version() const;
     void setVersion(int ver);
 
     int screenTrackerInterval() const;
     void setScreenTrackerInterval(int duration);
+
+    float thicknessMarginInfluence() const;
+    void setThicknessMarginInfluence(const float &influence);
 
     QString singleModeLayoutName() const;
     void setSingleModeLayoutName(QString layoutName);
@@ -129,17 +146,21 @@ signals:
     void colorsScriptIsPresentChanged();
     void downloadWindowSizeChanged();
     void inAdvancedModeForEditSettingsChanged();
+    void inConfigureAppletsModeChanged();
     void layoutsColumnWidthsChanged();
     void layoutsWindowSizeChanged();
     void launchersChanged();
     void layoutsMemoryUsageChanged();
+    void isAvailableGeometryBroadcastedToPlasmaChanged();
     void metaPressAndHoldEnabledChanged();
+    void parabolicSpreadChanged();
     void sensitivityChanged();
     void screensCountChanged();
     void screenScalesChanged();
     void screenTrackerIntervalChanged();
     void showInfoWindowChanged();
     void singleModeLayoutNameChanged();
+    void thicknessMarginInfluenceChanged();
     void versionChanged();
 
 private slots:
@@ -166,6 +187,8 @@ private:
     bool m_canDisableBorders{false};
     bool m_colorsScriptIsPresent{false};
     bool m_inAdvancedModeForEditSettings{false};
+    bool m_inConfigureAppletsMode{false};
+    bool m_isAvailableGeometryBroadcastedToPlasma{true};
     bool m_metaPressAndHoldEnabled{true};
     bool m_showInfoWindow{true};
 
@@ -177,6 +200,8 @@ private:
     int m_version{1};
 
     int m_screenTrackerInterval{2500};
+    int m_parabolicSpread{Data::Preferences::PARABOLICSPREAD};
+    float m_thicknessMarginInfluence{Data::Preferences::THICKNESSMARGININFLUENCE};
 
     QString m_singleModeLayoutName;
 

@@ -22,6 +22,8 @@ import "../colorizer" as Colorizer
 BackgroundProperties{
     id:barLine
 
+    readonly property alias panelBackgroundSvg: solidBackground
+
     //! Layer 0: Multi-Layer container in order to provide a consistent final element that acts
     //! as a single entity/background
     width: root.isHorizontal ? totals.visualLength : 16
@@ -60,7 +62,7 @@ BackgroundProperties{
             if (root.isVertical) {
                 var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
                 expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
-                return expected;
+                return expected * indicators.info.backgroundCornerMargin;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -77,7 +79,7 @@ BackgroundProperties{
             if (root.isVertical) {
                 var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
                 expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
-                return expected;
+                return expected * indicators.info.backgroundCornerMargin;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -95,7 +97,7 @@ BackgroundProperties{
             if (root.isHorizontal) {
                 var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
                 expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
-                return expected;
+                return expected * indicators.info.backgroundCornerMargin;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -113,7 +115,7 @@ BackgroundProperties{
             if (root.isHorizontal) {
                 var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
                 expected = Math.max(0, expected - metrics.margin.length); //! remove from roundness padding the applied margins
-                return expected;
+                return expected * indicators.info.backgroundCornerMargin;
             } else {
                 return Math.max(themePadding, solidBackgroundPadding);
             }
@@ -131,11 +133,7 @@ BackgroundProperties{
             return root.maxLength;
         }
 
-        if (root.isVertical) {
-            return Math.max(root.minLength, layoutsContainerItem.mainLayout.height + totals.paddingsLength);
-        } else {
-            return Math.max(root.minLength, layoutsContainerItem.mainLayout.width + totals.paddingsLength);
-        }
+        return Math.max(root.minLength, layoutsContainerItem.mainLayout.length + totals.paddingsLength);
     }
 
     thickness: {
@@ -167,12 +165,25 @@ BackgroundProperties{
             }
         }
 
-        return root.offset;// (myView.alignment === LatteCore.Types.Center ? root.offset : 0);
+        var parabolicOffseting = myView.alignment === LatteCore.Types.Center ? layoutsContainerItem.mainLayout.parabolicOffsetting : 0;
+        return root.offset + parabolicOffseting;
     }
 
     totals.visualThickness: {
-        var itemMargins = metrics.totals.thicknessEdges
+        var itemMargins = 2*metrics.margin.tailThickness;
         var maximumItem = metrics.iconSize + itemMargins;
+
+        if (totals.minThickness < maximumItem) {
+            maximumItem = maximumItem - totals.minThickness;
+        }
+
+        var percentage = LatteCore.WindowSystem.compositingActive ? plasmoid.configuration.panelSize/100 : 1;
+        return Math.max(totals.minThickness, totals.minThickness + (percentage*maximumItem));
+    }
+
+    totals.visualMaxThickness: {
+        var itemMargins = 2*metrics.margin.maxTailThickness;
+        var maximumItem = metrics.maxIconSize + itemMargins;
 
         if (totals.minThickness < maximumItem) {
             maximumItem = maximumItem - totals.minThickness;
@@ -188,6 +199,30 @@ BackgroundProperties{
         }
 
         return Math.max(background.length + totals.shadowsLength, totals.paddingsLength + totals.shadowsLength)
+    }
+
+    readonly property int tailRoundness: {
+        if ((root.isHorizontal && hasLeftBorder) || (!root.isHorizontal && hasTopBorder)) {
+            var customAppliedRadius = customRadiusIsEnabled ? customRadius : 0;
+            var themePadding = themeExtendedBackground ? (root.isHorizontal ? themeExtendedBackground.paddingLeft : themeExtendedBackground.paddingTop) : 0;
+            var solidBackgroundPadding = root.isHorizontal ? solidBackground.margins.left : solidBackground.margins.top;
+            var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+            return Math.max(0, expected - metrics.margin.length);
+        }
+
+        return 0;
+    }
+
+    readonly property int headRoundness: {
+        if ((root.isHorizontal && hasRightBorder) || (!root.isHorizontal && hasBottomBorder)) {
+            var customAppliedRadius = customRadiusIsEnabled ? customRadius : 0;
+            var themePadding = themeExtendedBackground ? (root.isHorizontal ? themeExtendedBackground.paddingRight : themeExtendedBackground.paddingBottom) : 0;
+            var solidBackgroundPadding = root.isHorizontal ? solidBackground.margins.right : solidBackground.margins.bottom;
+            var expected = customRadiusIsEnabled ? customAppliedRadius : Math.max(themePadding, solidBackgroundPadding);
+            return Math.max(0, expected - metrics.margin.length);
+        }
+
+        return 0;
     }
 
     readonly property int tailRoundnessMargin: {
@@ -210,8 +245,11 @@ BackgroundProperties{
 
     property int animationTime: 6*animations.speedFactor.current*animations.duration.small
 
+    //! Opacity related
+    readonly property bool isDefaultOpacityEnabled: plasmoid.configuration.panelTransparency===-1
+
     //! Metrics related
-    readonly property bool isGreaterThanItemThickness: root.useThemePanel && (totals.visualThickness >= (metrics.iconSize + metrics.margin.thickness))
+    readonly property bool isGreaterThanItemThickness: root.useThemePanel && (totals.visualThickness >= (metrics.iconSize + metrics.margin.tailThickness))
 
     //! CustomShadowedRectangle  properties
     readonly property bool customShadowedRectangleIsEnabled: customRadiusIsEnabled || (customDefShadowIsEnabled || customUserShadowIsEnabled)
@@ -279,6 +317,7 @@ BackgroundProperties{
 
     onXChanged: solidBackground.updateEffectsArea();
     onYChanged: solidBackground.updateEffectsArea();
+    onScreenEdgeMarginChanged: solidBackground.updateEffectsArea();
 
     //! Layer 1: Shadows that are drawn around the background but always inside the View window (these are internal drawn shadows).
     //!          When the container has chosen external shadows (these are shadows that are drawn out of the View window from the compositor)

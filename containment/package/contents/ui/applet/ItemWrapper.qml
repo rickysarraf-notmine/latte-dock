@@ -23,11 +23,15 @@ Item{
     height: root.isHorizontal ? thickness : length
 
     readonly property real length: {
+        if (appletItem.isScheduledForDestruction) {
+            return 0;
+        }
+
         if (appletItem.isInternalViewSplitter) {
             if (!root.inConfigureAppletsMode) {
                 return 0;
             } else {
-                return appletItem.inConfigureAppletsDragging && root.dragOverlay.currentApplet.isInternalViewSplitter ?
+                return appletItem.inConfigureAppletsDragging && root.dragOverlay.currentApplet.isInternalViewSplitter && root.dragOverlay.currentApplet === appletItem ?
                             appletMinimumLength : internalSplitterComputedLength;
             }
         }
@@ -136,7 +140,7 @@ Item{
                                      ? 0 : appletItem.lengthAppletFullMargins
 
     property real scaledLength: zoomScaleLength * (layoutLength + marginsLength)
-    property real scaledThickness: zoomScaleThickness * (layoutThickness + marginsThickness)
+    property real scaledThickness: zoomScaleThickness * layoutThickness + (zoomMarginScale*marginsThickness)
 
     property real zoomScaleLength: disableLengthScale ? 1 : zoomScale
     property real zoomScaleThickness: disableThicknessScale ? 1 : zoomScale
@@ -145,6 +149,7 @@ Item{
     property real layoutThickness: 0
 
     property real zoomScale: 1
+    readonly property real zoomMarginScale: 1 + (zoomScale - 1) * parabolic.factor.marginThicknessZoomInPercentage
 
     readonly property alias headThicknessMargin: _wrapperContainer.headThicknessMargin
     readonly property alias tailThicknessMargin: _wrapperContainer.tailThicknessMargin
@@ -153,7 +158,6 @@ Item{
     property int index: appletItem.index
 
     property Item wrapperContainer: _wrapperContainer
-    property Item clickedEffect: _clickedEffect
     property Item overlayIconLoader: _overlayIconLoader
 
     readonly property int internalSplitterComputedLength: {
@@ -176,7 +180,7 @@ Item{
 
         var parentLayoutCenter = (appletItem.layouter.maxLength - layoutsContainer.mainLayout.length)/2;
         var twinLayoutExceededCenter = Math.max(0, (parentTwinLayoutLength + root.maxJustifySplitterSize) - parentLayoutCenter);
-        var availableLength = Math.max(0, parentLayoutCenter - twinLayoutExceededCenter);
+        var availableLength = Math.max(0, parentLayoutCenter - twinLayoutExceededCenter) + 1; //add one pixel in order to not leave a gap inConfigureAppletsMode
 
         return Math.max(root.maxJustifySplitterSize, availableLength - parentLayoutLength);
     }
@@ -297,7 +301,7 @@ Item{
                            || appletItem.originalAppletBehavior)) {
 
                 //this way improves performance, probably because during animation the preferred sizes update a lot
-                if (appletMaximumLength>0 && appletMaximumLength < appletItem.metrics.iconSize){
+                if (appletMaximumLength>=0 && appletMaximumLength < appletItem.metrics.iconSize){
                     return appletMaximumLength;
                 } else if (appletMinimumLength > appletItem.metrics.iconSize){
                     return appletMinimumLength;
@@ -455,21 +459,23 @@ Item{
             } else if (appletItem.canFillThickness) {
                 return appliedEdgeMargin;
             } else if (appletItem.inMarginsArea) {
-                return appliedEdgeMargin + (wrapper.zoomScaleThickness * appletItem.metrics.marginsArea.marginThickness);
+                return appliedEdgeMargin + (wrapper.zoomMarginScale * appletItem.metrics.marginsArea.tailThickness);
             }
 
-            return appliedEdgeMargin + (wrapper.zoomScaleThickness * appletItem.metrics.margin.thickness);
+            return appliedEdgeMargin + (wrapper.zoomMarginScale * appletItem.metrics.margin.tailThickness);
         }
 
         readonly property int headThicknessMargin: {
             if (appletItem.canFillThickness || appletItem.canFillScreenEdge) {
                 return 0;
             } else if (appletItem.inMarginsArea) {
-                return appletItem.metrics.marginsArea.marginThickness;
+                return (wrapper.zoomMarginScale * appletItem.metrics.marginsArea.headThickness);
             }
 
-            return appletItem.metrics.margin.thickness
+            return wrapper.zoomMarginScale * appletItem.metrics.margin.headThickness;
         }
+
+        readonly property real zoomScaleThickness: wrapper.zoomScaleThickness
 
         Binding {
             target: _wrapperContainer
@@ -519,14 +525,18 @@ Item{
             property color backgroundColor: "transparent"
             property color glowColor: "transparent"
 
-            readonly property bool roundToIconSizeDisabled: communicator.appletIconItem && appletItem.parabolic.isEnabled
+            //! Plasma Applets RoundToIconSize should be ALWAYS false when Latte has discovered
+            //! the iconitem for these applets. This way we can be sure that applets and latte
+            //! tasks will follow the same icon size if it is possible; in any other case
+            //! the plasma applets might look to small
+            readonly property bool isRoundToIconSizeEnabled: !communicator.appletIconItem
 
-            onRoundToIconSizeDisabledChanged: {
+            onIsRoundToIconSizeEnabledChanged: {
                 if (!communicator.appletIconItem) {
                     return;
                 }
 
-                communicator.appletIconItem.roundToIconSize = !roundToIconSizeDisabled;
+                communicator.appletIconItem.roundToIconSize = isRoundToIconSizeEnabled;
             }
 
             sourceComponent: LatteCore.IconItem{
@@ -643,7 +653,7 @@ Item{
     Loader {
         id: eventsSinkLoader
         anchors.fill: _wrapperContainer
-        active: !communicator.parabolicEffectIsSupported && !isSeparator && !isSpacer
+        active: !communicator.parabolicEffectIsSupported && !isSeparator && !isSpacer && !isHidden && !isInternalViewSplitter
         //! The following can be added in case EventsSink creates slaginess with parabolic effect
         //!(appletItem.lockZoom || !appletItem.parabolic.isEnabled || !appletItem.parabolicEffectIsSupported)
 
@@ -677,14 +687,6 @@ Item{
                 }
             }
         }
-    }
-
-    BrightnessContrast {
-        id: _clickedEffect
-        anchors.fill: _wrapperContainer
-        source: _wrapperContainer
-
-        visible: clickedAnimation.running && !indicators.info.providesClickedAnimation
     }
 
     Loader{

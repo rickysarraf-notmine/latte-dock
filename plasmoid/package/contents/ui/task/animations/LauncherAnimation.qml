@@ -15,6 +15,9 @@ Item{
     property bool launchedAlready: false
     property int speed: 0.9 * taskItem.abilities.animations.speedFactor.current * taskItem.abilities.animations.duration.large
 
+    readonly property bool running: launcherAnimationLoader.item ? launcherAnimationLoader.item.running : false
+    readonly property bool paused: launcherAnimationLoader.active ? launcherAnimationLoader.item.paused : false
+
     readonly property string needThicknessEvent: launcherAnimation + "_launcher"
 
     Loader {
@@ -37,6 +40,12 @@ Item{
             taskItem.setBlockingAnimation(false);
             taskItem.animationEnded();
         }
+    }
+
+    Binding {
+        target: taskItem
+        property: "isLauncherBuiltinAnimationRunning"
+        value: running
     }
 
     function clearAnimationsSignals() {
@@ -75,31 +84,30 @@ Item{
                 }
             }
         }
-
-        taskItem.parabolicItem.zoomLength = taskItem.parabolicItem.zoom;
-        taskItem.parabolicItem.zoomThickness = taskItem.parabolicItem.zoom;
     }
 
     function startLauncherAnimation(){
-        if(root.launcherBouncingEnabled){
+        if (taskItem.abilities.indicators.info.providesTaskLauncherAnimation) {
+            return;
+        }
+
+        if(root.launcherBouncingEnabled) {
             taskItem.animationStarted();
             init();
-            taskItem.launcherAction();
             launcherAnimationLoader.item.start();
         } else {
             launcherAnimationLoader.item.stop();
-            taskItem.launcherAction();
         }
     }
 
 
     Component.onCompleted: {
-        taskItem.launcherAnimationRequested.connect(startLauncherAnimation);
+        taskItem.taskLauncherActivated.connect(startLauncherAnimation);
     }
 
     Component.onDestruction: {
         clearAnimationsSignals();
-        taskItem.launcherAnimationRequested.disconnect(startLauncherAnimation);
+        taskItem.taskLauncherActivated.disconnect(startLauncherAnimation);
     }
 }
 /////////////////// end of launcher animation

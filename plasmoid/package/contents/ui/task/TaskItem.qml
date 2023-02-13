@@ -28,12 +28,11 @@ AbilityItem.BasicItem {
 
     isHidden: !visible || isForcedHidden
 
-    isHiddenSpacerForcedShow: taskItem.inAttentionAnimation || taskItem.inFastRestoreAnimation
-    isHiddenSpacerAnimated: taskItem.inFastRestoreAnimation
-                            || showWindowAnimation.running
+    isHiddenSpacerForcedShow: taskItem.inAttentionBuiltinAnimation
+    isHiddenSpacerAnimated: showWindowAnimation.running
                             || root.inActivityChange
                             || taskItem.inRemoveStage
-                            || (taskItem.containsMouse && inAttentionAnimation && taskItem.parabolicItem.zoom!==taskItem.abilities.parabolic.factor.zoom)
+                            || (taskItem.containsMouse && inAttentionBuiltinAnimation && taskItem.parabolicItem.zoom!==taskItem.abilities.parabolic.factor.zoom)
 
     isMonochromaticForcedContentItem: plasmoid.configuration.forceMonochromaticIcons
     monochromizedItem: taskIcon.monochromizedItem
@@ -50,14 +49,14 @@ AbilityItem.BasicItem {
         return isWindow ? model.display : model.AppName;
     }
 
-    preserveIndicatorInInitialPosition: inBouncingAnimation || inAttentionAnimation || inNewWindowAnimation
+    preserveIndicatorInInitialPosition: inBouncingAnimation || inAttentionBuiltinAnimation || inNewWindowBuiltinAnimation
 
     parabolicItem.isParabolicEventBlocked: root.dragSource
                                            || !hoverEnabled
                                            || !taskItem.abilities.myView.isShownFully
                                            || inAnimation
-                                           || (inBlockingAnimation && !(inAttentionAnimation||inFastRestoreAnimation))
-    parabolicItem.isUpdatingOnlySpacers: inAttentionAnimation || inBouncingAnimation    
+                                           || (inBlockingAnimation && !inAttentionBuiltinAnimation)
+    parabolicItem.isUpdatingOnlySpacers: inAttentionBuiltinAnimation || inBouncingAnimation
 
     property alias hoverEnabled: taskMouseArea.hoverEnabled
     property alias pressed: taskMouseArea.pressed
@@ -72,13 +71,16 @@ AbilityItem.BasicItem {
     /*animations flags*/
     property bool inAnimation: true
     property bool inAddRemoveAnimation: true
-    property bool inAttentionAnimation: false
+    property bool inAttentionBuiltinAnimation: false
     property bool inBlockingAnimation: false
     property bool inBouncingAnimation: false
-    property bool inFastRestoreAnimation: false
-    property bool inNewWindowAnimation: false
+    property bool inNewWindowBuiltinAnimation: false
     property bool inPopup: false
     property bool inRemoveStage: false
+
+    property bool isLauncherBuiltinAnimationRunning: false
+    property bool isLauncherAnimationRunning: isLauncherBuiltinAnimationRunning
+                                              || (taskItem.abilities.indicators.info.providesTaskLauncherAnimation && isIndicatorTaskLauncherAnimationRunning)
 
     //! after clicking to show/hide preview enter events are trigerred even though the should not
     property bool showPreviewsIsBlockedFromReleaseEvent: false
@@ -105,6 +107,7 @@ AbilityItem.BasicItem {
     property bool hoveredFromDragging: (mouseHandler.hoveredItem === taskItem) || (mouseHandler.ignoredItem === taskItem)
 
     property bool wheelIsBlocked: false
+    property bool hasAddedWaitingLauncher: false
 
     property int badgeIndicator: 0 //it is used from external apps
     property int lastValidIndex: -1 //used for the removal animation
@@ -244,9 +247,6 @@ AbilityItem.BasicItem {
     property QtObject contextMenu: null
 
     signal checkWindowsStates();
-    signal groupWindowAdded();
-    signal groupWindowRemoved();
-    signal launcherAnimationRequested();
 
     SubWindows{
         id: subWindows
@@ -262,13 +262,13 @@ AbilityItem.BasicItem {
                     && (windowsCount > previousCount)
                     && !(taskItem.containsMouse)
                     && !root.dragSource ){
-                taskItem.groupWindowAdded();
+                taskItem.taskGroupedWindowAdded();
             } else if ((windowsCount >= 1)
                        && (windowsCount < previousCount)
                        && !root.dragSource
                        && !taskItem.delayingRemove){
                 //sometimes this is triggered in dragging with no reason
-                taskItem.groupWindowRemoved();
+                taskItem.taskGroupedWindowRemoved();
             }
 
             if (windowsCount>=1) {
@@ -328,9 +328,15 @@ AbilityItem.BasicItem {
 
     onIsDraggedChanged: {
         if (isDragged){
-            root.dragSource = taskItem;
-            dragHelper.startDrag(taskItem, model.MimeType, model.MimeData,
-                                 model.LauncherUrlWithoutIcon, model.decoration);
+            taskItem.contentItem.monochromizedItem.grabToImage((result) => {
+                root.dragSource = taskItem;
+                dragHelper.Drag.imageSource = result.url;
+                dragHelper.Drag.mimeData = backend.generateMimeData(model.MimeType, model.MimeData, model.LauncherUrlWithoutIcon);
+                dragHelper.Drag.active = true;
+            });
+        } else {
+            dragHelper.Drag.active = false;
+            dragHelper.Drag.imageSource = "";
             pressX = -1;
             pressY = -1;
         }
@@ -409,18 +415,37 @@ AbilityItem.BasicItem {
         subWindows.activateNextTask();
     }
 
+    function activateLauncher() {
+        if (LatteCore.WindowSystem.compositingActive) {
+            taskItem.taskLauncherActivated();
+            hasAddedWaitingLauncher = true;
+            tasksExtendedManager.addWaitingLauncher(taskItem.launcherUrl);
+        }
+
+        if (root.disableAllWindowsFunctionality) {
+            tasksModel.requestNewInstance(modelIndex());
+        } else {
+            tasksModel.requestActivate(modelIndex());
+        }
+    }
+
     function activateTask() {
         if( taskItem.isLauncher || root.disableAllWindowsFunctionality){
-            if (LatteCore.WindowSystem.compositingActive) {
-                taskItem.launcherAnimationRequested();
-            } else {
-                launcherAction();
-            }
+            activateLauncher();
         } else{
             if (model.IsGroupParent) {
-                var canPresentWindowsIsSupported = LatteCore.WindowSystem.compositingActive && (root.plasmaGreaterThan522 ? backend.canPresentWindows : backend.canPresentWindows());
-                if (canPresentWindowsIsSupported) {
-                    root.presentWindows(root.plasma515 ? model.WinIdList: model.LegacyWinIdList );
+                if (root.plasmaAtLeast525) {
+                    //! At least Plasma 5.25 case
+                    var isWindowViewAvailable = LatteCore.WindowSystem.compositingActive && backend.windowViewAvailable;
+                    if (isWindowViewAvailable) {
+                        root.activateWindowView(model.WinIdList);
+                    }
+                } else {
+                    //! Plasma 5.24 case
+                    var isPresentWindowsAvailable = LatteCore.WindowSystem.compositingActive && backend.canPresentWindows;
+                    if (isPresentWindowsAvailable) {
+                        root.presentWindows(model.WinIdList);
+                    }
                 }
             } else {
                 if (windowsPreviewDlg.visible) {
@@ -519,20 +544,6 @@ AbilityItem.BasicItem {
         toolTipDelegate.activitiesParent = Qt.binding(function() {
             return model.Activities;
         });
-    }
-
-
-    function launcherAction(){
-        if (LatteCore.WindowSystem.compositingActive) {
-            inBouncingAnimation = true;
-            tasksExtendedManager.addWaitingLauncher(taskItem.launcherUrl);
-        }
-
-        if (root.disableAllWindowsFunctionality) {
-            tasksModel.requestNewInstance(modelIndex());
-        } else {
-            tasksModel.requestActivate(modelIndex());
-        }
     }
 
     ///window previews///
@@ -694,7 +705,10 @@ AbilityItem.BasicItem {
 
     function slotWaitingLauncherRemoved(launch) {
         if ((isWindow || isStartup || isLauncher) && !visible && launch === launcherUrl) {
-            taskItem.parabolicItem.zoom = 1;
+            if (!taskItem.abilities.indicators.info.providesTaskLauncherAnimation) {
+                //! this is needed only from in-built launcher animation to restore zoom smoothly
+                taskItem.parabolicItem.zoom = 1;
+            }
             visible = true;
         }
     }
@@ -721,12 +735,7 @@ AbilityItem.BasicItem {
             // an application, one playing and the other not, it will look up appName
             // for the non-playing instance and erroneously show an indicator on both.
             if (!pa.hasPidMatch(taskItem.appName)) {
-                var streams_result;
-                streams_result = pa.streamsForAppName(taskItem.appName);
-                if (streams_result.length===0 && launcherName !== "") {
-                    streams_result = pa.streamsForAppName(launcherName);
-                }
-                streams = streams_result;
+                streams = pa.streamsForAppName(taskItem.appName);
             }
         }
 
@@ -945,5 +954,10 @@ AbilityItem.BasicItem {
     ///Item's Removal Animation
     ListView.onRemove: TaskAnimations.RealRemovalAnimation{ id: taskRealRemovalAnimation }
 
+    onIsLauncherAnimationRunningChanged: {
+        if (!isLauncherAnimationRunning && taskRealRemovalAnimation.paused) {
+            taskRealRemovalAnimation.resume();
+        }
+    }
 }// main Item
 

@@ -89,6 +89,8 @@ void Manager::initLayoutTemplates(const QString &path)
 
 void Manager::initViewTemplates(const QString &path)
 {
+    bool istranslated = (m_corona->kPackage().filePath("templates") == path);
+
     QDir templatesDir(path);
     QStringList filter;
     filter.append(QString("*.view.latte"));
@@ -100,7 +102,14 @@ void Manager::initViewTemplates(const QString &path)
         if (!m_viewTemplates.containsId(templatePath)) {
             Data::Generic vdata;
             vdata.id = templatePath;
-            vdata.name = QFileInfo(templatePath).baseName();
+            QString tname = QFileInfo(templatePath).baseName();
+
+            if (istranslated) {
+                QByteArray tnamechars = tname.toUtf8();
+                vdata.name = i18nc("view template name", tnamechars);
+            } else {
+                vdata.name = tname;
+            }
 
             m_viewTemplates << vdata;
         }
@@ -205,10 +214,10 @@ QString Manager::proposedTemplateAbsolutePath(QString templateFilename)
     QString tempfilename = templateFilename;
 
     if (tempfilename.endsWith(".layout.latte")) {
-        QString clearedname = QFileInfo(tempfilename).baseName();
+        QString clearedname = tempfilename.chopped(QString(".layout.latte").size());
         tempfilename = uniqueLayoutTemplateName(clearedname) + ".layout.latte";
     } else if (tempfilename.endsWith(".view.latte")) {
-        QString clearedname = QFileInfo(tempfilename).baseName();
+        QString clearedname = tempfilename.chopped(QString(".view.latte").size());
         tempfilename = uniqueViewTemplateName(clearedname) + ".view.latte";
     }
 
@@ -234,6 +243,15 @@ bool Manager::hasLayoutTemplate(const QString &templateName) const
 bool Manager::hasViewTemplate(const QString &templateName) const
 {
     return m_viewTemplates.containsName(templateName);
+}
+
+QString Manager::viewTemplateFilePath(const QString templateName) const
+{
+    if (m_viewTemplates.containsName(templateName)) {
+        return m_viewTemplates.idForName(templateName);
+    }
+
+    return QString();
 }
 
 void Manager::installCustomLayoutTemplate(const QString &templateFilePath)
@@ -293,12 +311,36 @@ QString Manager::uniqueViewTemplateName(QString name) const
     return name;
 }
 
+QString Manager::templateName(const QString &filePath)
+{
+    int lastSlash = filePath.lastIndexOf("/");
+    QString tempFilePath = filePath;
+    QString templatename = tempFilePath.remove(0, lastSlash + 1);
+
+    QString extension(".layout.latte");
+    int ext = templatename.lastIndexOf(extension);
+    if (ext>0) {
+        templatename = templatename.remove(ext, extension.size());
+    } else {
+        extension = ".view.latte";
+        ext = templatename.lastIndexOf(extension);
+        templatename = templatename.remove(ext,extension.size());
+    }
+
+    return templatename;
+}
 
 //! it is used in order to provide translations for system templates
 void Manager::exposeTranslatedTemplateNames()
 {
+    //! layout templates default names
     i18nc("default layout template name", "Default");
     i18nc("empty layout template name", "Empty");
+
+    //! dock/panel templates default names
+    i18nc("view template name", "Default Dock");
+    i18nc("view template name", "Default Panel");
+    i18nc("view template name", "Empty Panel");
 }
 
 }

@@ -21,6 +21,7 @@
 #include "../../layout/centrallayout.h"
 #include "../../layouts/importer.h"
 #include "../../layouts/manager.h"
+#include "../../layouts/storage.h"
 #include "../../templates/templatesmanager.h"
 #include "../../tools/commontools.h"
 
@@ -376,11 +377,12 @@ void TabLayouts::switchLayout()
 
 void TabLayouts::toggleActivitiesManager()
 {
-    QDBusInterface iface("org.kde.plasmashell", "/PlasmaShell", "", QDBusConnection::sessionBus());
+    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"),
+                                                          QStringLiteral("/PlasmaShell"),
+                                                          QStringLiteral("org.kde.PlasmaShell"),
+                                                          QStringLiteral("toggleActivityManager"));
 
-    if (iface.isValid()) {
-        iface.call("toggleActivityManager");
-    }
+    QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
 }
 
 void TabLayouts::toggleEnabledLayout()
@@ -511,8 +513,6 @@ void TabLayouts::removeLayout()
                           KMessageWidget::Error);
         return;
     }
-
-    qDebug() << Q_FUNC_INFO;
 
     m_layoutsController->removeSelected();
 }
@@ -659,6 +659,9 @@ void TabLayouts::exportLayoutForBackup()
                 QFile(file).setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ReadGroup | QFileDevice::ReadOther);
             }
 
+            // cleanup clones from exported file
+            Latte::Layouts::Storage::self()->removeAllClonedViews(file);
+
             CentralLayout layoutS(this, file);
             layoutS.setActivities(QStringList());
             layoutS.clearLastUsedActivity();
@@ -713,7 +716,7 @@ void TabLayouts::exportLayoutForBackup()
     });
 
     exportFileDialog->open();
-    exportFileDialog->selectFile(selectedLayout.name);
+    exportFileDialog->selectFile(selectedLayout.name + ".layout.latte");
 }
 
 void TabLayouts::showDetailsDialog()

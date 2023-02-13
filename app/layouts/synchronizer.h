@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QHash>
 #include <QTimer>
+#include <QStringList>
 
 
 namespace Latte {
@@ -65,7 +66,7 @@ public:
     void pauseLayout(QString layoutName);
     void syncActiveLayoutsToOriginalFiles();
     void syncLatteViewsToScreens();
-    void syncMultipleLayoutsToActivities();
+    void syncMultipleLayoutsToActivities(QStringList preloadedLayouts = QStringList());
 
     //! In that case single layout file must be removed after loading the new layout
     void setIsSingleLayoutInDeprecatedRenaming(const bool &enabled);
@@ -95,7 +96,9 @@ public:
     QList<CentralLayout *> currentLayouts() const;
     QList<Latte::View *> currentViews() const;
     QList<Latte::View *> currentViewsWithPlasmaShortcuts() const;
+    QList<Latte::View *> currentOriginalViews() const;
     QList<Latte::View *> sortedCurrentViews() const;
+    QList<Latte::View *> sortedCurrentOriginalViews() const;
     QList<Latte::View *> viewsBasedOnActivityId(const QString &id) const;
 
     CentralLayout *centralLayout(QString layoutname) const;
@@ -119,6 +122,7 @@ signals:
     void centralLayoutsChanged();
     void layoutsChanged();
     void runningActicitiesChanged();
+    void initializationFinished();
 
     void currentLayoutIsSwitching(QString layoutName);
 
@@ -127,15 +131,16 @@ signals:
 
 private slots:
     void onActivityRemoved(const QString &activityid);
-    void onCurrentActivityChanged(const QString &activityid);
     void onLayoutAdded(const QString &layoutpath);
 
+    void unloadPreloadedLayouts();
     void reloadAssignedLayouts();
+    void updateBorderlessMaximizedAfterTimer();
 
 private:
     void addLayout(CentralLayout *layout);
     void unloadCentralLayout(CentralLayout *layout);
-    void unloadLayouts(const QStringList &layoutNames);
+    void unloadLayouts(const QStringList &layoutNames, const QStringList &preloadedLayouts);
 
     bool initSingleMode(QString layoutName);
     bool initMultipleMode(QString layoutName);
@@ -153,6 +158,8 @@ private:
     bool m_multipleModeInitialized{false};
     bool m_isLoaded{false};
     bool m_isSingleLayoutInDeprecatedRenaming{false};
+
+    QTimer m_updateBorderlessMaximized;
 
     Data::LayoutsTable m_layouts;
     QList<CentralLayout *> m_centralLayouts;

@@ -11,6 +11,7 @@
 #include "../../view/view.h"
 #include "../../layout/genericlayout.h"
 #include "../../layouts/manager.h"
+#include "../../settings/universalsettings.h"
 
 // Qt
 #include <QDebug>
@@ -59,9 +60,17 @@ ScreenGeometries::~ScreenGeometries()
 
 void ScreenGeometries::init()
 {
-    QDBusInterface plasmaStrutsIface(PLASMASERVICE, "/StrutManager", PLASMASTRUTNAMESPACE, QDBusConnection::sessionBus());
+    qDebug() << " PLASMA STRUTS MANAGER :: checking availability....";
+    bool serviceavailable{false};
 
-    if (plasmaStrutsIface.isValid()) {
+    if (QDBusConnection::sessionBus().interface()) {
+        serviceavailable = QDBusConnection::sessionBus().interface()->isServiceRegistered(PLASMASERVICE).value();
+        qDebug() << "PLASMA STRUTS MANAGER :: interface availability :: " << QDBusConnection::sessionBus().interface()->isServiceRegistered(PLASMASERVICE).value();
+    }
+
+    connect(m_corona->universalSettings(), &Latte::UniversalSettings::isAvailableGeometryBroadcastedToPlasmaChanged, this, &ScreenGeometries::onBroadcastToPlasmaChanged);
+
+    if (serviceavailable) {
         m_plasmaInterfaceAvailable = true;
 
         qDebug() << " PLASMA STRUTS MANAGER :: is available...";
@@ -74,11 +83,14 @@ void ScreenGeometries::init()
         });
 
         connect(m_corona->activitiesConsumer(), &KActivities::Consumer::currentActivityChanged, this, [&]() {
-            m_forceGeometryBroadcast = true;
-            m_publishTimer.start();
+            if (m_corona->universalSettings()->isAvailableGeometryBroadcastedToPlasma()) {
+                m_publishTimer.start();
+            }
         });
 
-        m_publishTimer.start();
+        if (m_corona->universalSettings()->isAvailableGeometryBroadcastedToPlasma()) {
+            m_publishTimer.start();
+        }
     }
 }
 
@@ -93,21 +105,92 @@ bool ScreenGeometries::screenIsActive(const QString &screenName) const
     return false;
 }
 
-void ScreenGeometries::updateGeometries()
+void ScreenGeometries::onBroadcastToPlasmaChanged()
+{
+    if (m_corona->universalSettings()->isAvailableGeometryBroadcastedToPlasma()) {
+        m_publishTimer.start();
+    } else {
+        clearGeometries();
+    }
+}
+
+void ScreenGeometries::setPlasmaAvailableScreenRect(const QString &screenName, const QRect &rect)
+{
+    QDBusMessage message = QDBusMessage::createMethodCall(PLASMASERVICE,
+                                                          "/StrutManager",
+                                                          PLASMASTRUTNAMESPACE,
+                                                          "setAvailableScreenRect");
+    QVariantList args;
+
+    args << LATTESERVICE
+         << screenName
+         << rect;
+
+    message.setArguments(args);
+    QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
+}
+
+void ScreenGeometries::setPlasmaAvailableScreenRegion(const QString &screenName, const QRegion &region)
+{
+    QDBusMessage message = QDBusMessage::createMethodCall(PLASMASERVICE,
+                                                          "/StrutManager",
+                                                          PLASMASTRUTNAMESPACE,
+                                                          "setAvailableScreenRegion");
+
+    QVariant regionvariant;
+
+    QList<QRect> rects;
+    if (!region.isNull()) {
+        //! transorm QRegion to QList<QRect> in order to be sent through dbus
+        foreach (const QRect &rect, region) {
+            rects << rect;
+        }
+    } else {
+        rects << QRect();
+    }
+    regionvariant = QVariant::fromValue(rects);
+
+    QVariantList args;
+
+    args << LATTESERVICE
+         << screenName
+         << regionvariant;
+
+    message.setArguments(args);
+    QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
+}
+
+void ScreenGeometries::clearGeometries()
 {
     if (!m_plasmaInterfaceAvailable) {
         return;
     }
 
-    QDBusInterface plasmaStrutsIface(PLASMASERVICE, "/StrutManager", PLASMASTRUTNAMESPACE, QDBusConnection::sessionBus());
+    for (QScreen *screen : qGuiApp->screens()) {
+        QString scrName = screen->name();
+        int scrId = m_corona->screenPool()->id(screen->name());
 
-    if (!plasmaStrutsIface.isValid()) {
+        if (m_corona->screenPool()->hasScreenId(scrId)) {
+            setPlasmaAvailableScreenRect(scrName, QRect());
+            setPlasmaAvailableScreenRegion(scrName, QRegion());
+        }
+    }
+
+    m_lastAvailableRect.clear();
+    m_lastAvailableRegion.clear();
+}
+
+void ScreenGeometries::updateGeometries()
+{
+    if (!m_plasmaInterfaceAvailable || !m_corona->universalSettings()->isAvailableGeometryBroadcastedToPlasma()) {
         return;
     }
 
     QStringList availableScreenNames;
 
     qDebug() << " PLASMA SCREEN GEOMETRIES, LAST AVAILABLE SCREEN RECTS :: " << m_lastAvailableRect;
+
+    QStringList clearedScreenNames;
 
     //! check for available geometries changes
     for (QScreen *screen : qGuiApp->screens()) {
@@ -131,36 +214,23 @@ void ScreenGeometries::updateGeometries()
                                                                                   true,
                                                                                   true);
 
-            //! Workaround: Force update, to workaround Plasma not updating its layout at some cases
-            //! Example: Canvas,Music activities use the same Layout. Unity activity
-            //! is using a different layout. When the user from Unity is switching to
-            //! Music and afterwards to Canvas the desktop elements are not positioned properly
-            if (m_forceGeometryBroadcast) {
-                plasmaStrutsIface.call("setAvailableScreenRect", LATTESERVICE, scrName, QRect());
-            }
+            bool clearedScreen = (availableRect == screen->geometry());
 
-            //! Disable checks because of the workaround concerning plasma desktop behavior
-            if (m_forceGeometryBroadcast || (!m_lastAvailableRect.contains(scrName) || m_lastAvailableRect[scrName] != availableRect)) {
-                m_lastAvailableRect[scrName] = availableRect;
-                plasmaStrutsIface.call("setAvailableScreenRect", LATTESERVICE, scrName, availableRect);
-                qDebug() << " PLASMA SCREEN GEOMETRIES, AVAILABLE RECT :: " << screen->name() << " : " << availableRect;
-            }
-
-            if (m_forceGeometryBroadcast) {
-                m_forceGeometryBroadcast = false;
-            }
-
-            if (!m_lastAvailableRegion.contains(scrName) || m_lastAvailableRegion[scrName] != availableRegion) {
-                m_lastAvailableRegion[scrName] = availableRegion;
-
-                //! transorm QRegion to QList<QRect> in order to be sent through dbus
-                QList<QRect> rects;
-                foreach (const QRect &rect, availableRegion) {
-                    rects << rect;
+            if (!clearedScreen) {
+                //! Disable checks because of the workaround concerning plasma desktop behavior
+                if (!m_lastAvailableRect.contains(scrName) || m_lastAvailableRect[scrName] != availableRect) {
+                    m_lastAvailableRect[scrName] = availableRect;
+                    setPlasmaAvailableScreenRect(scrName, availableRect);
+                    qDebug() << " PLASMA SCREEN GEOMETRIES, AVAILABLE RECT :: " << screen->name() << " : " << availableRect;
                 }
 
-                plasmaStrutsIface.call("setAvailableScreenRegion", LATTESERVICE, scrName, QVariant::fromValue(rects));
-                qDebug() << " PLASMA SCREEN GEOMETRIES, AVAILABLE REGION :: " << screen->name() << " : " << availableRegion;
+                if (!m_lastAvailableRegion.contains(scrName) || m_lastAvailableRegion[scrName] != availableRegion) {
+                    m_lastAvailableRegion[scrName] = availableRegion;
+                    setPlasmaAvailableScreenRegion(scrName, availableRegion);
+                    qDebug() << " PLASMA SCREEN GEOMETRIES, AVAILABLE REGION :: " << screen->name() << " : " << availableRegion;
+                }
+            } else {
+                clearedScreenNames << scrName;
             }
         }
 
@@ -169,14 +239,21 @@ void ScreenGeometries::updateGeometries()
 
     //! check for inactive screens that were published previously
     for (QString &lastScrName : m_lastScreenNames) {
-        if (!screenIsActive(lastScrName)) {
+        bool scractive = screenIsActive(lastScrName);
+
+        if (!scractive || clearedScreenNames.contains(lastScrName)) {
             //! screen became inactive and its geometries could be unpublished
-            plasmaStrutsIface.call("setAvailableScreenRect", LATTESERVICE, lastScrName, QRect());
-            plasmaStrutsIface.call("setAvailableScreenRegion", LATTESERVICE, lastScrName, QVariant::fromValue(QList<QRect>()));
+            setPlasmaAvailableScreenRect(lastScrName, QRect());
+            setPlasmaAvailableScreenRegion(lastScrName, QRegion());
 
             m_lastAvailableRect.remove(lastScrName);
             m_lastAvailableRegion.remove(lastScrName);
+        }
+
+        if (!scractive) {
             qDebug() << " PLASMA SCREEN GEOMETRIES, INACTIVE SCREEN :: " << lastScrName;
+        } else if (clearedScreenNames.contains(lastScrName)) {
+            qDebug() << " PLASMA SCREEN GEOMETRIES, CLEARED SCREEN :: " << lastScrName;
         }
     }
 
@@ -185,7 +262,7 @@ void ScreenGeometries::updateGeometries()
 
 void ScreenGeometries::availableScreenGeometryChangedFrom(Latte::View *origin)
 {
-    if (origin && origin->layout() && origin->layout()->isCurrent()) {
+    if (m_corona->universalSettings()->isAvailableGeometryBroadcastedToPlasma() &&  origin && origin->layout() && origin->layout()->isCurrent()) {
         m_publishTimer.start();
     }
 }

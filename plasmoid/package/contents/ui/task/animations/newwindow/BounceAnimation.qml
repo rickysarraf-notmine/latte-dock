@@ -8,8 +8,9 @@ import QtQuick 2.0
 import org.kde.plasma.plasmoid 2.0
 
 SequentialAnimation{
-    alwaysRunToEnd: true
     loops: newWindowAnimation.isDemandingAttention ? 20 : 1
+
+    readonly property string bouncePropertyName: taskItem.isVertical ? "iconAnimatedOffsetX" : "iconAnimatedOffsetY"
 
     Component.onCompleted: {
         if (newWindowAnimation.inDelayedStartup) {
@@ -19,31 +20,37 @@ SequentialAnimation{
         }
     }
 
-    ParallelAnimation{
-        PropertyAnimation {
-            target: taskItem.parabolicItem
-            property: "zoomThickness"
-            to: 1 + (thickPercentage * 2 * (taskItem.abilities.animations.requirements.zoomFactor-1))
-            duration: newWindowAnimation.speed
-            easing.type: Easing.OutQuad
-
-            property real thickPercentage: taskItem.inAttentionAnimation ? 0.8 : 0.6
-        }
-
-        PropertyAnimation {
-            target: taskItem.parabolicItem
-            property: "zoomLength"
-            to: 1
-            duration: newWindowAnimation.speed
-            easing.type: Easing.OutQuad
+    Component.onDestruction: {
+        //! make sure to return on initial position even when the animation is destroyed in the middle
+        if (taskItem.isVertical) {
+            taskItem.iconAnimatedOffsetX = 0;
+        } else {
+            taskItem.iconAnimatedOffsetY = 0;
         }
     }
 
     PropertyAnimation {
-        target: taskItem.parabolicItem
-        property: "zoomThickness"
-        to: 1
+        target: taskItem
+        property: bouncePropertyName
+        to: 0.6 * taskItem.abilities.metrics.iconSize
+        duration: newWindowAnimation.speed
+        easing.type: Easing.OutQuad
+    }
+
+    PropertyAnimation {
+        target: taskItem
+        property: bouncePropertyName
+        to: 0
         duration: 4.4*newWindowAnimation.speed
         easing.type: Easing.OutBounce
+    }
+
+    onStopped: {
+        //! make sure to return on initial position even when the animation is destroyed in the middle
+        if (taskItem.isVertical) {
+            taskItem.iconAnimatedOffsetX = 0;
+        } else {
+            taskItem.iconAnimatedOffsetY = 0;
+        }
     }
 }

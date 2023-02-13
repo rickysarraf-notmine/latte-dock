@@ -87,6 +87,7 @@ class Corona : public Plasma::Corona
 public:
     Corona(bool defaultLayoutOnStartup = false,
                QString layoutNameOnStartUp = QString(),
+               QString addViewTemplateName = QString(),
                int userSetMemoryUsage = -1,
                QObject *parent = nullptr);
     virtual ~Corona();
@@ -144,6 +145,7 @@ public:
     //! these functions are used from context menu through containmentactions    
     void quitApplication();
     void switchToLayout(QString layout);
+    void importLayoutFile(const QString &filepath, const QString &suggestedLayoutName = QString());
     void showSettingsWindow(int page);
 
     QStringList contextMenuData(const uint &containmentId);
@@ -153,6 +155,8 @@ public slots:
     void aboutApplication();
     void activateLauncherMenu();
     void loadDefaultLayout() override;
+
+    void setAutostart(const bool &enabled);
 
     void addView(const uint &containmentId, const QString &templateId);
     void duplicateView(const uint &containmentId);
@@ -185,10 +189,10 @@ private slots:
 
     void onAboutToQuit();
 
-    void addOutput(QScreen *screen);
-    void primaryOutputChanged();
-    void screenRemoved(QScreen *screen);
-    void screenCountChanged();
+    void onScreenAdded(QScreen *screen);
+    void onScreenRemoved(QScreen *screen);
+    void onScreenCountChanged();
+    void onScreenGeometryChanged(const QRect &geometry);
     void syncLatteViewsToScreens();
 
 private:
@@ -211,6 +215,7 @@ private:
 
     bool m_activitiesStarting{true};
     bool m_defaultLayoutOnStartup{false}; //! this is used to enforce loading the default layout on startup
+    bool m_inStartup{true}; //! this is used in order to identify when application is still in startup phase
     bool m_inQuit{false}; //! this is used in order to identify when application is in quit phase
     bool m_quitTimedEnded{false}; //! this is used on destructor in order to delay it and slide-out the views
 
@@ -218,6 +223,7 @@ private:
     int m_userSetMemoryUsage{ -1};
 
     QString m_layoutNameOnStartUp;
+    QString m_startupAddViewTemplateName;
     QString m_importFullConfigurationFile;
 
     QList<KDeclarative::QmlObjectSharedEngine *> m_alternativesObjects;

@@ -14,6 +14,7 @@
 #include "../screenpool.h"
 #include "../layout/abstractlayout.h"
 #include "../settings/universalsettings.h"
+#include "../templates/templatesmanager.h"
 #include "../tools/commontools.h"
 
 // Qt
@@ -358,7 +359,7 @@ bool Importer::importOldConfiguration(QString oldConfigPath, QString newName)
     }
 
     //! the old configuration contains also screen values, these must be updated also
-   /*
+    /*
     * do not use any deprecated screen ids
     * KSharedConfigPtr oldScreensConfig = KSharedConfig::openConfig(screensPath);
     KConfigGroup m_screensGroup = KConfigGroup(oldScreensConfig, "ScreenConnectors");
@@ -531,9 +532,66 @@ bool Importer::importHelper(QString fileName)
     return true;
 }
 
-QString Importer::importLayout(QString fileName)
+bool Importer::isAutostartEnabled()
 {
-    QString newLayoutName = importLayoutHelper(fileName);
+    QFile autostartFile(Latte::configPath() + "/autostart/org.kde.latte-dock.desktop");
+    return autostartFile.exists();
+}
+
+void Importer::enableAutostart()
+{
+    //! deprecated old file
+    QFile oldAutostartFile(Latte::configPath() + "/autostart/latte-dock.desktop");
+
+    if (oldAutostartFile.exists()) {
+        //! remove deprecated file
+        oldAutostartFile.remove();
+    }
+
+    QFile autostartFile(Latte::configPath() + "/autostart/org.kde.latte-dock.desktop");
+    QFile metaFile(standardPath("applications/org.kde.latte-dock.desktop", false));
+
+    if (autostartFile.exists()) {
+        //! if autostart file already exists, do nothing
+        return;
+    }
+
+    if (metaFile.exists()) {
+        //! check if autostart folder exists and create otherwise
+        QDir autostartDir(Latte::configPath() + "/autostart");
+        if (!autostartDir.exists()) {
+            QDir configDir(Latte::configPath());
+            configDir.mkdir("autostart");
+        }
+
+        metaFile.copy(autostartFile.fileName());
+    }
+}
+
+void Importer::disableAutostart()
+{
+    QFile oldAutostartFile(Latte::configPath() + "/autostart/latte-dock.desktop");
+
+    if (oldAutostartFile.exists()) {
+        //! remove deprecated file
+        oldAutostartFile.remove();
+    }
+
+    QFile autostartFile(Latte::configPath() + "/autostart/org.kde.latte-dock.desktop");
+
+    if (autostartFile.exists()) {
+        autostartFile.remove();
+    }
+}
+
+bool Importer::hasViewTemplate(const QString &name)
+{
+    return availableViewTemplates().contains(name);
+}
+
+QString Importer::importLayout(const QString &fileName, const QString &suggestedLayoutName)
+{
+    QString newLayoutName = importLayoutHelper(fileName, suggestedLayoutName);
 
     if (!newLayoutName.isEmpty()) {
         emit newLayoutAdded(layoutUserFilePath(newLayoutName));
@@ -542,7 +600,7 @@ QString Importer::importLayout(QString fileName)
     return newLayoutName;
 }
 
-QString Importer::importLayoutHelper(QString fileName)
+QString Importer::importLayoutHelper(const QString &fileName, const QString &suggestedLayoutName)
 {
     LatteFileVersion version = fileVersion(fileName);
 
@@ -550,17 +608,24 @@ QString Importer::importLayoutHelper(QString fileName)
         return QString();
     }
 
-    QString newLayoutName = Layout::AbstractLayout::layoutName(fileName);
+    QString newLayoutName = !suggestedLayoutName.isEmpty() ? suggestedLayoutName : Layout::AbstractLayout::layoutName(fileName);
     newLayoutName = uniqueLayoutName(newLayoutName);
 
     QString newPath = layoutUserFilePath(newLayoutName);
+
+    QDir localLayoutsDir(layoutUserDir());
+
+    if (!localLayoutsDir.exists()) {
+        QDir(Latte::configPath()).mkdir("latte");
+    }
+
     QFile(fileName).copy(newPath);
 
     QFileInfo newFileInfo(newPath);
 
     if (newFileInfo.exists() && !newFileInfo.isWritable()) {
         QFile(newPath).setPermissions(QFileDevice::ReadUser | QFileDevice::WriteUser | QFileDevice::ReadGroup | QFileDevice::ReadOther);
-    }    
+    }
 
     return newLayoutName;
 }
@@ -581,6 +646,57 @@ QStringList Importer::availableLayouts()
     return layoutNames;
 }
 
+QStringList Importer::availableViewTemplates()
+{
+    QStringList templates;
+
+    QDir localDir(layoutUserDir() + "/templates");
+    QStringList filter;
+    filter.append(QString("*.view.latte"));
+    QStringList files = localDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
+
+    for(const auto &file : files) {
+        templates.append(Templates::Manager::templateName(file));
+    }
+
+    QDir systemDir(systemShellDataPath()+"/contents/templates");
+    QStringList sfiles = systemDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
+
+    for(const auto &file : sfiles) {
+        QString name = Templates::Manager::templateName(file);
+        if (!templates.contains(name)) {
+            templates.append(name);
+        }
+    }
+
+    return templates;
+}
+
+QStringList Importer::availableLayoutTemplates()
+{
+    QStringList templates;
+
+    QDir localDir(layoutUserDir() + "/templates");
+    QStringList filter;
+    filter.append(QString("*.layout.latte"));
+    QStringList files = localDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
+
+    for(const auto &file : files) {
+        templates.append(Templates::Manager::templateName(file));
+    }
+
+    QDir systemDir(systemShellDataPath()+"/contents/templates");
+    QStringList sfiles = systemDir.entryList(filter, QDir::Files | QDir::NoSymLinks);
+
+    for(const auto &file : sfiles) {
+        QString name = Templates::Manager::templateName(file);
+        if (!templates.contains(name)) {
+            templates.append(name);
+        }
+    }
+
+    return templates;
+}
 
 QString Importer::nameOfConfigFile(const QString &fileName)
 {
@@ -610,6 +726,18 @@ QString Importer::layoutUserFilePath(QString layoutName)
     return QString(layoutUserDir() + "/" + layoutName + ".layout.latte");
 }
 
+QString Importer::systemShellDataPath()
+{
+    QStringList paths = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    QString rootpath = paths.count() > 0 ? paths[paths.count()-1] : "/usr/share";
+    return  rootpath + "/plasma/shells/org.kde.latte.shell";
+}
+
+QString Importer::layoutTemplateSystemFilePath(const QString &name)
+{
+    return systemShellDataPath() + "/contents/templates/" + name + ".layout.latte";
+}
+
 QString Importer::uniqueLayoutName(QString name)
 {
     int pos_ = name.lastIndexOf(QRegExp(QString(" - [0-9]+")));
@@ -628,6 +756,38 @@ QString Importer::uniqueLayoutName(QString name)
     }
 
     return name;
+}
+
+Latte::MultipleLayouts::Status Importer::multipleLayoutsStatus()
+{
+    QString linkedFilePath = layoutUserFilePath(Layout::MULTIPLELAYOUTSHIDDENNAME);
+    if (!QFileInfo(linkedFilePath).exists()) {
+        return Latte::MultipleLayouts::Uninitialized;
+    }
+
+    KSharedConfigPtr filePtr = KSharedConfig::openConfig(linkedFilePath);
+    KConfigGroup multipleSettings = KConfigGroup(filePtr, "MultipleLayoutsSettings");
+    return static_cast<Latte::MultipleLayouts::Status>(multipleSettings.readEntry("status", (int)Latte::MultipleLayouts::Uninitialized));
+}
+
+void Importer::setMultipleLayoutsStatus(const Latte::MultipleLayouts::Status &status)
+{
+    QString linkedFilePath = layoutUserFilePath(Layout::MULTIPLELAYOUTSHIDDENNAME);
+
+    if (!QFileInfo(linkedFilePath).exists()) {
+        return;
+    }
+
+    if (multipleLayoutsStatus() == status) {
+        return;
+    }
+
+    qDebug() << " MULTIPLE LAYOUTS changed status:" << status;
+
+    KSharedConfigPtr filePtr = KSharedConfig::openConfig(linkedFilePath);
+    KConfigGroup multipleSettings = KConfigGroup(filePtr, "MultipleLayoutsSettings");
+    multipleSettings.writeEntry("status", (int)(status));
+    multipleSettings.sync();
 }
 
 QStringList Importer::checkRepairMultipleLayoutsLinkedFile()

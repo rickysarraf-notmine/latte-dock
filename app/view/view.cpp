@@ -8,7 +8,6 @@
 #include "view.h"
 
 // local
-#include "contextmenu.h"
 #include "effects.h"
 #include "positioner.h"
 #include "visibilitymanager.h"
@@ -62,12 +61,11 @@
 
 namespace Latte {
 
-//! both alwaysVisible and byPassWM are passed through corona because
+//! both alwaysVisible and byPassWMX11 are passed through corona because
 //! during the view window creation containment hasn't been set, but these variables
 //! are needed in order for window flags to be set correctly
-View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
+View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassX11WM)
     : PlasmaQuick::ContainmentView(corona),
-      m_contextMenu(new ViewPart::ContextMenu(this)),
       m_effects(new ViewPart::Effects(this)),
       m_interface(new ViewPart::ContainmentInterface(this)),
       m_parabolic(new ViewPart::Parabolic(this)),
@@ -75,6 +73,8 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
 {
     //this is disabled because under wayland breaks Views positioning
     //setVisible(false);
+
+    m_corona = qobject_cast<Latte::Corona *>(corona);
 
     //! needs to be created after Effects because it catches some of its signals
     //! and avoid a crash from View::winId() at the same time
@@ -90,25 +90,39 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
             | Qt::NoDropShadowWindowHint
             | Qt::WindowDoesNotAcceptFocus;
 
-    if (byPassWM) {
+    if (byPassX11WM) {
         setFlags(flags | Qt::BypassWindowManagerHint);
+        //! needs to be set early enough
+        m_byPassWM = byPassX11WM;
     } else {
         setFlags(flags);
     }
 
-    if (targetScreen)
+    if (KWindowSystem::isPlatformX11()) {
+        //! Enable OnAllDesktops during creation in order to protect corner cases that is ignored
+        //! during startup. Such corner case is bug #447689.
+        //! Best guess is that this is needed because OnAllDesktops is set through visibilitymanager
+        //! after containment has been assigned. That delay might lead wm ignoring the flag
+        //! until it is reapplied.
+        KWindowSystem::setOnAllDesktops(winId(), true);
+    }
+
+    if (targetScreen) {
         m_positioner->setScreenToFollow(targetScreen);
-    else
-        m_positioner->setScreenToFollow(qGuiApp->primaryScreen());
+    } else {
+        qDebug() << "org.kde.view :::: corona was found properly!!!";
+        m_positioner->setScreenToFollow(m_corona->screenPool()->primaryScreen());
+    }
 
     m_releaseGrabTimer.setInterval(400);
     m_releaseGrabTimer.setSingleShot(true);
     connect(&m_releaseGrabTimer, &QTimer::timeout, this, &View::releaseGrab);
 
-    connect(m_contextMenu, &ViewPart::ContextMenu::menuChanged, this, &View::updateTransientWindowsTracking);
+    connect(m_interface, &ViewPart::ContainmentInterface::hasExpandedAppletChanged, this, &View::updateTransientWindowsTracking);
 
+    connect(this, &View::containmentChanged, this, &View::groupIdChanged);
     connect(this, &View::containmentChanged
-            , this, [ &, byPassWM]() {
+            , this, [ &, byPassX11WM]() {
         qDebug() << "dock view c++ containment changed 1...";
 
         if (!this->containment())
@@ -122,7 +136,7 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
         restoreConfig();
 
         //! Afterwards override that values in case during creation something different is needed
-        setByPassWM(byPassWM);
+        setByPassWM(byPassX11WM);
 
         //! Check the screen assigned to this dock
         reconsiderScreen();
@@ -169,16 +183,16 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
         if (m_positioner) {
             //! immediateSyncGeometry helps avoiding binding loops from containment qml side
             m_positioner->immediateSyncGeometry();
-            if (m_inStartup) {
-                m_inStartup = false;
-                m_positioner->slideInDuringStartup();
-            }
         }
 
         connect(this->containment(), SIGNAL(statusChanged(Plasma::Types::ItemStatus)), SLOT(statusChanged(Plasma::Types::ItemStatus)));
         connect(this->containment(), &Plasma::Containment::showAddWidgetsInterface, this, &View::showWidgetExplorer);
         connect(this->containment(), &Plasma::Containment::userConfiguringChanged, this, [&]() {
             emit inEditModeChanged();
+        });
+
+        connect(this->containment(), &Plasma::Containment::destroyedChanged, this, [&]() {
+            m_inDelete = containment()->destroyed();
         });
 
         if (m_corona->viewSettingsFactory()->hasOrphanSettings()
@@ -191,8 +205,6 @@ View::View(Plasma::Corona *corona, QScreen *targetScreen, bool byPassWM)
 
         emit containmentActionsChanged();
     }, Qt::DirectConnection);
-
-    m_corona = qobject_cast<Latte::Corona *>(this->corona());
 
     if (m_corona) {
         connect(m_corona, &Latte::Corona::viewLocationChanged, this, &View::dockLocationChanged);
@@ -234,10 +246,6 @@ View::~View()
 
     if (m_appletConfigView) {
         delete m_appletConfigView;
-    }
-
-    if (m_contextMenu) {
-        delete m_contextMenu;
     }
 
     //needs to be deleted before Effects because it catches some of its signals
@@ -288,6 +296,34 @@ void View::init(Plasma::Containment *plasma_containment)
     connect(this, &View::activitiesChanged, this, &View::applyActivitiesToWindows);
     connect(m_positioner, &ViewPart::Positioner::winIdChanged, this, &View::applyActivitiesToWindows);
 
+    connect(this, &View::alignmentChanged, this, [&](){
+        // inform neighbour vertical docks/panels to adjust their positioning
+        if (m_inDelete || formFactor() == Plasma::Types::Vertical) {
+            return;
+        }
+
+        emit availableScreenRectChangedFrom(this);
+        emit availableScreenRegionChangedFrom(this);
+    });
+
+    connect(this, &View::maxLengthChanged, this, [&]() {
+        if (m_inDelete) {
+            return;
+        }
+
+        emit availableScreenRectChangedFrom(this);
+        emit availableScreenRegionChangedFrom(this);
+    });
+
+    connect(this, &View::offsetChanged, this, [&]() {
+        if (m_inDelete ) {
+            return;
+        }
+
+        emit availableScreenRectChangedFrom(this);
+        emit availableScreenRegionChangedFrom(this);
+    });
+
     connect(this, &View::localGeometryChanged, this, [&]() {
         updateAbsoluteGeometry();
     });
@@ -319,8 +355,6 @@ void View::init(Plasma::Containment *plasma_containment)
     connect(m_positioner, &ViewPart::Positioner::windowSizeChanged, this, [&]() {
         emit availableScreenRectChangedFrom(this);
     });
-
-    connect(m_contextMenu, &ViewPart::ContextMenu::menuChanged, this, &View::contextMenuIsShownChanged);
 
     connect(m_interface, &ViewPart::ContainmentInterface::hasExpandedAppletChanged, this, &View::verticalUnityViewHasFocus);
 
@@ -404,6 +438,9 @@ void View::availableScreenRectChangedFromSlot(View *origin)
     }
 
     if (formFactor() == Plasma::Types::Vertical
+            && origin->formFactor() == Plasma::Types::Horizontal //! accept only horizontal views
+            && !(origin->location() == Plasma::Types::TopEdge && m_positioner->isStickedOnTopEdge()) //! ignore signals in such case
+            && !(origin->location() == Plasma::Types::BottomEdge && m_positioner->isStickedOnBottomEdge()) //! ignore signals in such case
             && origin->layout()
             && m_layout
             && origin->layout()->lastUsedActivity() == m_layout->lastUsedActivity()) {
@@ -493,8 +530,6 @@ void View::newView(const QString &templateFile)
 void View::removeView()
 {
     if (m_layout) {
-        m_inDelete = true;
-
         QAction *removeAct = action("remove");
 
         if (removeAct) {
@@ -559,6 +594,14 @@ void View::showConfigurationInterface(Plasma::Applet *applet)
     } else {
         m_appletConfigView = new PlasmaQuick::ConfigView(applet);
         m_appletConfigView.data()->init();
+
+        //! center applet config window
+        m_appletConfigView->setScreen(screen());
+        QRect scrgeometry = screenGeometry();
+        QPoint position{scrgeometry.center().x() - m_appletConfigView->width() / 2, scrgeometry.center().y() - m_appletConfigView->height() / 2 };
+        //!under wayland probably needs another workaround
+        m_appletConfigView->setPosition(position);
+
         m_appletConfigView->show();
     }
 }
@@ -639,6 +682,15 @@ void View::updateAbsoluteGeometry(bool bypassChecks)
         }
     }
 
+    if (KWindowSystem::isPlatformX11() && devicePixelRatio() != 1.0) {
+        //!Fix for X11 Global Scale, I dont think this could be pixel perfect accurate
+        auto factor = devicePixelRatio();
+        absGeometry = QRect(qRound(absGeometry.x() * factor),
+                            qRound(absGeometry.y() * factor),
+                            qRound(absGeometry.width() * factor),
+                            qRound(absGeometry.height() * factor));
+    }
+
     if (m_absoluteGeometry == absGeometry && !bypassChecks) {
         return;
     }
@@ -648,8 +700,8 @@ void View::updateAbsoluteGeometry(bool bypassChecks)
         emit absoluteGeometryChanged(m_absoluteGeometry);
     }
 
-    //! this is needed in order to update correctly the screenGeometries
-    if (visibility() && corona() && visibility()->mode() == Types::AlwaysVisible) {
+    if ((m_absoluteGeometry != absGeometry) || bypassChecks) {
+        //! inform others such as neighbour vertical views that new geometries are applied
         //! main use of BYPASSCKECKS is from Positioner when the view changes screens
         emit availableScreenRectChangedFrom(this);
         emit availableScreenRegionChangedFrom(this);
@@ -662,17 +714,34 @@ void View::statusChanged(Plasma::Types::ItemStatus status)
         return;
     }
 
-    if (status == Plasma::Types::NeedsAttentionStatus) {
+    //! Fix for #443236, following setFlags(...) need to be added at all three cases
+    //! but initViewFlags() should be called afterwards because setFlags(...) breaks
+    //! the Dock window default behavior under x11
+    if (status == Plasma::Types::NeedsAttentionStatus || status == Plasma::Types::RequiresAttentionStatus) {
         m_visibility->addBlockHidingEvent(BLOCKHIDINGNEEDSATTENTIONTYPE);
+        setFlags(flags() | Qt::WindowDoesNotAcceptFocus);
         m_visibility->initViewFlags();
+        if (m_shellSurface) {
+            m_shellSurface->setPanelTakesFocus(false);
+        }
     } else if (status == Plasma::Types::AcceptingInputStatus) {
         m_visibility->removeBlockHidingEvent(BLOCKHIDINGNEEDSATTENTIONTYPE);
         setFlags(flags() & ~Qt::WindowDoesNotAcceptFocus);
-        KWindowSystem::forceActiveWindow(winId());
+        m_visibility->initViewFlags();
+        if (KWindowSystem::isPlatformX11()) {
+            KWindowSystem::forceActiveWindow(winId());
+        }
+        if (m_shellSurface) {
+            m_shellSurface->setPanelTakesFocus(true);
+        }
     } else {
         updateTransientWindowsTracking();
         m_visibility->removeBlockHidingEvent(BLOCKHIDINGNEEDSATTENTIONTYPE);
+        setFlags(flags() | Qt::WindowDoesNotAcceptFocus);
         m_visibility->initViewFlags();
+        if (m_shellSurface) {
+            m_shellSurface->setPanelTakesFocus(false);
+        }
     }
 }
 
@@ -702,6 +771,10 @@ void View::removeTransientWindow(const bool &visible)
         disconnect(window, &QWindow::visibleChanged, this, &View::removeTransientWindow);
         m_transientWindows.removeAll(window);
 
+        if (m_visibility->hasBlockHidingEvent(Latte::GlobalShortcuts::SHORTCUTBLOCKHIDINGTYPE)) {
+            m_visibility->removeBlockHidingEvent(Latte::GlobalShortcuts::SHORTCUTBLOCKHIDINGTYPE);
+        }
+
         updateTransientWindowsTracking();
     }
 }
@@ -709,11 +782,9 @@ void View::removeTransientWindow(const bool &visible)
 void View::updateTransientWindowsTracking()
 {
     for(QWindow *window: qApp->topLevelWindows()) {
-        if (window->transientParent() == this){
-            if (window->isVisible()) {
-                addTransientWindow(window);
-                break;
-            }
+        if (window->transientParent() == this && window->isVisible()){
+            addTransientWindow(window);
+            break;
         }
     }
 }
@@ -775,15 +846,6 @@ void View::setContainsDrag(bool contains)
 bool View::containsMouse() const
 {
     return m_containsMouse;
-}
-
-bool View::contextMenuIsShown() const
-{
-    if (!m_contextMenu) {
-        return false;
-    }
-
-    return m_contextMenu->menu();
 }
 
 int View::normalThickness() const
@@ -948,6 +1010,15 @@ void View::setOnPrimary(bool flag)
 
     m_onPrimary = flag;
     emit onPrimaryChanged();
+}
+
+int View::groupId() const
+{
+    if (!containment()) {
+        return -1;
+    }
+
+    return containment()->id();
 }
 
 float View::maxLength() const
@@ -1322,7 +1393,10 @@ Latte::Data::View View::data() const
         vdata.screen = containment()->lastScreen();
     }
 
-    vdata.screenEdgeMargin = m_screenEdgeMargin;
+    vdata.screensGroup = screensGroup();
+
+    //!screen edge margin can be more accurate in the config file
+    vdata.screenEdgeMargin = m_screenEdgeMargin > 0 ? m_screenEdgeMargin : containment()->config().group("General").readEntry("screenEdgeMargin", (int)-1);
 
     vdata.edge = location();
     vdata.maxLength = m_maxLength * 100;
@@ -1371,11 +1445,6 @@ ViewPart::Effects *View::effects() const
 ViewPart::Indicator *View::indicator() const
 {
     return m_indicator;
-}
-
-ViewPart::ContextMenu *View::contextMenu() const
-{
-    return m_contextMenu;
 }
 
 ViewPart::ContainmentInterface *View::extendedInterface() const
@@ -1478,6 +1547,7 @@ bool View::event(QEvent *e)
             if (auto me = dynamic_cast<QMouseEvent *>(e)) {
                 emit mousePressed(me->pos(), me->button());
                 sinkableevent = true;
+                verticalUnityViewHasFocus();
             }
             break;
 
@@ -1524,13 +1594,8 @@ bool View::event(QEvent *e)
 
         case QEvent::Wheel:
             if (auto we = dynamic_cast<QWheelEvent *>(e)) {
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-                QPoint pos = QPoint(we->x(), we->y());
-#else
                 QPoint pos = we->position().toPoint();
-#endif
                 emit wheelScrolled(pos, we->angleDelta(), we->buttons());
-
                 sinkableevent = true;
             }
             break;
@@ -1653,25 +1718,12 @@ void View::verticalUnityViewHasFocus()
 }
 //! END: WORKAROUND
 
-//!BEGIN overriding context menus behavior
-void View::mousePressEvent(QMouseEvent *event)
-{
-    bool result = m_contextMenu->mousePressEvent(event);
-
-    if (result) {
-        PlasmaQuick::ContainmentView::mousePressEvent(event);
-        updateTransientWindowsTracking();
-    }
-
-    verticalUnityViewHasFocus();
-}
-//!END overriding context menus behavior
-
 //!BEGIN configuration functions
 void View::saveConfig()
 {
-    if (!this->containment())
+    if (!this->containment()) {
         return;
+    }
 
     auto config = this->containment()->config();
     config.writeEntry("onPrimary", onPrimary());
@@ -1683,8 +1735,9 @@ void View::saveConfig()
 
 void View::restoreConfig()
 {
-    if (!this->containment())
+    if (!this->containment()) {
         return;
+    }
 
     auto config = this->containment()->config();
     m_onPrimary = config.readEntry("onPrimary", true);
@@ -1696,6 +1749,7 @@ void View::restoreConfig()
     //! Send changed signals at the end in order to be sure that saveConfig
     //! wont rewrite default/invalid values
     emit alignmentChanged();
+    emit nameChanged();
     emit onPrimaryChanged();
     emit byPassWMChanged();
 }

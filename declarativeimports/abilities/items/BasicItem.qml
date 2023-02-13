@@ -22,6 +22,9 @@ Item{
     signal mouseReleased(int x, int y, int button);
     signal shortcutRequestedActivate();
     signal shortcutRequestedNewInstance();
+    signal taskLauncherActivated();
+    signal taskGroupedWindowAdded();
+    signal taskGroupedWindowRemoved();
 
     anchors.bottom: (parent && abilityItem.location === PlasmaCore.Types.BottomEdge) ? parent.bottom : undefined
     anchors.top: (parent && abilityItem.location === PlasmaCore.Types.TopEdge) ? parent.top : undefined
@@ -97,6 +100,13 @@ Item{
     readonly property bool isHorizontal: !isVertical
     readonly property bool isVertical: plasmoid.formFactor === PlasmaCore.Types.Vertical
     readonly property bool parabolicAreaContainsMouse: parabolicEventsAreaLoader.active && parabolicEventsAreaLoader.item.containsMouse
+    readonly property int parabolicAreaLastMousePos: {
+        if (parabolicEventsAreaLoader.active) {
+            return Math.round(plasmoid.formFactor === PlasmaCore.Types.Horizontal ? parabolicEventsAreaLoader.item.lastMouseX : parabolicEventsAreaLoader.item.lastMouseY);
+        }
+
+        return 0;
+    }
 
     readonly property int location: {
         if (plasmoid.location === PlasmaCore.Types.LeftEdge
@@ -108,10 +118,22 @@ Item{
         return PlasmaCore.Types.BottomEdge;
     }
 
+    readonly property bool isFirstItemInContainer: abilityItem.abilities.containment.isFirstAppletInContainment && (index === abilityItem.abilities.indexer.firstVisibleItemIndex)
+    readonly property bool isLastItemInContainer: abilityItem.abilities.containment.isLastAppletInContainment && (index === abilityItem.abilities.indexer.lastVisibleItemIndex)
+
     readonly property int itemIndex: index
     readonly property int animationTime: (abilityItem.abilities.animations.active ? abilityItem.abilities.animations.speedFactor.current : 2) * (1.2 * abilityItem.abilities.animations.duration.small)
-    readonly property int iconOffsetX: indicatorBackLayer.level.requested.iconOffsetX
-    readonly property int iconOffsetY: indicatorBackLayer.level.requested.iconOffsetY
+    property int iconAnimatedOffsetX: 0
+    property int iconAnimatedOffsetY: 0
+    readonly property int iconOffsetX: iconAnimatedOffsetX + indicatorBackLayer.level.requested.iconOffsetX
+    readonly property int iconOffsetY: iconAnimatedOffsetY + indicatorBackLayer.level.requested.iconOffsetY
+    readonly property int iconTransformOrigin: indicatorBackLayer.level.requested.iconTransformOrigin
+    readonly property real iconOpacity: indicatorBackLayer.level.requested.iconOpacity
+    readonly property real iconRotation: indicatorBackLayer.level.requested.iconRotation
+    readonly property real iconScale: indicatorBackLayer.level.requested.iconScale
+
+    readonly property bool isIndicatorTaskLauncherAnimationRunning: (indicatorBackLayer.level.requested.isTaskLauncherAnimationRunning
+                                                                     || indicatorFrontLayer.level.requested.isTaskLauncherAnimationRunning)
 
     readonly property alias indicator: abilityIndicatorObj
     readonly property alias parabolicItem: _parabolicItem
