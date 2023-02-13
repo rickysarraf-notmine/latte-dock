@@ -1,3 +1,10 @@
+latte-dock (0.10.8+git1.76302ee7-1) UNRELEASED; urgency=medium
+
+  * New upstream version 0.10.8+git1.76302ee7
+  * Add qtwayland5 to build dependency
+
+ -- Ritesh Raj Sarraf <rrs@debian.org>  Mon, 13 Feb 2023 16:45:45 +0530
+
 latte-dock (0.9.12+git0.af64411d-1) norbert; urgency=medium
 
   * New upstream version 0.9.12+git0.af64411d
