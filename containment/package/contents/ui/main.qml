@@ -174,13 +174,13 @@ Item {
     readonly property bool hasUserSpecifiedBackground: (latteView && latteView.layout && latteView.layout.background.startsWith("/")) ?
                                                            true : false
 
-    readonly property bool inConfigureAppletsMode: root.editMode && plasmoid.configuration.inConfigureAppletsMode
+    readonly property bool inConfigureAppletsMode: root.editMode && universalSettings && universalSettings.inConfigureAppletsMode
 
     property bool closeActiveWindowEnabled: plasmoid.configuration.closeActiveWindowEnabled
     property bool dragActiveWindowEnabled: plasmoid.configuration.dragActiveWindowEnabled
     property bool immutable: plasmoid.immutable
     property bool inFullJustify: (plasmoid.configuration.alignment === LatteCore.Types.Justify) && (maxLengthPerCentage===100)
-    property bool inStartup: !fastLayoutManager.hasRestoredApplets
+    property bool inStartup: true
 
     property bool isHorizontal: plasmoid.formFactor === PlasmaCore.Types.Horizontal
     property bool isVertical: !isHorizontal
@@ -462,6 +462,7 @@ Item {
                 layouter.appletsInParentChange = false;
             }
 
+            root.updateIndexes();
             plasmoid.configuration.alignment = latteView.alignment;
             fastLayoutManager.save();
         }
@@ -553,7 +554,15 @@ Item {
         }
     }
 
-    Containment.onAppletAdded: fastLayoutManager.addAppletItem(applet, x, y);
+    Containment.onAppletAdded: {
+        if (fastLayoutManager.isMasqueradedIndex(x, y)) {
+            var index = fastLayoutManager.masquearadedIndex(x, y);
+            fastLayoutManager.addAppletItem(applet, index);
+        } else {
+            fastLayoutManager.addAppletItem(applet, x, y);
+        }
+    }
+
     Containment.onAppletRemoved: fastLayoutManager.removeAppletItem(applet);
 
     Plasmoid.onUserConfiguringChanged: {
@@ -572,18 +581,21 @@ Item {
 
     //////////////START OF FUNCTIONS
     function createAppletItem(applet) {
-        var appletItem = appletItemComponent.createObject(dndSpacer.parent);
-        appletItem.applet = applet;
-        applet.parent = appletItem.appletWrapper;
-        applet.anchors.fill = appletItem.appletWrapper;
-        applet.visible = true;
+        var appletContainer = appletItemComponent.createObject(dndSpacer.parent);
+        initAppletContainer(appletContainer, applet);
 
         // don't show applet if it chooses to be hidden but still make it  accessible in the panelcontroller
-        appletItem.visible = Qt.binding(function() {
-            return applet.status !== PlasmaCore.Types.HiddenStatus || (!plasmoid.immutable && root.inConfigureAppletsMode)
+        appletContainer.visible = Qt.binding(function() {
+            return (appletContainer.applet && appletContainer.applet.status !== PlasmaCore.Types.HiddenStatus || (!plasmoid.immutable && root.inConfigureAppletsMode)) && !appletContainer.isHidden;
         });
+        return appletContainer;
+    }
 
-        return appletItem;
+    function initAppletContainer(appletContainer, applet) {
+        appletContainer.applet = applet;
+        applet.parent = appletContainer.appletWrapper;
+        applet.anchors.fill = appletContainer.appletWrapper;
+        applet.visible = true;
     }
 
     function createJustifySplitter() {
@@ -743,23 +755,9 @@ Item {
         endLayout: layoutsContainer.endLayout
         metrics: _metrics
 
-        onLockedZoomAppletsChanged: plasmoid.configuration.lockedZoomApplets = fastLayoutManager.lockedZoomApplets;
-        onUserBlocksColorizingAppletsChanged: plasmoid.configuration.userBlocksColorizingApplets = fastLayoutManager.userBlocksColorizingApplets;
-
-        onAppletOrderChanged: {
-            plasmoid.configuration.appletOrder = fastLayoutManager.appletOrder;
-            root.updateIndexes();
-        }
-
-        onSplitterPositionChanged: {
-            plasmoid.configuration.splitterPosition = fastLayoutManager.splitterPosition;
-            root.updateIndexes();
-        }
-
-        onSplitterPosition2Changed: {
-            plasmoid.configuration.splitterPosition2 = fastLayoutManager.splitterPosition2;
-            root.updateIndexes();
-        }
+        onAppletOrderChanged: root.updateIndexes();
+        onSplitterPositionChanged: root.updateIndexes();
+        onSplitterPosition2Changed: root.updateIndexes();
     }
 
     ///////////////BEGIN UI elements
@@ -861,7 +859,7 @@ Item {
             width: root.isHorizontal ? parent.length : parent.thickness - metrics.margin.screenEdge
             height: root.isHorizontal ? parent.thickness - metrics.margin.screenEdge : parent.length
 
-            property int thickMargin: metrics.margin.screenEdge //+ metrics.margin.thickness
+            property int thickMargin: metrics.margin.screenEdge
 
             LatteComponents.AddItem{
                 id: dndSpacerAddItem
@@ -1015,6 +1013,7 @@ Item {
         debug: _debug
         layouts: layoutsContainer
         view: latteView
+        settings: universalSettings
     }
 
     Ability.PositionShortcuts {
@@ -1045,6 +1044,12 @@ Item {
         onViewChanged: {
             if (view) {
                 view.interfacesGraphicObj = _interfaces;
+
+                if (!root.inStartup) {
+                    //! used from recreating views
+                    root.inStartup = true;
+                    startupDelayer.start();
+                }
             }
         }
     }
@@ -1056,7 +1061,31 @@ Item {
     //! It is used in order to slide-in the latteView on startup
     onInStartupChanged: {
         if (!inStartup) {
+            latteView.positioner.startupFinished();
+            latteView.positioner.slideInDuringStartup();
             visibilityManager.slotMustBeShown();
+        }
+    }
+
+    Connections {
+        target:fastLayoutManager
+        onHasRestoredAppletsChanged: {
+            if (fastLayoutManager.hasRestoredApplets) {
+                startupDelayer.start();
+            }
+        }
+    }
+
+    Timer {
+        //! Give a little more time to layouter and applets to load and be positioned properly during startup when
+        //! the view is drawn out-of-screen and afterwards trigger the startup animation sequence:
+        //! 1.slide-out when out-of-screen //slotMustBeHide()
+        //! 2.be positioned properly at correct screen //slideInDuringStartup(), triggers Positioner::syncGeometry()
+        //! 3.slide-in properly in correct screen //slotMustBeShown();
+        id: startupDelayer
+        interval: 1000
+        onTriggered: {
+            visibilityManager.slotMustBeHide();
         }
     }
 

@@ -50,6 +50,9 @@ Item {
     property bool plasma518: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,18,0)
     property bool plasma520: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,20,0)
     property bool plasmaGreaterThan522: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,21,75)
+    property bool plasmaAtLeast524: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,24,0)
+    property bool plasmaAtLeast525: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,24,75)
+    property bool plasmaAtLeast526: LatteCore.Environment.plasmaDesktopVersion >= LatteCore.Environment.makeVersion(5,25,75)
 
     property bool disableRestoreZoom: false //blocks restore animation in rightClick
     property bool disableAllWindowsFunctionality: plasmoid.configuration.hideAllTasks
@@ -63,6 +66,8 @@ Item {
     property bool transparentPanel: plasmoid.configuration.transparentPanel
     property bool vertical: plasmoid.formFactor === PlasmaCore.Types.Vertical ? true : false
     property bool isHorizontal: plasmoid.formFactor === PlasmaCore.Types.Horizontal ? true : false
+
+    property bool hasTaskDemandingAttention: false
 
     property int clearWidth
     property int clearHeight
@@ -203,6 +208,7 @@ Item {
     signal draggingFinished();
     signal hiddenTasksUpdated();
     signal presentWindows(variant winIds);
+    signal activateWindowView(variant winIds);
     signal requestLayout;
     signal signalPreviewsShown();
     //signal signalDraggingState(bool value);
@@ -253,11 +259,24 @@ Item {
         target: plasmoid
         property: "status"
         value: {
-            if (tasksModel.anyTaskDemandsAttentionInValidTime || root.dragSource) {
-                return PlasmaCore.Types.NeedsAttentionStatus;
+            var hastaskinattention = root.hasTaskDemandingAttention && tasksModel.anyTaskDemandsAttentionInValidTime;
+            return (hastaskinattention || root.dragSource) ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.PassiveStatus;
+        }
+    }
+
+    Binding {
+        target: root
+        property: "hasTaskDemandingAttention"
+        when: appletAbilities.indexer.isReady
+        value: {
+            for (var i=0; i<appletAbilities.indexer.layout.children.length; ++i){
+                var item = appletAbilities.indexer.layout.children[i];
+                if (item && item.isDemandingAttention) {
+                    return true;
+                }
             }
 
-            return PlasmaCore.Types.PassiveStatus;
+            return false;
         }
     }
 
@@ -506,9 +525,12 @@ Item {
         }
 
         onAnyTaskDemandsAttentionChanged: {
+            anyTaskDemandsAttentionInValidTime = anyTaskDemandsAttention;
+
             if (anyTaskDemandsAttention){
-                anyTaskDemandsAttentionInValidTime = true;
-                attentionTimerComponent.createObject(root);
+                attentionTimer.start();
+            } else {
+                attentionTimer.stop();
             }
         }
 
@@ -573,10 +595,12 @@ Item {
         }
     }
 
-    TaskManagerApplet.DragHelper {
+    Item {
         id: dragHelper
 
-        dragIconSize: units.iconSizes.medium
+        Drag.dragType: Drag.Automatic
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+        Drag.onDragFinished: root.dragSource = null;
     }
 
     TaskManager.VirtualDesktopInfo {
@@ -698,10 +722,11 @@ Item {
         launchers.isStealingDroppedLaunchers: plasmoid.configuration.isPreferredForDroppedLaunchers
         launchers.syncer.isBlocked: inDraggingPhase
 
-        metrics.local.iconSize: inPlasmaDesktop ? maxIconSizeInPlasma : (inPlasmaPanel ? Math.max(16, panelThickness - 2*metrics.margin.thickness) : maxIconSizeInPlasma)
+        metrics.local.iconSize: inPlasmaDesktop ? maxIconSizeInPlasma : (inPlasmaPanel ? Math.max(16, panelThickness - metrics.margin.tailThickness - metrics.margin.headThickness) : maxIconSizeInPlasma)
         metrics.local.backgroundThickness: metrics.totals.thickness
         metrics.local.margin.length: 0.1 * metrics.iconSize
-        metrics.local.margin.thickness: inPlasmaDesktop ? 0.16 * metrics.iconSize : Math.max(2, (panelThickness - maxIconSizeInPlasma) / 2)
+        metrics.local.margin.tailThickness: inPlasmaDesktop ? 0.16 * metrics.iconSize : Math.max(2, (panelThickness - maxIconSizeInPlasma) / 2)
+        metrics.local.margin.headThickness: metrics.local.margin.tailThickness
         metrics.local.padding.length: 0.04 * metrics.iconSize
 
         myView.local.isHidingBlocked: root.contextMenu || root.windowPreviewIsShown
@@ -723,21 +748,14 @@ Item {
         thinTooltip.local.showIsBlocked: root.contextMenu || root.windowPreviewIsShown
     }
 
-    Component{
-        id: attentionTimerComponent
-        Timer{
-            id: attentionTimer
-            interval:8500
-            onTriggered: {
-                tasksModel.anyTaskDemandsAttentionInValidTime = false;
-                destroy();
+    Timer{
+        id: attentionTimer
+        interval:8500
+        onTriggered: {
+            tasksModel.anyTaskDemandsAttentionInValidTime = false;
 
-                if (appletAbilities.debug.timersEnabled) {
-                    console.log("plasmoid timer: attentionTimer called...");
-                }
-            }
-            Component.onCompleted: {
-                start();
+            if (appletAbilities.debug.timersEnabled) {
+                console.log("plasmoid timer: attentionTimer called...");
             }
         }
     }
@@ -1257,11 +1275,6 @@ Item {
         return false;
     }
 
-    function resetDragSource() {
-        dragSource.z = 0;
-        dragSource = null;
-    }
-
     ///REMOVE
     /*function createContextMenu(task) {
         var menu = root.contextMenuComponent.createObject(task);
@@ -1284,16 +1297,24 @@ Item {
     }
 
     Component.onCompleted:  {
-        root.presentWindows.connect(backend.presentWindows);
+        if (root.plasmaAtLeast525) {
+            root.activateWindowView.connect(backend.activateWindowView);
+        } else {
+            root.presentWindows.connect(backend.presentWindows);
+        }
+
         root.windowsHovered.connect(backend.windowsHovered);
-        dragHelper.dropped.connect(resetDragSource);
         updateListViewParent();
     }
 
     Component.onDestruction: {
-        root.presentWindows.disconnect(backend.presentWindows);
+        if (root.plasmaAtLeast525) {
+            root.activateWindowView.disconnect(backend.activateWindowView);
+        } else {
+            root.presentWindows.disconnect(backend.presentWindows);
+        }
+
         root.windowsHovered.disconnect(backend.windowsHovered);
-        dragHelper.dropped.disconnect(resetDragSource);
     }
 
     //BEGIN states

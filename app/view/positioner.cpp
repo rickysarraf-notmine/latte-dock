@@ -8,6 +8,7 @@
 // local
 #include <coretypes.h>
 #include "effects.h"
+#include "originalview.h"
 #include "view.h"
 #include "visibilitymanager.h"
 #include "../lattecorona.h"
@@ -107,6 +108,7 @@ void Positioner::init()
     connect(this, &Positioner::hidingForRelocationStarted, this, &Positioner::updateInRelocationAnimation);
     connect(this, &Positioner::showingAfterRelocationFinished, this, &Positioner::updateInRelocationAnimation);
     connect(this, &Positioner::showingAfterRelocationFinished, this, &Positioner::syncLatteViews);
+    connect(this, &Positioner::startupFinished, this, &Positioner::onStartupFinished);
 
     connect(m_view, &Latte::View::onPrimaryChanged, this, &Positioner::syncLatteViews);
 
@@ -207,7 +209,7 @@ void Positioner::init()
     });
 
     connect(qGuiApp, &QGuiApplication::screenAdded, this, &Positioner::onScreenChanged);
-    connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &Positioner::onScreenChanged);
+    connect(m_corona->screenPool(), &ScreenPool::primaryScreenChanged, this, &Positioner::onScreenChanged);
 
     connect(m_view, &Latte::View::visibilityChanged, this, &Positioner::initDelayedSignals);
 
@@ -263,6 +265,11 @@ void Positioner::setInRelocationShowing(bool active)
     } else {
         m_view->visibility()->removeBlockHidingEvent(RELOCATIONSHOWINGEVENT);
     }
+}
+
+bool Positioner::isOffScreen() const
+{
+    return (m_view->absoluteGeometry().x()<-500 || m_view->absoluteGeometry().y()<-500);
 }
 
 int Positioner::currentScreenId() const
@@ -334,6 +341,15 @@ void Positioner::slideOutDuringExit(Plasma::Types::Location location)
 void Positioner::slideInDuringStartup()
 {
     m_corona->wm()->slideWindow(*m_view, slideLocation(m_view->containment()->location()));
+}
+
+void Positioner::onStartupFinished()
+{
+    if (m_inStartup) {
+        m_inStartup = false;
+        syncGeometry();
+        emit isOffScreenChanged();
+    }
 }
 
 void Positioner::onCurrentLayoutIsSwitching(const QString &layoutName)
@@ -419,11 +435,12 @@ void Positioner::reconsiderScreen()
     }
 
     bool screenExists{false};
+    QScreen *primaryScreen{m_corona->screenPool()->primaryScreen()};
 
     //!check if the associated screen is running
     for (const auto scr : qGuiApp->screens()) {
         if (m_screenNameToFollow == scr->name()
-                || (m_view->onPrimary() && scr == qGuiApp->primaryScreen())) {
+                || (m_view->onPrimary() && scr == primaryScreen)) {
             screenExists = true;
         }
     }
@@ -431,12 +448,12 @@ void Positioner::reconsiderScreen()
     qDebug() << "dock screen exists  ::: " << screenExists;
 
     //! 1.a primary dock must be always on the primary screen
-    if (m_view->onPrimary() && (m_screenNameToFollow != qGuiApp->primaryScreen()->name()
-                                || m_screenToFollow != qGuiApp->primaryScreen()
-                                || m_view->screen() != qGuiApp->primaryScreen())) {
+    if (m_view->onPrimary() && (m_screenNameToFollow != primaryScreen->name()
+                                || m_screenToFollow != primaryScreen
+                                || m_view->screen() != primaryScreen)) {
         //! case 1
         qDebug() << "reached case 1: of updating dock primary screen...";
-        setScreenToFollow(qGuiApp->primaryScreen());
+        setScreenToFollow(primaryScreen);
     } else if (!m_view->onPrimary()) {
         //! 2.an explicit dock must be always on the correct associated screen
         //! there are cases that window manager misplaces the dock, this function
@@ -509,7 +526,12 @@ void Positioner::immediateSyncGeometry()
         //! instead of two times (both inside the resizeWindow and the updatePosition)
         QRegion freeRegion;;
         QRect maximumRect;
-        QRect availableScreenRect{m_view->screen()->geometry()};
+        QRect availableScreenRect = m_view->screen()->geometry();
+
+        if (m_inStartup) {
+            //! paint out-of-screen
+            availableScreenRect = QRect(-9999, -9999, m_view->screen()->geometry().width(), m_view->screen()->geometry().height());
+        }
 
         if (m_view->formFactor() == Plasma::Types::Vertical) {
             QString layoutName = m_view->layout() ? m_view->layout()->name() : QString();
@@ -538,9 +560,17 @@ void Positioner::immediateSyncGeometry()
             }
 
             QString activityid = m_view->layout() ? m_view->layout()->lastUsedActivity() : QString();
-            freeRegion = latteCorona->availableScreenRegionWithCriteria(fixedScreen, activityid, ignoreModes, ignoreEdges);
+            if (m_inStartup) {
+                //! paint out-of-screen
+                freeRegion = availableScreenRect;
+            } else {
+                freeRegion = latteCorona->availableScreenRegionWithCriteria(fixedScreen, activityid, ignoreModes, ignoreEdges);
+            }
 
-            maximumRect = maximumNormalGeometry();
+            //! On startup when offscreen use offscreen screen geometry.
+            //! This way vertical docks and panels are not showing are shrinked that
+            //! need to be expanded after sliding-in in startup
+            maximumRect = maximumNormalGeometry(m_inStartup ? availableScreenRect : QRect());
             QRegion availableRegion = freeRegion.intersected(maximumRect);
 
             availableScreenRect = freeRegion.intersected(maximumRect).boundingRect();
@@ -560,7 +590,6 @@ void Positioner::immediateSyncGeometry()
             }
 
             validateTopBottomBorders(availableScreenRect, freeRegion);
-
             m_lastAvailableScreenRegion = freeRegion;
         } else {
             m_view->effects()->setForceTopBorder(false);
@@ -610,23 +639,25 @@ void Positioner::setCanvasGeometry(const QRect &geometry)
 //! this is used mainly from vertical panels in order to
 //! to get the maximum geometry that can be used from the dock
 //! based on their alignment type and the location dock
-QRect Positioner::maximumNormalGeometry()
+QRect Positioner::maximumNormalGeometry(QRect screenGeometry)
 {
+    QRect currentScrGeometry = screenGeometry.isEmpty() ? m_view->screen()->geometry() : screenGeometry;
+
     int xPos = 0;
-    int yPos = m_view->screen()->geometry().y();;
-    int maxHeight = m_view->screen()->geometry().height();
+    int yPos = currentScrGeometry.y();;
+    int maxHeight = currentScrGeometry.height();
     int maxWidth = m_view->maxNormalThickness();
     QRect maxGeometry;
     maxGeometry.setRect(0, 0, maxWidth, maxHeight);
 
     switch (m_view->location()) {
     case Plasma::Types::LeftEdge:
-        xPos = m_view->screen()->geometry().x();
+        xPos = currentScrGeometry.x();
         maxGeometry.setRect(xPos, yPos, maxWidth, maxHeight);
         break;
 
     case Plasma::Types::RightEdge:
-        xPos = m_view->screen()->geometry().right() - maxWidth + 1;
+        xPos = currentScrGeometry.right() - maxWidth + 1;
         maxGeometry.setRect(xPos, yPos, maxWidth, maxHeight);
         break;
 
@@ -645,7 +676,8 @@ void Positioner::validateTopBottomBorders(QRect availableScreenRect, QRegion ava
 
     if (availableScreenRect.top() != m_view->screenGeometry().top()) {
         //! check top border
-        QRegion fitInRegion = QRect(m_view->screenGeometry().x(), availableScreenRect.y()-1, edgeMargin, 1);
+        int x = m_view->location() == Plasma::Types::LeftEdge ? m_view->screenGeometry().x() : m_view->screenGeometry().right() - edgeMargin + 1;
+        QRegion fitInRegion = QRect(x, availableScreenRect.y()-1, edgeMargin, 1);
         QRegion subtracted = fitInRegion.subtracted(availableScreenRegion);
 
         if (subtracted.isNull()) {
@@ -661,7 +693,8 @@ void Positioner::validateTopBottomBorders(QRect availableScreenRect, QRegion ava
 
     if (availableScreenRect.bottom() != m_view->screenGeometry().bottom()) {
         //! check top border
-        QRegion fitInRegion = QRect(m_view->screenGeometry().x(), availableScreenRect.bottom()+1, edgeMargin, 1);
+        int x = m_view->location() == Plasma::Types::LeftEdge ? m_view->screenGeometry().x() : m_view->screenGeometry().right()  - edgeMargin + 1;
+        QRegion fitInRegion = QRect(x, availableScreenRect.bottom()+1, edgeMargin, 1);
         QRegion subtracted = fitInRegion.subtracted(availableScreenRegion);
 
         if (subtracted.isNull()) {
@@ -871,6 +904,10 @@ void Positioner::resizeWindow(QRect availableScreenRect)
         }
     }
 
+    //! protect from invalid window size under wayland
+    size.setWidth(qMax(1, size.width()));
+    size.setHeight(qMax(1, size.height()));
+
     m_validGeometry.setSize(size);
 
     m_view->setMinimumSize(size);
@@ -938,10 +975,18 @@ void Positioner::initSignalingForLocationChangeSliding()
 
     //! SCREEN
     connect(m_view, &QQuickView::screenChanged, this, [&]() {
+        if (!m_view || !m_nextScreen) {
+            return;
+        }
+
+        //[1] if panels are not excluded from confirmed geometry check then they are stuck in sliding out end
+        //and they do not switch to new screen geometry
+        //[2] under wayland view geometry may be delayed to be updated even though the screen has been updated correctly
+        bool confirmedgeometry = KWindowSystem::isPlatformWayland() || m_view->behaveAsPlasmaPanel() || (!m_view->behaveAsPlasmaPanel() && m_nextScreen->geometry().contains(m_view->geometry().center()));
+
         if (m_nextScreen
                 && m_nextScreen == m_view->screen()
-                && m_nextScreen->geometry().contains(m_view->geometry().center())) {
-
+                && confirmedgeometry) {
             bool isrelocationlastevent = isLastHidingRelocationEvent();
             m_nextScreen = nullptr;
             m_nextScreenName = "";
@@ -986,7 +1031,7 @@ void Positioner::initSignalingForLocationChangeSliding()
         //! SCREEN
         if (!m_nextScreenName.isEmpty()) {
             bool nextonprimary = (m_nextScreenName == Latte::Data::Screen::ONPRIMARYNAME);
-            m_nextScreen = qGuiApp->primaryScreen();
+            m_nextScreen = m_corona->screenPool()->primaryScreen();
 
             if (!nextonprimary) {
                 for (const auto scr : qGuiApp->screens()) {
@@ -1010,6 +1055,12 @@ void Positioner::initSignalingForLocationChangeSliding()
         if (m_nextAlignment != Latte::Types::NoneAlignment && m_nextAlignment != m_view->alignment()) {
             m_view->setAlignment(m_nextAlignment);
             m_nextAlignment = Latte::Types::NoneAlignment;
+        }
+
+        //! SCREENSGROUP
+        if (m_view->isOriginal()) {
+            auto originalview = qobject_cast<Latte::OriginalView *>(m_view);
+            originalview->setScreensGroup(m_nextScreensGroup);
         }
     });
 }
@@ -1105,7 +1156,7 @@ bool Positioner::isLastHidingRelocationEvent() const
     return (events <= 1);
 }
 
-void Positioner::setNextLocation(const QString layoutName, const QString screenName, int edge, int alignment)
+void Positioner::setNextLocation(const QString layoutName, const int screensGroup, QString screenName, int edge, int alignment)
 {
     bool isanimated{false};
     bool haschanges{false};
@@ -1130,6 +1181,30 @@ void Positioner::setNextLocation(const QString layoutName, const QString screenN
         }
     }
 
+    //! SCREENSGROUP
+    if (m_view->isOriginal()) {
+        auto originalview = qobject_cast<Latte::OriginalView *>(m_view);
+        //!initialize screens group
+        m_nextScreensGroup = originalview->screensGroup();
+
+        if (m_nextScreensGroup != screensGroup) {
+            haschanges = true;
+            m_nextScreensGroup = static_cast<Latte::Types::ScreensGroup>(screensGroup);
+
+            if (m_nextScreensGroup == Latte::Types::AllScreensGroup) {
+                screenName = Latte::Data::Screen::ONPRIMARYNAME;
+            } else if (m_nextScreensGroup == Latte::Types::AllSecondaryScreensGroup) {
+                int scrid = originalview->expectedScreenIdFromScreenGroup(m_nextScreensGroup);
+
+                if (scrid != Latte::ScreenPool::NOSCREENID) {
+                    screenName = m_corona->screenPool()->connector(scrid);
+                }
+            }
+        }
+    } else {
+        m_nextScreensGroup = Latte::Types::SingleScreenGroup;
+    }
+
     //! SCREEN
     if (!screenName.isEmpty()) {
         bool nextonprimary = (screenName == Latte::Data::Screen::ONPRIMARYNAME);
@@ -1138,7 +1213,7 @@ void Positioner::setNextLocation(const QString layoutName, const QString screenN
              || (!m_view->onPrimary() && nextonprimary) /*explicit -> primary*/
              || (!m_view->onPrimary() && !nextonprimary && screenName != currentScreenName()) ) { /*explicit -> new_explicit*/
 
-            QString nextscreenname = nextonprimary ? qGuiApp->primaryScreen()->name() : screenName;
+            QString nextscreenname = nextonprimary ? m_corona->screenPool()->primaryScreen()->name() : screenName;
 
             if (currentScreenName() == nextscreenname) {
                 m_view->setOnPrimary(nextonprimary);
@@ -1164,6 +1239,11 @@ void Positioner::setNextLocation(const QString layoutName, const QString screenN
     if (alignment != Latte::Types::NoneAlignment && m_view->alignment() != alignment) {
         m_nextAlignment = static_cast<Latte::Types::Alignment>(alignment);
         haschanges = true;
+    }
+
+    if (haschanges && m_view->isOriginal()) {
+        auto originalview = qobject_cast<Latte::OriginalView *>(m_view);
+        originalview->setNextLocationForClones(layoutName, edge, alignment);
     }
 
     m_repositionIsAnimated = isanimated;

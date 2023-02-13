@@ -27,12 +27,17 @@ Item{
         providesFrontLayer: false
         providesHoveredAnimation: false
         providesClickedAnimation: false
+        providesTaskLauncherAnimation: false
+        providesInAttentionAnimation: false
+        providesGroupedWindowAddedAnimation: false
+        providesGroupedWindowRemovedAnimation: false
 
         extraMaskThickness: 0
 
         minThicknessPadding: 0
         minLengthPadding: 0
 
+        backgroundCornerMargin: 1.00
         lengthPadding: 0.08
         appletLengthPadding: -1
 

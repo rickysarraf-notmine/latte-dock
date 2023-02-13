@@ -10,6 +10,7 @@
 #include "apptypes.h"
 #include "lattecorona.h"
 #include "layouts/importer.h"
+#include "templates/templatesmanager.h"
 
 // C++
 #include <memory>
@@ -24,8 +25,11 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDir>
+#include <QFile>
 #include <QLockFile>
+#include <QSessionManager>
 #include <QSharedMemory>
+#include <QTextStream>
 
 // KDE
 #include <KCrash>
@@ -48,6 +52,7 @@ inline void detectPlatform(int argc, char **argv);
 inline void filterDebugMessageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 
 QString filterDebugMessageText;
+QString filterDebugLogFile;
 
 int main(int argc, char **argv)
 {
@@ -68,9 +73,11 @@ int main(int argc, char **argv)
 
     QQuickWindow::setDefaultAlphaBuffer(true);
 
+    qputenv("QT_WAYLAND_DISABLE_FIXED_POSITIONS", {});
     const bool qpaVariable = qEnvironmentVariableIsSet("QT_QPA_PLATFORM");
     detectPlatform(argc, argv);
     QApplication app(argc, argv);
+    qunsetenv("QT_WAYLAND_DISABLE_FIXED_POSITIONS");
 
     if (!qpaVariable) {
         // don't leak the env variable to processes we start
@@ -93,11 +100,17 @@ int main(int argc, char **argv)
                           {{"r", "replace"}, i18nc("command line", "Replace the current Latte instance.")}
                           , {{"d", "debug"}, i18nc("command line", "Show the debugging messages on stdout.")}
                           , {{"cc", "clear-cache"}, i18nc("command line", "Clear qml cache. It can be useful after system upgrades.")}
+                          , {"enable-autostart", i18nc("command line", "Enable autostart for this application")}
+                          , {"disable-autostart", i18nc("command line", "Disable autostart for this application")}
                           , {"default-layout", i18nc("command line", "Import and load default layout on startup.")}
                           , {"available-layouts", i18nc("command line", "Print available layouts")}
+                          , {"available-dock-templates", i18nc("command line", "Print available dock templates")}
+                          , {"available-layout-templates", i18nc("command line", "Print available layout templates")}
                           , {"layout", i18nc("command line", "Load specific layout on startup."), i18nc("command line: load", "layout_name")}
-                          , {"import-layout", i18nc("command line", "Import and load a layout."), i18nc("command line: import", "file_name")}
+                          , {"import-layout", i18nc("command line", "Import and load a layout."), i18nc("command line: import", "absolute_filepath")}
+                          , {"suggested-layout-name", i18nc("command line", "Suggested layout name when importing a layout file"), i18nc("command line: import", "suggested_name")}
                           , {"import-full", i18nc("command line", "Import full configuration."), i18nc("command line: import", "file_name")}
+                          , {"add-dock", i18nc("command line", "Add Dock/Panel"), i18nc("command line: add", "template_name")}
                           , {"single", i18nc("command line", "Single layout memory mode. Only one layout is active at any case.")}
                           , {"multiple", i18nc("command line", "Multiple layouts memory mode. Multiple layouts can be active at any time based on Activities running.")}
                       });
@@ -163,9 +176,25 @@ int main(int argc, char **argv)
     filterDebugEventSinkMask.setDescription(QStringLiteral("Show visual indicators for areas of EventsSink."));
     filterDebugEventSinkMask.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOption(filterDebugEventSinkMask);
+
+    QCommandLineOption filterDebugLogCmd(QStringList() << QStringLiteral("log-file"));
+    filterDebugLogCmd.setDescription(QStringLiteral("Forward debug output in a log text file."));
+    filterDebugLogCmd.setFlags(QCommandLineOption::HiddenFromHelp);
+    filterDebugLogCmd.setValueName(i18nc("command line: log-filepath", "filter_log_filepath"));
+    parser.addOption(filterDebugLogCmd);
     //! END: Hidden options
 
     parser.process(app);
+
+    if (parser.isSet(QStringLiteral("enable-autostart"))) {
+        Latte::Layouts::Importer::enableAutostart();
+    }
+
+    if (parser.isSet(QStringLiteral("disable-autostart"))) {
+        Latte::Layouts::Importer::disableAutostart();
+        qGuiApp->exit();
+        return 0;
+    }
 
     //! print available-layouts
     if (parser.isSet(QStringLiteral("available-layouts"))) {
@@ -185,9 +214,59 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    //! print available-layout-templates
+    if (parser.isSet(QStringLiteral("available-layout-templates"))) {
+        QStringList templates = Latte::Layouts::Importer::availableLayoutTemplates();
+
+        if (templates.count() > 0) {
+            qInfo() << i18n("Available layout templates found in your system:");
+
+            for (const auto &templatename : templates) {
+                qInfo() << "     " << templatename;
+            }
+        } else {
+            qInfo() << i18n("There are no available layout templates in your system.");
+        }
+
+        qGuiApp->exit();
+        return 0;
+    }
+
+    //! print available-dock-templates
+    if (parser.isSet(QStringLiteral("available-dock-templates"))) {
+        QStringList templates = Latte::Layouts::Importer::availableViewTemplates();
+
+        if (templates.count() > 0) {
+            qInfo() << i18n("Available dock templates found in your system:");
+
+            for (const auto &templatename : templates) {
+                qInfo() << "     " << templatename;
+            }
+        } else {
+            qInfo() << i18n("There are no available dock templates in your system.");
+        }
+
+        qGuiApp->exit();
+        return 0;
+    }
+
+    //! disable restore from session management
+    //! based on spectacle solution at:
+    //!   - https://bugs.kde.org/show_bug.cgi?id=430411
+    //!   - https://invent.kde.org/graphics/spectacle/-/commit/8db27170d63f8a4aaff09615e51e3cc0fb115c4d
+    QGuiApplication::setFallbackSessionManagementEnabled(false);
+
+    auto disableSessionManagement = [](QSessionManager &sm) {
+        sm.setRestartHint(QSessionManager::RestartNever);
+    };
+    QObject::connect(&app, &QGuiApplication::commitDataRequest, disableSessionManagement);
+    QObject::connect(&app, &QGuiApplication::saveStateRequest, disableSessionManagement);
+
+    //! choose layout for startup
     bool defaultLayoutOnStartup = false;
     int memoryUsage = -1;
     QString layoutNameOnStartup = "";
+    QString addViewTemplateNameOnStartup = "";
 
     //! --default-layout option
     if (parser.isSet(QStringLiteral("default-layout"))) {
@@ -223,12 +302,37 @@ int main(int argc, char **argv)
 
     if (!lockFile.tryLock(timeout)) {
         QDBusInterface iface("org.kde.lattedock", "/Latte", "", QDBusConnection::sessionBus());
+        bool addview{parser.isSet(QStringLiteral("add-dock"))};
+        bool importlayout{parser.isSet(QStringLiteral("import-layout"))};
+        bool enableautostart{parser.isSet(QStringLiteral("enable-autostart"))};
+        bool disableautostart{parser.isSet(QStringLiteral("disable-autostart"))};
+
+        bool validaction{false};
+
         if (iface.isValid()) {
-            // LayoutPage = 0
-            iface.call("showSettingsWindow", 0);
+            if (addview) {
+                validaction = true;
+                iface.call("addView", (uint)0, parser.value(QStringLiteral("add-dock")));
+                qGuiApp->exit();
+                return 0;
+            } else if (importlayout) {
+                validaction = true;
+                QString suggestedname = parser.isSet(QStringLiteral("suggested-layout-name")) ? parser.value(QStringLiteral("suggested-layout-name")) : QString();
+                iface.call("importLayoutFile", parser.value(QStringLiteral("import-layout")), suggestedname);
+                qGuiApp->exit();
+                return 0;
+            } else if (enableautostart || disableautostart){
+                validaction = true;
+            } else {
+                // LayoutPage = 0
+                iface.call("showSettingsWindow", 0);
+            }
         }
 
-        qInfo() << i18n("An instance is already running!, use --replace to restart Latte");
+        if (!validaction) {
+            qInfo() << i18n("An instance is already running!, use --replace to restart Latte");
+        }
+
         qGuiApp->exit();
         return 0;
     }
@@ -256,7 +360,8 @@ int main(int argc, char **argv)
 
     //! import-layout option
     if (parser.isSet(QStringLiteral("import-layout"))) {
-        QString importedLayout = Latte::Layouts::Importer::importLayoutHelper(parser.value(QStringLiteral("import-layout")));
+        QString suggestedname = parser.isSet(QStringLiteral("suggested-layout-name")) ? parser.value(QStringLiteral("suggested-layout-name")) : QString();
+        QString importedLayout = Latte::Layouts::Importer::importLayoutHelper(parser.value(QStringLiteral("import-layout")), suggestedname);
 
         if (importedLayout.isEmpty()) {
             qInfo() << i18n("The layout cannot be imported");
@@ -274,9 +379,39 @@ int main(int argc, char **argv)
         memoryUsage = (int)(Latte::MemoryUsage::SingleLayout);
     }
 
+    //! add-dock usage option
+    if (parser.isSet(QStringLiteral("add-dock"))) {
+        QString viewTemplateName = parser.value(QStringLiteral("add-dock"));
+        QStringList viewTemplates = Latte::Layouts::Importer::availableViewTemplates();
+
+        if (viewTemplates.contains(viewTemplateName)) {
+            if (layoutNameOnStartup.isEmpty()) {
+                //! Clean layout template is applied and proper name is used
+                QString emptytemplatepath = Latte::Layouts::Importer::layoutTemplateSystemFilePath(Latte::Templates::EMPTYLAYOUTTEMPLATENAME);
+                QString suggestedname = parser.isSet(QStringLiteral("suggested-layout-name")) ? parser.value(QStringLiteral("suggested-layout-name")) : viewTemplateName;
+                QString importedLayout = Latte::Layouts::Importer::importLayoutHelper(emptytemplatepath, suggestedname);
+
+                if (importedLayout.isEmpty()) {
+                    qInfo() << i18n("The layout cannot be imported");
+                    qGuiApp->exit();
+                    return 0;
+                } else {
+                    layoutNameOnStartup = importedLayout;
+                }
+            }
+
+            addViewTemplateNameOnStartup = viewTemplateName;
+        }
+    }
+
     //! text filter for debug messages
     if (parser.isSet(QStringLiteral("debug-text"))) {
         filterDebugMessageText = parser.value(QStringLiteral("debug-text"));
+    }
+
+    //! log file for debug output
+    if (parser.isSet(QStringLiteral("log-file")) && !parser.value(QStringLiteral("log-file")).isEmpty()) {
+        filterDebugLogFile = parser.value(QStringLiteral("log-file"));
     }
 
     //! debug/mask options
@@ -286,7 +421,6 @@ int main(int argc, char **argv)
         const auto noMessageOutput = [](QtMsgType, const QMessageLogContext &, const QString &) {};
         qInstallMessageHandler(noMessageOutput);
     }
-
 
     auto signal_handler = [](int) {
         qGuiApp->exit();
@@ -298,7 +432,7 @@ int main(int argc, char **argv)
     KCrash::setDrKonqiEnabled(true);
     KCrash::setFlags(KCrash::AutoRestart | KCrash::AlwaysDirectly);
 
-    Latte::Corona corona(defaultLayoutOnStartup, layoutNameOnStartup, memoryUsage);
+    Latte::Corona corona(defaultLayoutOnStartup, layoutNameOnStartup, addViewTemplateNameOnStartup, memoryUsage);
     KDBusService service(KDBusService::Unique);
 
     return app.exec();
@@ -348,14 +482,21 @@ inline void filterDebugMessageOutput(QtMsgType type, const QMessageLogContext &c
         TypeColor = CRED;
     } else {
         TypeColor = CIGREEN;
-
     }
 
-    qDebug().nospace() << TypeColor << "[" << typeStr.toStdString().c_str() << " : " << CGREEN << QTime::currentTime().toString("h:mm:ss.zz").toStdString().c_str() << TypeColor << "]" << CNORMAL
-                      #ifndef QT_NO_DEBUG
-                       << CIRED << " [" << CCYAN << function << CIRED << ":" << CCYAN << context.line << CIRED << "]"
-                      #endif
-                       << CICYAN << " - " << CNORMAL << msg;
+    if (filterDebugLogFile.isEmpty()) {
+        qDebug().nospace() << TypeColor << "[" << typeStr.toStdString().c_str() << " : " << CGREEN << QTime::currentTime().toString("h:mm:ss.zz").toStdString().c_str() << TypeColor << "]" << CNORMAL
+                          #ifndef QT_NO_DEBUG
+                           << CIRED << " [" << CCYAN << function << CIRED << ":" << CCYAN << context.line << CIRED << "]"
+                          #endif
+                           << CICYAN << " - " << CNORMAL << msg;
+    } else {
+        QFile logfile(filterDebugLogFile);
+        logfile.open(QIODevice::WriteOnly | QIODevice::Append);
+        QTextStream logts(&logfile);
+        logts << "[" << typeStr.toStdString().c_str() << " : " << QTime::currentTime().toString("h:mm:ss.zz").toStdString().c_str() << "]"
+              <<  " - " << msg << Qt::endl;
+    }
 }
 
 inline void configureAboutData()
@@ -373,6 +514,7 @@ inline void configureAboutData()
     about.setHomepage(WEBSITE);
     about.setProgramLogo(QIcon::fromTheme(QStringLiteral("latte-dock")));
     about.setDesktopFileName(QStringLiteral("latte-dock"));
+    about.setProductName(QByteArray("lattedock"));
 
     // Authors
     about.addAuthor(QStringLiteral("Michail Vourlakos"), QString(), QStringLiteral("mvourlakos@gmail.com"));

@@ -285,6 +285,74 @@ void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &i
     painter->restore();
 }
 
+QRect remainedFromColorSchemeIcon(const QStyleOption &option, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
+{
+    if (alignment == Qt::AlignHCenter) {
+        return option.rect;
+    }
+
+    return remainedFromIcon(option, alignment, lengthMargin, thickMargin);
+}
+
+void drawColorSchemeIcon(QPainter *painter, const QStyleOption &option, const QColor &textColor, const QColor &backgroundColor, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
+{
+    bool active = Latte::isActive(option);
+    bool selected = Latte::isSelected(option);
+    bool focused = Latte::isFocused(option);
+
+    int lenmargin = (lengthMargin == -1 ? ICONMARGIN + MARGIN : lengthMargin);
+    int thickmargin = (thickMargin == -1 ? ICONMARGIN : thickMargin);
+
+    int iconsize = option.rect.height() - 2*thickMargin;
+    int total = iconsize + 2*lenmargin;
+
+    Qt::AlignmentFlag curalign = alignment;
+
+    if (qApp->layoutDirection() == Qt::LeftToRight || alignment == Qt::AlignHCenter) {
+        curalign = alignment;
+    } else {
+        curalign = alignment == Qt::AlignLeft ? Qt::AlignRight : Qt::AlignLeft;
+    }
+
+    QRect target;
+
+    if (curalign == Qt::AlignLeft) {
+        target = QRect(option.rect.x() + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    } else if (curalign == Qt::AlignRight) {
+        target = QRect(option.rect.x() + option.rect.width() - total + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    } else {
+        //! centered
+        target = QRect(option.rect.x() + ((option.rect.width() - total)/2) + lenmargin, option.rect.y() + thickmargin, iconsize, iconsize);
+    }
+
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, false);
+
+    int backImageMargin = 0; //most icon themes provide 1-2px. padding around icons //OLD CALCS: ICONMARGIN; //qMin(target.height()/4, ICONMARGIN+1);
+    QRect backTarget(target.x() + backImageMargin, target.y() + backImageMargin, target.width() - 2*backImageMargin, target.height() - 2*backImageMargin);
+
+    QPalette::ColorRole textColorRole = selected ? QPalette::HighlightedText : QPalette::Text;
+
+    QBrush colorbrush(backgroundColor);
+    QPen pen; pen.setWidth(1);
+    pen.setColor(option.palette.color(Latte::colorGroup(option), textColorRole));
+
+    painter->setBrush(colorbrush);
+    painter->setPen(pen);
+
+    int rectsize = 0.7 * backTarget.width();
+    int gap = backTarget.width() - rectsize;
+
+    painter->drawRect(backTarget.right() - rectsize, backTarget.bottom() - rectsize, rectsize, rectsize);
+
+    colorbrush.setColor(textColor);
+    painter->setBrush(colorbrush);
+    painter->drawRect(backTarget.x(), backTarget.y(), rectsize, rectsize);
+
+    painter->restore();
+}
+
+
 QRect remainedFromIcon(const QStyleOption &option, Qt::AlignmentFlag alignment, int lengthMargin, int thickMargin)
 {
     int lenmargin = (lengthMargin == -1 ? ICONMARGIN + MARGIN : lengthMargin);
@@ -434,7 +502,7 @@ int screenMaxLength(const QStyleOption &option, const int &maxIconSize)
     return scr_maxlength;
 }
 
-QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSize)
+QRect remainedFromScreenDrawing(const QStyleOption &option, bool drawMultipleScreens, const int &maxIconSize)
 {
     int total_length = screenMaxLength(option, maxIconSize) + MARGIN * 2 + 1;
 
@@ -444,7 +512,7 @@ QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSi
     return optionRemainedRect;
 }
 
-QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeometry, const int &maxIconSize, const float brushOpacity)
+QRect drawScreen(QPainter *painter, const QStyleOption &option, bool drawMultipleScreens, QRect screenGeometry, const int &maxIconSize, const float brushOpacity)
 {
     float scr_ratio = (float)screenGeometry.width() / (float)screenGeometry.height();
     bool isVertical = (scr_ratio < 1.0);
@@ -497,13 +565,24 @@ QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeom
     painter->setPen(pen);
     painter->drawRect(screenRect);
 
+    //! draw screen base
     pen.setWidth(1);
     painter->setPen(pen);
+    painter->setRenderHint(QPainter::Antialiasing, false);
+
+    //! draw multiple
+    if (drawMultipleScreens) {
+        int multiplemargin = 3;
+        int curx = screenRect.x()-multiplemargin;
+        painter->drawLine(screenRect.x() - multiplemargin, screenRect.y() - multiplemargin,
+                          screenRect.x() - multiplemargin, screenRect.y() - multiplemargin + screenRect.height());
+        painter->drawLine(screenRect.x() - multiplemargin, screenRect.y() - multiplemargin,
+                          screenRect.x() - multiplemargin + screenRect.width(), screenRect.y() - multiplemargin);
+    }
 
     int basex = screenRect.x() + (screenRect.width()/2) - 4;
     int basey = screenRect.y() + screenRect.height() + 2;
 
-    painter->setRenderHint(QPainter::Antialiasing, false);
     painter->drawLine(basex , basey, basex + 8, basey);
 
     // debug screen maximum available rect

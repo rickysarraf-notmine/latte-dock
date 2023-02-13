@@ -11,6 +11,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.core 2.0 as PlasmaCore
 
+import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.abilities.definition 0.1 as AbilityDefinition
 
 AbilityDefinition.ThinTooltip {
@@ -52,7 +53,9 @@ AbilityDefinition.ThinTooltip {
             _hideTimer.stop();
             _showTimer.stop();
             _tooltipDialog.visible = false;
-            return;
+            //disabling because we need to updated currentvisualparent even when tooltip is blocked
+            //for example when triggering a different applet popup
+            //return;
         }
 
         _hideTimer.stop();
@@ -108,12 +111,13 @@ AbilityDefinition.ThinTooltip {
         }
     }
 
-    PlasmaCore.Dialog{
+    LatteCore.Dialog{
         id: _tooltipDialog
         type: PlasmaCore.Dialog.Tooltip
         flags: Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
 
         location: plasmoid.location
+        edge: plasmoid.location
         mainItem: RowLayout{
             Layout.fillWidth: true
             Layout.fillHeight: true

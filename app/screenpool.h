@@ -16,28 +16,32 @@
 #include <QScreen>
 #include <QString>
 #include <QTimer>
-#include <QAbstractNativeEventFilter>
 
 // KDE
 #include <KConfigGroup>
 #include <KSharedConfig>
 
+class PrimaryOutputWatcher;
+
 namespace Latte {
 
-class ScreenPool : public QObject, public QAbstractNativeEventFilter
+class ScreenPool : public QObject
 {
     Q_OBJECT
 
 public:
     static const int FIRSTSCREENID = 10;
+    static const int NOSCREENID = -1;
 
     ScreenPool(KSharedConfig::Ptr config, QObject *parent = nullptr);
-    void load();
     ~ScreenPool() override;
+
+    void load();
 
     bool hasScreenId(int screenId) const;
     bool isScreenActive(int screenId) const;
     int primaryScreenId() const;
+    QList<int> secondaryScreenIds() const;
 
     void insertScreenMapping(const QString &connector);
     void reload(QString path);
@@ -48,19 +52,20 @@ public:
     QString connector(int id) const;
 
     QScreen *screenForId(int id);
+    QScreen *primaryScreen() const;
 
     Latte::Data::ScreensTable screensTable();
 
 signals:
-    void primaryPoolChanged();
+    void primaryScreenChanged(QScreen *screen);
+    void screenGeometryChanged();
 
 protected:
-    bool nativeEventFilter(const QByteArray &eventType, void *message, long *result) Q_DECL_OVERRIDE;
-
     int firstAvailableId() const;
 
 private slots:
     void updateScreenGeometry(const QScreen *screen);
+    void onPrimaryOutputNameChanged(const QString &oldOutputName, const QString &newOutputName);
     void onScreenAdded(const QScreen *screen);
     void onScreenRemoved(const QScreen *screen);
 
@@ -72,10 +77,10 @@ private:
     Latte::Data::ScreensTable m_screensTable;
 
     KConfigGroup m_configGroup;
-    //! used to workaround a bug under X11 when primary screen changes and no screenChanged signal is emitted
-    QString m_lastPrimaryConnector;
 
     QTimer m_configSaveTimer;
+
+    PrimaryOutputWatcher *m_primaryWatcher;
 };
 
 }

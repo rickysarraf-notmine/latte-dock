@@ -48,6 +48,10 @@ MouseArea {
                 } else if (windowsPreviewDlg.visible) {
                     //! when the previews are already shown, update them immediately
                     taskItem.showPreviewWindow();
+
+                    if (taskItem.isWindow && root.highlightWindows) {
+                        root.windowsHovered(model.WinIdList, taskItem.containsMouse);
+                    }
                 }
             }
         }
@@ -77,12 +81,15 @@ MouseArea {
             // mouse.button is always 0 here, hence checking with mouse.buttons
             if (pressX != -1 && mouse.buttons == Qt.LeftButton
                     && isDragged
-                    && dragHelper.isDrag(pressX, pressY, mouse.x, mouse.y) ) {
-                root.dragSource = taskItem;
-                dragHelper.startDrag(taskItem, model.MimeType, model.MimeData,
-                                     model.LauncherUrlWithoutIcon, model.decoration);
-                pressX = -1;
-                pressY = -1;
+                    && (Math.abs(pressX - mouse.x) + Math.abs(pressY - mouse.y) >= Qt.styleHints.startDragDistance) ) {
+                taskItem.contentItem.monochromizedItem.grabToImage((result) => {
+                    pressX = -1;
+                    pressY = -1;
+                    root.dragSource = taskItem;
+                    dragHelper.Drag.imageSource = result.url;
+                    dragHelper.Drag.mimeData = backend.generateMimeData(model.MimeType, model.MimeData, model.LauncherUrlWithoutIcon);
+                    dragHelper.Drag.active = true;
+                });
             }
         }
     }
@@ -94,7 +101,7 @@ MouseArea {
 
         ////disable hover effect///
         if (isWindow && root.highlightWindows && !containsMouse) {
-            root.windowsHovered( root.plasma515 ? model.WinIdList : model.LegacyWinIdList , false);
+            root.windowsHovered(model.WinIdList, false);
         }
     }
 
@@ -136,7 +143,7 @@ MouseArea {
         //console.log("Released Task Delegate...");
         _resistanerTimer.stop();
 
-        if(pressed && (!inBlockingAnimation || inAttentionAnimation) && !isSeparator){
+        if(pressed && (!inBlockingAnimation || inAttentionBuiltinAnimation) && !isSeparator){
 
             if (modifierAccepted(mouse) && !root.disableAllWindowsFunctionality){
                 if( !taskItem.isLauncher ){
@@ -177,7 +184,18 @@ MouseArea {
                     activateTask();
                 }
             } else if (mouse.button == Qt.LeftButton){
-                var canPresentWindowsIsSupported = LatteCore.WindowSystem.compositingActive && (root.plasmaGreaterThan522 ? backend.canPresentWindows : backend.canPresentWindows());
+                var canPresentWindowsIsSupported = false;
+
+                if (root.plasmaAtLeast525) {
+                    //! At least Plasma 5.25 case
+                    canPresentWindowsIsSupported = LatteCore.WindowSystem.compositingActive && backend.windowViewAvailable;
+                } else if (root.plasmaGreaterThan522) {
+                    //! At least Plasma 5.23 case
+                    canPresentWindowsIsSupported = LatteCore.WindowSystem.compositingActive && backend.canPresentWindows;
+                } else {
+                    //! past Plasma versions
+                    canPresentWindowsIsSupported = LatteCore.WindowSystem.compositingActive && backend.canPresentWindows();
+                }
 
                 if( !taskItem.isLauncher && !root.disableAllWindowsFunctionality ){
                     if ( (root.leftClickAction === LatteTasks.Types.PreviewWindows && isGroupParent)
@@ -211,7 +229,7 @@ MouseArea {
     }
 
     onWheel: {
-        var wheelActionsEnabled = (root.taskScrollAction !== LatteTasks.Types.ScrollNone || manualScrollTasksEnabled);
+        var wheelActionsEnabled = (root.taskScrollAction !== LatteTasks.Types.ScrollNone || root.manualScrollTasksEnabled);
 
         if (isSeparator
                 || wheelIsBlocked
@@ -250,7 +268,7 @@ MouseArea {
                 scrollableList.decreasePos();
             } else {
                 if (isLauncher || root.disableAllWindowsFunctionality) {
-                    taskItem.launcherAnimationRequested();
+                    taskItem.activateLauncher();
                 } else if (isGroupParent) {
                     subWindows.activateNextTask();
                 } else {
@@ -322,7 +340,7 @@ MouseArea {
                 }
 
                 if (taskItem.isWindow && root.highlightWindows) {
-                    root.windowsHovered( root.plasma515 ? model.WinIdList : model.LegacyWinIdList , taskItem.containsMouse);
+                    root.windowsHovered(model.WinIdList, taskItem.containsMouse);
                 }
             }
         }

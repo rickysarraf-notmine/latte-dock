@@ -109,25 +109,30 @@ SequentialAnimation {
             if (taskItem.parabolicItem.zoom > 1 && !taskRealRemovalAnimation.enabledAnimation
                     && !taskItem.inBouncingAnimation && LatteCore.WindowSystem.compositingActive) {
                 tasksExtendedManager.setFrozenTask(taskItem.launcherUrl, taskItem.parabolicItem.zoom);
+            } else {
+                //! remove frozen task if it is deprecated. This fixes the libreoffice launcher issue with custom indicator launcher animations,
+                //! steps to reproduce:
+                //! 1. set an indicator that provides its own launcher animation such as "Animated Dot"
+                //! 2. enable parabolic effect zoom
+                //! 3. click on libreoffice writer launcher and keep the mouse inside the launcher
+                //! 4. close libreoffice writer window from its decoration close button
+                //! 5. libreoffice writer launcher is zoomed even though it should not
+                var frozenTask = tasksExtendedManager.getFrozenTask(taskItem.launcherUrl);
+                if (frozenTask && frozenTask.zoom>1) {
+                    tasksExtendedManager.removeFrozenTask(taskItem.launcherUrl);
+                }
+            }
+
+            if (taskItem.isLauncherAnimationRunning && !taskItem.isSeparator) {
+                taskRealRemovalAnimation.pause();
             }
         }
     }
 
-    //Ghost animation that acts as a delayer in case there is a bouncing animation
-    //taking place
-    PropertyAnimation {
-        target: taskItem.parabolicItem
-        property: "opacity"
-        to: 1
-
-        //this duration must be a bit less than the bouncing animation. Otherwise the
-        //smooth transition between removals is breaking
-        duration:  taskItem.inBouncingAnimation  && !taskItem.isSeparator? 4*launcherSpeedStep + 50 : 0
-        easing.type: Easing.InQuad
-
-        property int launcherSpeedStep: 0.8 * taskItem.abilities.animations.speedFactor.current * taskItem.abilities.animations.duration.large
+    //! Wait for launcher animation to finish before continue with real removal
+    PauseAnimation {
+        duration: taskItem.isLauncherAnimationRunning && !taskItem.isSeparator ? 50 : 0
     }
-    //end of ghost animation
 
     PropertyAnimation {
         target: taskItem.parabolicItem
@@ -153,9 +158,9 @@ SequentialAnimation {
         }
 
         PropertyAnimation {
-            target: taskItem.parabolicItem
-            property: "zoomThickness"
-            to: 0
+            target: taskItem
+            property: taskItem.isVertical ? "iconAnimatedOffsetX" : "iconAnimatedOffsetY"
+            to: -0.7*taskItem.abilities.metrics.iconSize
             duration: taskRealRemovalAnimation.enabledAnimation ? 1.35*showWindowAnimation.speed : 0
             easing.type: Easing.InQuad
         }
@@ -202,9 +207,13 @@ SequentialAnimation {
             taskItem.visible = false;
 
             //send signal that the launcher is really removing
-            if (taskItem.inBouncingAnimation) {
+            if (taskItem.hasAddedWaitingLauncher) {
                 tasksExtendedManager.removeWaitingLauncher(taskItem.launcherUrl);
-                taskItem.abilities.parabolic.setDirectRenderingEnabled(false);
+
+                if (!taskItem.abilities.indicators.info.providesTaskLauncherAnimation) {
+                    //! this is needed only from in-built launcher animation to restore zoom smoothly to neighbour tasks
+                    taskItem.abilities.parabolic.setDirectRenderingEnabled(false);
+                }
             }
         }
     }

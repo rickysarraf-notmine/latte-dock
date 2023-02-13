@@ -186,7 +186,7 @@ PlasmaComponents.Page {
                         Layout.fillWidth: true
                         value: Number(1 + plasmoid.configuration.zoomLevel / 20).toFixed(2)
                         from: 1
-                        to: 2
+                        to: 2.25
                         stepSize: 0.05
                         wheelEnabled: false
 
@@ -684,7 +684,7 @@ PlasmaComponents.Page {
                     spacing: units.smallSpacing
 
                     PlasmaComponents.Label {
-                        text: i18n("Screen edge")
+                        text: i18n("Floating gap")
                         horizontalAlignment: Text.AlignLeft
                     }
 
@@ -742,26 +742,30 @@ PlasmaComponents.Page {
                 readonly property bool colorsScriptIsPresent: universalSettings.colorsScriptIsPresent
 
                 PlasmaComponents.Label {
-                    text: i18n("Theme")
+                    text: i18n("Palette")
                 }
 
                 LatteComponents.ComboBox {
                     Layout.fillWidth: true
                     model: [
                         {
-                            name: i18nc("plasma theme colors", "Plasma"),
+                            name: i18nc("plasma theme colors", "Plasma Theme Colors"),
                             value: LatteContainment.Types.PlasmaThemeColors
                         },{
-                            name: i18nc("dark theme colors", "Dark"),
+                            name: i18nc("dark theme colors", "Dark Colors"),
                             value: LatteContainment.Types.DarkThemeColors
                         },{
-                            name: i18nc("light theme colors", "Light"),
+                            name: i18nc("light theme colors", "Light Colors"),
                             value: LatteContainment.Types.LightThemeColors
                         },{
+                            name: i18nc("layout custom colors", "Layout Custom Colors"),
+                            value: LatteContainment.Types.LayoutThemeColors
+                        },
+                        /*,{
                             name: i18nc("reverse plasma theme colors", "Reverse"),
                             value: LatteContainment.Types.ReverseThemeColors
-                        },{
-                            name: i18nc("smart theme colors", "Smart"),
+                        }*/{
+                            name: i18nc("smart theme colors", "Smart Colors Based On Desktop Background"),
                             value: LatteContainment.Types.SmartThemeColors
                         }
                     ]
@@ -778,6 +782,8 @@ PlasmaComponents.Page {
                         } else if (colors === LatteContainment.Types.LightThemeColors) {
                             return 2;
                         } else if (colors === LatteContainment.Types.ReverseThemeColors) {
+                            return 3;
+                        } else if (colors === LatteContainment.Types.LayoutThemeColors) {
                             return 3;
                         } else if (colors === LatteContainment.Types.SmartThemeColors) {
                             return 4;
@@ -859,7 +865,7 @@ PlasmaComponents.Page {
 
                     PlasmaComponents.Label {
                         enabled: showBackground.checked
-                        text: i18n("Size")
+                        text: i18n("Thickness")
                         horizontalAlignment: Text.AlignLeft
                     }
 
@@ -919,7 +925,7 @@ PlasmaComponents.Page {
                         enabled: showBackground.checked //&& !blockOpacityAdjustment
 
                         value: plasmoid.configuration.panelTransparency
-                        from: 0
+                        from: -1
                         to: 100
                         stepSize: 1
                         wheelEnabled: false
@@ -944,7 +950,7 @@ PlasmaComponents.Page {
 
                     PlasmaComponents.Label {
                         enabled: transparencySlider.enabled
-                        text: i18nc("number in percentage, e.g. 85 %","%1 %", transparencySlider.value)
+                        text: transparencySlider.value >= 0 ? i18nc("number in percentage, e.g. 85 %","%1 %", transparencySlider.value) : i18nc("Default word abbreviation", "Def.")
                         horizontalAlignment: Text.AlignRight
                         Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
                         Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4

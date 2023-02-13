@@ -16,6 +16,7 @@
 #include "../data/generictable.h"
 #include "../layout/abstractlayout.h"
 #include "../layout/centrallayout.h"
+#include "../layouts/storage.h"
 #include "../settings/universalsettings.h"
 #include "../templates/templatesmanager.h"
 #include "../tools/commontools.h"
@@ -51,6 +52,10 @@ Manager::Manager(QObject *parent)
 
 Manager::~Manager()
 {
+    if (memoryUsage() == Latte::MemoryUsage::MultipleLayouts) {
+        m_importer->setMultipleLayoutsStatus(Latte::MultipleLayouts::Paused);
+    }
+
     m_importer->deleteLater();
     m_syncedLaunchers->deleteLater();
 
@@ -230,7 +235,7 @@ bool Manager::switchToLayout(QString layoutName,  MemoryUsage::LayoutsMemory new
 
 void Manager::loadLayoutOnStartup(QString layoutName)
 {
-    QStringList layouts = m_importer->checkRepairMultipleLayoutsLinkedFile();
+ /*   QStringList layouts = m_importer->checkRepairMultipleLayoutsLinkedFile();
 
     //! Latte didn't close correctly, maybe a crash
     if (layouts.size() > 0) {
@@ -254,7 +259,7 @@ void Manager::loadLayoutOnStartup(QString layoutName)
                                        KMessageBox::NoExec,
                                        QString());
         dialog->show();
-    }
+    }*/
 
     m_synchronizer->switchToLayout(layoutName);
 }
@@ -332,6 +337,8 @@ void Manager::setOnActivities(QString layoutName, QStringList activities)
 
 void Manager::cleanupOnStartup(QString path)
 {
+    Layouts::Storage::self()->removeAllClonedViews(path);
+
     KSharedConfigPtr filePtr = KSharedConfig::openConfig(path);
 
     KConfigGroup actionGroups = KConfigGroup(filePtr, "ActionPlugins");

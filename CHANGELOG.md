@@ -1,5 +1,114 @@
 #**CHANGELOG**#
 
+#### Version 0.10.8
+* multi-screen: fix docks/panels screen repositioning when the user specifies different screen for dock or panel
+* fix borders identification for autopositioning vertical docks/panels
+* fix vertical docks/panels autopositioning which is relevant to top and bottom panels
+* position kwin edges helper window properly on startup after offscreen positioning
+* x11: center applets config window on screen
+* do not shrink vertical docks/panels on startup after switching from offscreen to onscreen
+* make dock and panel work properly when they undo their removal
+
+#### Version 0.10.7
+* multi-screen: always trust KWin under X11 in order to set correct struts for panels and docks
+* automatically offset centered applets when the left or right widgets overlap the centered one
+* windowsgobelow: show properly during startup
+* kwinedges: calculate accurately their size and position
+* improve applets dragging during rearrange and configure widgets mode
+* hide thin tooltips properly at some cases that were stack
+* fill one pixel gap of justify splitters during rearrange and configure widgets mode
+* fix, windows belong to screen whenever they are touching it. This way a window could belong in more than one screens and be taken into account for visibility modes and active window tracking
+* remove file extensions for layouts and templates properly in order to identify the layout or template name
+* fix build for Freebsd
+* x11: force OnAllDesktops for all docks and panels during creation
+* fix empty availableScreenRegion broadcast to Plasma
+
+#### Version 0.10.6
+* fix build with Qt 5.12
+* initialize windows tracking properly
+
+#### Version 0.10.5
+* improve startup behavior and reduce visual glitches whenever a dock or panel is first appearing
+* prepare code for Plasma LookNFeel packages
+* improve applets dragging behavior when changing their position in a dock or panel
+* ignore window states when kwin window manager is showing desktop effect
+* reposition vertical docks and panels when surrounding docks and panels are changing their maximum length independent of their visibility mode
+* reduce/increase maximum length through canvas ruler even when the minimum length equals the maximum length
+* do not update kwin borderless windows behavior when it is not really changed for the current running layouts structure
+* copied and duplicated docks or panels should not have AllBorders background enabled with no reason
+* ignore maxlength that equals zero for fillLength applets as Qt already doing
+* support 10bit systems under x11 and not show only a blurred area in that case
+* multiscreen: disable struts under x11 for docks or panels that stand between two or more different screens
+* tasks: reassign launchers group properly when a dock or panel view is recreated for any of reasons
+* tasks: identify vivaldi audio stream properly and show the audio badge in that case
+* cmd: support --add-dock through command line even when application is not already running
+* cmd: provide option to print all available templates
+* cmd: provide option to enable/disable application autostart
+
+#### Version 0.10.4
+* Feature Indicators: extend Indicators API in order for indicators to be able to animate their parent icon including when a task launcher is activated
+* Feature Indicators: expose more Icon properties to indicators
+* Important: Fix 25secs startup freezes from QDBusInterface desktop geometry calls
+* Important: Fix startup delays because KWin was reconfiguring even though it was needed when BorderlessMaximized windows were activated
+* Important: Remove plasma workarounds that were hiding plasma desktop bug #445495
+* wayland: hide black line in the dock/panel center for AlwaysVisible visibility mode
+* LastActiveWindow: update last activated window properties when changed
+* initialize VirtualDesktopsWrappingAround property in a proper way
+* plasmoid: decouple bouncing launcher animation for task real removal animation
+* fix binding loops for Indexer qml ability
+* respect applets maximumLength when equals zero
+
+#### Version 0.10.3
+* support GlobalScale in combination with PLASMA_USE_QT_SCALING properly under X11 environment
+* add CornerMargin option for latte and plasma indicators and expose it through the indicators api
+* unblock visibility mode properly when Meta is used to show an application launcher such as Win11, Simple menu etc.
+* fix focus behavior when applets are requesting input such as knotes applet
+* expose indicators iconOffsetX/Y value to applets
+* enable/disable "CanBeAboveFullscreenWindows" option properly
+* disable GtkFrameExtents for docks and panels that ByPassWindowManager ("CanBeAboveFullscreenWindows" option) under X11
+* draw always a contrasted border for latte indicator
+* simplify latte indicator implementation
+* enforce RoundToIconSize for all applets always and as such the Items Size is always respected. If the user has blur issues with its icons, he should specify an items size that is provided by its icons theme. For example, 16px., 24px., 36px., 48px.
+* identify kickofflegacy applet properly
+* fix popup positioning for plasma-style popups when the dock background is using very big corner roundness
+* prevent session manager from restoring latte just like Spectacle is already doing
+* respect virtual desktops navigation wrapping around option
+* expose translations for default dock and panel templates
+
+#### Version 0.10.2
+* fix crash from containmentactions loading after kde frameworks 5.86
+* Fitt's Law fix for vertical panels in justify alignment
+* Fitt's Law fix for applets touching the screen edge and at the same time using parabolic effect
+* hide all context menu actions if the user has chosen it
+* add missing translations for docks/panels dialog
+
+#### Version 0.10.1
+* fix autostart crash: do not show settings dialog too early
+* fix build for Fedora
+* specify product name in KAboutData to receive bug reports correctly at kde bug tracker
+
+#### Version 0.10.0
+* 2200 commits after version 0.9
+* plenty of bug fixes and improvements
+* Highlights:
+  -- multiple docks and panels on the same screen edge
+  -- floating docks and panels
+  -- support background radius and background shadow size
+  -- ten different visibility modes
+  -- ondemand sidebars support
+  -- inform Plasma Desktop about panels and docks geometries (since plasma 5.18)
+  -- inform window managers about docks visible area (GTK_FRAME_EXTENTS support)
+  -- provide internal Widgets Explorer dialog and thus being able to be used completely in other desktop environments such as GNOME and XFCE
+  -- support multiple Latte Tasks in the same dock or panel
+  -- improve applets positioning for Justify alignment in latte panels
+  -- support latte centric applets that can use parabolic effect easily
+  -- support Plasma Margins Area Separators
+  -- user can specify custom color scheme per layout
+  -- redesign and improve all layouts dialogs
+  -- use templates for all layout functionality
+  -- provide move/copy/paste functionality for docks and panels
+  -- export layouts and docks/panels as templates for public use
+
 #### Version 0.9.11
 
 * fix context menu for classic systray items such as Viber and Telegram

@@ -24,7 +24,9 @@ Ability.ParabolicEffectPrivate {
         return (maxSize/metrics.iconSize);
     }
     factor.maxZoom: Math.max(factor.zoom, animations.requirements.zoomFactor)
-    restoreZoomIsBlocked: restoreZoomIsBlockedFromApplet || (view && view.contextMenuIsShown)
+    factor.marginThicknessZoomInPercentage: settings ? settings.thicknessMarginInfluence : 1.0 //100%
+    restoreZoomIsBlocked: restoreZoomIsBlockedFromApplet || layouts.contextMenuIsShown
+    spread: settings ? settings.parabolicSpread : 3
 
     currentParabolicItem: view ? view.parabolic.currentItem : null
 }

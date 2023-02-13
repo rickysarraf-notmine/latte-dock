@@ -7,6 +7,7 @@
 #define GENERICSETTINGSTOOLS_H
 
 // Qt
+#include <QColor>
 #include <QPainter>
 #include <QPalette>
 #include <QRect>
@@ -46,6 +47,10 @@ void drawIcon(QPainter *painter, const QStyleOption &option, const QString &icon
 QRect remainedFromLayoutIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
 void drawLayoutIcon(QPainter *painter, const QStyleOption &option, const bool &isBackgroundFile, const QString &iconName, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
 
+//! color scheme icon
+QRect remainedFromColorSchemeIcon(const QStyleOption &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
+void drawColorSchemeIcon(QPainter *painter, const QStyleOption &option, const QColor &textColor, const QColor &backgroundColor,Qt::AlignmentFlag alignment = Qt::AlignLeft, int lengthMargin = -1, int thickMargin = -1);
+
 //! changes indicator
 QRect remainedFromChangesIndicator(const QStyleOptionViewItem &option);
 void drawChangesIndicator(QPainter *painter, const QStyleOptionViewItem &option);
@@ -55,8 +60,8 @@ QRect remainedFromCheckBox(const QStyleOptionButton &option, Qt::AlignmentFlag a
 void drawCheckBox(QPainter *painter, const QStyleOptionButton &option, Qt::AlignmentFlag alignment = Qt::AlignLeft, const QWidget *widget = nullptr);
 
 //! screen icon
-QRect remainedFromScreenDrawing(const QStyleOption &option, const int &maxIconSize = -1);
-QRect drawScreen(QPainter *painter, const QStyleOption &option, QRect screenGeometry, const int &maxIconSize = -1, const float brushOpacity = 1.0); // returns screen available rect
+QRect remainedFromScreenDrawing(const QStyleOption &option, bool drawMultipleScreens, const int &maxIconSize = -1);
+QRect drawScreen(QPainter *painter, const QStyleOption &option, bool drawMultipleScreens, QRect screenGeometry, const int &maxIconSize = -1, const float brushOpacity = 1.0); // returns screen available rect
 
 int screenMaxLength(const QStyleOption &option, const int &maxIconSize = -1);
 

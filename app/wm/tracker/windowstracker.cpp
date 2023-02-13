@@ -19,6 +19,9 @@
 #include "../../view/view.h"
 #include "../../view/positioner.h"
 
+// Qt
+#include <KWindowSystem>
+
 namespace Latte {
 namespace WindowSystem {
 namespace Tracker {
@@ -37,6 +40,11 @@ Windows::Windows(AbstractWindowInterface *parent)
     m_updateApplicationDataTimer.setInterval(1500);
     m_updateApplicationDataTimer.setSingleShot(true);
     connect(&m_updateApplicationDataTimer, &QTimer::timeout, this, &Windows::updateApplicationData);
+
+    //! delayed update all hints
+    m_updateAllHintsTimer.setInterval(300);
+    m_updateAllHintsTimer.setSingleShot(true);
+    connect(&m_updateAllHintsTimer, &QTimer::timeout, this, &Windows::updateAllHints);
 
     init();
 }
@@ -62,8 +70,6 @@ Windows::~Windows()
 
 void Windows::init()
 {
-    connect(m_wm->corona(), &Plasma::Corona::availableScreenRectChanged, this, &Windows::updateAvailableScreenGeometries);
-
     connect(m_wm, &AbstractWindowInterface::windowChanged, this, [&](WindowId wid) {
         m_windows[wid] = m_wm->requestInfo(wid);
         updateAllHints();
@@ -94,7 +100,7 @@ void Windows::init()
         //! for some reason this is needed in order to update properly activeness values
         //! when the active window changes the previous active windows should be also updated
         for (const auto view : m_views.keys()) {
-            WindowId lastWinId = m_views[view]->lastActiveWindow()->winId();
+            WindowId lastWinId = m_views[view]->lastActiveWindow()->currentWinId();
             if ((lastWinId) != wid && m_windows.contains(lastWinId)) {
                 m_windows[lastWinId] = m_wm->requestInfo(lastWinId);
             }
@@ -106,19 +112,9 @@ void Windows::init()
         emit activeWindowChanged(wid);
     });
 
-    connect(m_wm, &AbstractWindowInterface::currentDesktopChanged, this, [&] {
-        updateAllHints();
-    });
-
-    connect(m_wm, &AbstractWindowInterface::currentActivityChanged, this, [&] {
-        if (m_wm->corona()->layoutsManager()->memoryUsage() == MemoryUsage::MultipleLayouts) {
-            //! this is needed in MultipleLayouts because there is a chance that multiple
-            //! layouts are providing different available screen geometries in different Activities
-            updateAvailableScreenGeometries();
-        }
-
-        updateAllHints();
-    });
+    connect(m_wm, &AbstractWindowInterface::currentDesktopChanged, this, &Windows::updateAllHints);
+    connect(m_wm, &AbstractWindowInterface::currentActivityChanged,  this, &Windows::updateAllHints);    
+    connect(m_wm, &AbstractWindowInterface::isShowingDesktopChanged,  this, &Windows::updateAllHints);
 }
 
 void Windows::initLayoutHints(Latte::Layout::GenericLayout *layout)
@@ -165,7 +161,7 @@ void Windows::addView(Latte::View *view)
 
     m_views[view] = new TrackedViewInfo(this, view);
 
-    updateAvailableScreenGeometries();
+    updateScreenGeometries();
 
     //! Consider Layouts
     addRelevantLayout(view);
@@ -174,8 +170,11 @@ void Windows::addView(Latte::View *view)
         addRelevantLayout(view);
     });
 
+    connect(view, &Latte::View::screenGeometryChanged, this, &Windows::updateScreenGeometries);
+
     connect(view, &Latte::View::isTouchingBottomViewAndIsBusyChanged, this, &Windows::updateExtraViewHints);
     connect(view, &Latte::View::isTouchingTopViewAndIsBusyChanged, this, &Windows::updateExtraViewHints);
+    connect(view, &Latte::View::absoluteGeometryChanged, this, &Windows::updateAllHintsAfterTimer);
 
     updateAllHints();
 
@@ -694,18 +693,43 @@ bool Windows::isActive(const WindowInfoWrap &winfo)
 
 bool Windows::isActiveInViewScreen(Latte::View *view, const WindowInfoWrap &winfo)
 {
-    return (winfo.isValid() && winfo.isActive() &&  !winfo.isMinimized()
-            && m_views[view]->availableScreenGeometry().contains(winfo.geometry().center()));
+    auto screenGeometry = m_views[view]->screenGeometry();
+
+    if (KWindowSystem::isPlatformX11() && view->devicePixelRatio() != 1.0) {
+        //!Fix for X11 Global Scale, I dont think this could be pixel perfect accurate
+        auto factor = view->devicePixelRatio();
+        screenGeometry = QRect(qRound(screenGeometry.x() * factor),
+                               qRound(screenGeometry.y() * factor),
+                               qRound(screenGeometry.width() * factor),
+                               qRound(screenGeometry.height() * factor));
+    }
+
+    return (winfo.isValid()
+            && winfo.isActive()
+            && !winfo.isMinimized()
+            && screenGeometry.intersects(winfo.geometry()));
 }
 
 bool Windows::isMaximizedInViewScreen(Latte::View *view, const WindowInfoWrap &winfo)
 {
+    auto screenGeometry = m_views[view]->screenGeometry();
+
+    if (KWindowSystem::isPlatformX11() && view->devicePixelRatio() != 1.0) {
+        //!Fix for X11 Global Scale, I dont think this could be pixel perfect accurate
+        auto factor = view->devicePixelRatio();
+        screenGeometry = QRect(qRound(screenGeometry.x() * factor),
+                               qRound(screenGeometry.y() * factor),
+                               qRound(screenGeometry.width() * factor),
+                               qRound(screenGeometry.height() * factor));
+    }
+
     //! updated implementation to identify the screen that the maximized window is present
     //! in order to avoid: https://bugs.kde.org/show_bug.cgi?id=397700
-    return (winfo.isValid() && !winfo.isMinimized()
+    return (winfo.isValid()
+            && !winfo.isMinimized()
             && !winfo.isShaded()
             && winfo.isMaximized()
-            && m_views[view]->availableScreenGeometry().contains(winfo.geometry().center()));
+            && screenGeometry.intersects(winfo.geometry()));
 }
 
 bool Windows::isTouchingView(Latte::View *view, const WindowSystem::WindowInfoWrap &winfo)
@@ -723,6 +747,15 @@ bool Windows::isTouchingViewEdge(Latte::View *view, const QRect &windowgeometry)
     bool inViewLengthBoundaries{false};
 
     QRect screenGeometry = view->screenGeometry();
+
+    if (KWindowSystem::isPlatformX11() && view->devicePixelRatio() != 1.0) {
+        //!Fix for X11 Global Scale, I dont think this could be pixel perfect accurate
+        auto factor = view->devicePixelRatio();
+        screenGeometry = QRect(qRound(screenGeometry.x() * factor),
+                               qRound(screenGeometry.y() * factor),
+                               qRound(screenGeometry.width() * factor),
+                               qRound(screenGeometry.height() * factor));
+    }
 
     bool inCurrentScreen{screenGeometry.contains(windowgeometry.topLeft()) || screenGeometry.contains(windowgeometry.bottomRight())};
 
@@ -784,20 +817,24 @@ void Windows::cleanupFaultyWindows()
 }
 
 
-void Windows::updateAvailableScreenGeometries()
+void Windows::updateScreenGeometries()
 {
     for (const auto view : m_views.keys()) {
-        if (m_views[view]->enabled()) {
-            int currentscrid = view->positioner()->currentScreenId();
-            QString activityid = view->layout() ? view->layout()->lastUsedActivity() : QString();
+        if (m_views[view]->screenGeometry() != view->screenGeometry()) {
+            m_views[view]->setScreenGeometry(view->screenGeometry());
 
-            QRect tempAvailableScreenGeometry = m_wm->corona()->availableScreenRectWithCriteria(currentscrid, activityid, m_ignoreModes, {});
-
-            if (tempAvailableScreenGeometry != m_views[view]->availableScreenGeometry()) {
-                m_views[view]->setAvailableScreenGeometry(tempAvailableScreenGeometry);
+            if (m_views[view]->enabled()) {
                 updateHints(view);
             }
         }
+    }
+}
+
+void Windows::updateAllHintsAfterTimer()
+{
+    if (!m_updateAllHintsTimer.isActive()) {
+        updateAllHints();
+        m_updateAllHintsTimer.start();
     }
 }
 
@@ -884,6 +921,10 @@ void Windows::updateHints(Latte::View *view)
 
     //! First Pass
     for (const auto &winfo : m_windows) {
+        if (m_wm->isShowingDesktop()) {
+            break;
+        }
+
         if (!existsFaultyWindow && (winfo.wid()<=0 || winfo.geometry() == QRect(0, 0, 0, 0))) {
             existsFaultyWindow = true;
         }
@@ -938,7 +979,7 @@ void Windows::updateHints(Latte::View *view)
             }
         }
 
-        //qDebug() << "TRACKING |       ACTIVE:"<< foundActive <<  " ACT_CUR_SCR:" << foundTouchInCurScreen << " MAXIM:"<<foundMaximizedInCurScreen;
+        //qDebug() << "TRACKING |       ACTIVE:"<< foundActive <<  " ACT_TOUCH_CUR_SCR:" << foundActiveTouchInCurScreen << " MAXIM:"<<foundMaximizedInCurScreen;
         //qDebug() << "TRACKING |       TOUCHING VIEW EDGE:"<< touchingViewEdge << " TOUCHING VIEW:" << foundTouchInCurScreen;
     }
 
@@ -947,7 +988,7 @@ void Windows::updateHints(Latte::View *view)
     }
 
     //! PASS 2
-    if (foundActiveInCurScreen && !foundActiveTouchInCurScreen) {
+    if (!m_wm->isShowingDesktop() && foundActiveInCurScreen && !foundActiveTouchInCurScreen) {
         //! Second Pass to track also Child windows if needed
 
         //qDebug() << "Windows Array...";
@@ -1050,6 +1091,10 @@ void Windows::updateHints(Latte::Layout::GenericLayout *layout) {
     WindowId maxWinId;
 
     for (const auto &winfo : m_windows) {
+        if (m_wm->isShowingDesktop()) {
+            break;
+        }
+
         if (!existsFaultyWindow && (winfo.wid()<=0 || winfo.geometry() == QRect(0, 0, 0, 0))) {
             existsFaultyWindow = true;
         }

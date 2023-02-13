@@ -8,6 +8,7 @@
 // local
 #include "currentscreentracker.h"
 #include "allscreenstracker.h"
+#include "../positioner.h"
 #include "../view.h"
 #include "../../lattecorona.h"
 #include "../../wm/tracker/windowstracker.h"
@@ -35,7 +36,6 @@ WindowsTracker::WindowsTracker(Latte::View *parent)
     });
 
     m_wm->windowsTracker()->addView(m_latteView);
-
     emit allScreensChanged();
     emit currentScreenChanged();
 }

@@ -24,13 +24,11 @@ import "../debugger" as Debugger
 
 Item {
     id: appletItem
-
-    visible: false
     width: isInternalViewSplitter && !root.inConfigureAppletsMode ? 0 : computeWidth
     height: isInternalViewSplitter && !root.inConfigureAppletsMode ? 0 : computeHeight
 
     //any applets that exceed their limits should not take events from their surrounding applets
-    clip: !isSeparator && !parabolicAreaLoader.active
+    //clip: !isSeparator && !parabolicAreaLoader.active
 
     signal mousePressed(int x, int y, int button);
     signal mouseReleased(int x, int y, int button);
@@ -57,6 +55,7 @@ Item {
     //! Fill Applet(s)
     property bool inFillCalculations: false //temp record, is used in calculations for fillWidth,fillHeight applets
     property bool isAutoFillApplet:  isRequestingFill
+    property bool isParabolicEdgeSpacer: false
 
     property bool isRequestingFill: {
         if (!applet || !applet.Layout) {
@@ -64,7 +63,7 @@ Item {
         }
 
         if ((root.isHorizontal && applet.Layout.fillWidth===true)
-             || (root.isVertical && applet.Layout.fillHeight===true)) {
+                || (root.isVertical && applet.Layout.fillHeight===true)) {
             return !isHidden;
         }
 
@@ -78,10 +77,13 @@ Item {
                                                        && root.dragOverlay.currentApplet
                                                        && root.dragOverlay.pressed
 
-    property bool userBlocksColorizing: false
     property bool appletBlocksColorizing: !communicator.requires.latteSideColoringEnabled || communicator.indexerIsSupported
     property bool appletBlocksParabolicEffect: communicator.requires.parabolicEffectLocked
-    property bool lockZoom: false
+    readonly property bool lockZoom: !parabolicEffectIsSupported
+                                     || appletBlocksParabolicEffect
+                                     || (fastLayoutManager && applet && (fastLayoutManager.lockedZoomApplets.indexOf(applet.id)>=0))
+    readonly property bool userBlocksColorizing: appletBlocksColorizing
+                                                 || (fastLayoutManager && applet && (fastLayoutManager.userBlocksColorizingApplets.indexOf(applet.id)>=0))
 
     property bool isActive: (isExpanded
                              && !appletItem.communicator.indexerIsSupported
@@ -90,10 +92,12 @@ Item {
 
     property bool isExpanded: false
 
-    property bool isHidden: !root.inConfigureAppletsMode
-                            && ((applet && applet.status === PlasmaCore.Types.HiddenStatus ) || isInternalViewSplitter)
+    property bool isScheduledForDestruction: (fastLayoutManager && applet && fastLayoutManager.appletsInScheduledDestruction.indexOf(applet.id)>=0)
+    property bool isHidden: (!root.inConfigureAppletsMode && ((applet && applet.status === PlasmaCore.Types.HiddenStatus ) || isInternalViewSplitter)) || isScheduledForDestruction
     property bool isInternalViewSplitter: (internalSplitterId > 0)
     property bool isZoomed: false
+    property bool isPlaceHolder: false
+    property bool isPressed: viewSignalsConnector.pressed
     property bool isSeparator: applet && (applet.pluginName === "audoban.applet.separator"
                                           || applet.pluginName === "org.kde.latte.separator")
     property bool isSpacer: applet && (applet.pluginName === "org.kde.latte.spacer")
@@ -291,6 +295,10 @@ Item {
     //! are set by the indicator
     readonly property int iconOffsetX: indicatorBackLayer.level.requested.iconOffsetX
     readonly property int iconOffsetY: indicatorBackLayer.level.requested.iconOffsetY
+    readonly property int iconTransformOrigin: indicatorBackLayer.level.requested.iconTransformOrigin
+    readonly property real iconOpacity: indicatorBackLayer.level.requested.iconOpacity
+    readonly property real iconRotation: indicatorBackLayer.level.requested.iconRotation
+    readonly property real iconScale: indicatorBackLayer.level.requested.iconScale
 
     property real computeWidth: root.isVertical ? wrapper.width :
                                                   hiddenSpacerLeft.width+wrapper.width+hiddenSpacerRight.width
@@ -326,7 +334,7 @@ Item {
     property Item userRequests: null
 
     property bool containsMouse: parabolicAreaLoader.active && parabolicAreaLoader.item.containsMouse
-    property bool pressed: viewSignalsConnector.pressed || clickedAnimation.running
+    property bool pressed: viewSignalsConnector.pressed
 
 
     //// BEGIN :: Animate Applet when a new applet is dragged in the view
@@ -463,28 +471,46 @@ Item {
     function checkIndex(){
         index = -1;
 
+        var startAppletIndex = -1;
         for(var i=0; i<appletItem.layouter.startLayout.count; ++i){
             var child = layoutsContainer.startLayout.children[i];
+            if (child.isParabolicEdgeSpacer || child.isInternalViewSplitter) {
+                continue;
+            }
+
+            startAppletIndex++;
             if (child === appletItem){
-                index = layoutsContainer.startLayout.beginIndex + i;
+                index = layoutsContainer.startLayout.beginIndex + startAppletIndex;
                 break;
             }
         }
 
+        var mainAppletIndex = -1;
         for(var i=0; i<appletItem.layouter.mainLayout.count; ++i){
             var child = layoutsContainer.mainLayout.children[i];
+            if (child.isParabolicEdgeSpacer || child.isInternalViewSplitter) {
+                continue;
+            }
+
+            mainAppletIndex++;
             if (child === appletItem){
-                index = layoutsContainer.mainLayout.beginIndex + i;
+                index = layoutsContainer.mainLayout.beginIndex + mainAppletIndex;
                 break;
             }
         }
 
+        var endAppletIndex = -1;
         for(var i=0; i<appletItem.layouter.endLayout.count; ++i){
             var child = layoutsContainer.endLayout.children[i];
+            if (child.isParabolicEdgeSpacer || child.isInternalViewSplitter) {
+                continue;
+            }
+
+            endAppletIndex++;
             if (child === appletItem){
                 //create a very high index in order to not need to exchange hovering messages
                 //between layoutsContainer.mainLayout and layoutsContainer.endLayout
-                index = layoutsContainer.endLayout.beginIndex + i;
+                index = layoutsContainer.endLayout.beginIndex + endAppletIndex;
                 break;
             }
         }
@@ -567,9 +593,7 @@ Item {
     }
 
     onIsAutoFillAppletChanged: updateParabolicEffectIsSupported();
-
-    onLockZoomChanged: fastLayoutManager.saveOptions();
-    onUserBlocksColorizingChanged: fastLayoutManager.saveOptions();
+    onParentChanged: checkIndex()
 
     Component.onCompleted: {
         checkIndex();
@@ -660,7 +684,9 @@ Item {
             blockWheel = true;
             scrollDelayer.start();
 
-            if (appletItem.containsPos(pos) && root.latteView.extendedInterface.appletIsExpandable(applet.id)) {
+            if (appletItem.containsPos(pos)
+                    && (root.latteView.extendedInterface.appletIsExpandable(applet.id)
+                        || (root.latteView.extendedInterface.appletIsActivationTogglesExpanded(applet.id)))) {
                 var angle = angleDelta.y / 8;
                 var expanded = root.latteView.extendedInterface.appletIsExpanded(applet.id);
 
@@ -725,9 +751,10 @@ Item {
 
                 isActive: appletItem.isActive
                 isHovered: appletItem.containsMouse
+                isPressed: appletItem.isPressed
                 isSquare: appletItem.isSquare
 
-                hasActive: isActive
+                hasActive: appletItem.isActive
 
                 scaleFactor: appletItem.wrapper.zoomScale
                 panelOpacity: root.background.currentOpacity
@@ -826,10 +853,12 @@ Item {
                 readonly property int badgeThickness: {
                     if (plasmoid.location === PlasmaCore.Types.BottomEdge
                             || plasmoid.location === PlasmaCore.Types.RightEdge) {
-                        return ((appletItem.metrics.iconSize + appletItem.metrics.margin.thickness) * wrapper.zoomScale) + appletItem.metrics.margin.screenEdge;
+                        var marginthickness = appletItem.metrics.margin.tailThickness * wrapper.zoomMarginScale;
+                        return (appletItem.metrics.iconSize * wrapper.zoomScale) + marginthickness + appletItem.metrics.margin.screenEdge;
                     }
 
-                    return ((appletItem.metrics.iconSize + appletItem.metrics.margin.thickness) * wrapper.zoomScale);
+                    var marginthickness = appletItem.metrics.margin.headThickness * wrapper.zoomMarginScale;
+                    return (appletItem.metrics.iconSize * wrapper.zoomScale) + marginthickness;
                 }
 
                 ShortcutBadge{
@@ -1019,33 +1048,4 @@ Item {
             easing.type: Easing.InCubic
         }
     }
-
-
-    /////Clicked Animation/////
-    SequentialAnimation{
-        id: clickedAnimation
-        alwaysRunToEnd: true
-        running: appletItem.isSquare && !originalAppletBehavior && appletItem.pressed
-                 && (appletItem.animations.speedFactor.current > 0) && !indicators.info.providesClickedAnimation
-
-        ParallelAnimation{
-            PropertyAnimation {
-                target: wrapper.clickedEffect
-                property: "brightness"
-                to: -0.35
-                duration: appletItem.animations.duration.large
-                easing.type: Easing.OutQuad
-            }
-        }
-        ParallelAnimation{
-            PropertyAnimation {
-                target: wrapper.clickedEffect
-                property: "brightness"
-                to: 0
-                duration: appletItem.animations.duration.large
-                easing.type: Easing.OutQuad
-            }
-        }
-    }
-    //END animations
 }

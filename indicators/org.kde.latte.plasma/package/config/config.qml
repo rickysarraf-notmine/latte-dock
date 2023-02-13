@@ -18,7 +18,7 @@ ColumnLayout {
     Layout.fillWidth: true
 
     LatteComponents.SubHeader {
-        text: i18n("Padding")
+        text: i18n("Style")
     }
 
     RowLayout {
@@ -26,7 +26,7 @@ ColumnLayout {
         spacing: units.smallSpacing
 
         PlasmaComponents.Label {
-            text: i18n("Length")
+            text: i18n("Padding")
             horizontalAlignment: Text.AlignLeft
         }
 
@@ -59,6 +59,42 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: units.smallSpacing
+
+        PlasmaComponents.Label {
+            text: i18n("Corner Margin")
+            horizontalAlignment: Text.AlignLeft
+        }
+
+        LatteComponents.Slider {
+            id: backgroundCornerMarginSlider
+            Layout.fillWidth: true
+
+            value: Math.round(indicator.configuration.backgroundCornerMargin * 100)
+            from: 0
+            to: 100
+            stepSize: 1
+            wheelEnabled: false
+
+            onPressedChanged: {
+                if (!pressed) {
+                    indicator.configuration.backgroundCornerMargin = value / 100;
+                }
+            }
+        }
+
+        PlasmaComponents.Label {
+            text: i18nc("number in percentage, e.g. 85 %","%1 %", currentValue)
+            horizontalAlignment: Text.AlignRight
+            Layout.minimumWidth: theme.mSize(theme.defaultFont).width * 4
+            Layout.maximumWidth: theme.mSize(theme.defaultFont).width * 4
+
+            readonly property int currentValue: backgroundCornerMarginSlider.value
+        }
+    }
+
     LatteComponents.SubHeader {
         text: i18n("Options")
     }
@@ -66,7 +102,7 @@ ColumnLayout {
     LatteComponents.CheckBoxesColumn {
         Layout.topMargin: 1.5 * units.smallSpacing
 
-        LatteComponents.CheckBox {
+       /* LatteComponents.CheckBox {
             Layout.maximumWidth: dialog.optionsWidth
             text: i18n("Reverse indicator style")
             value: indicator.configuration.reversed
@@ -74,7 +110,7 @@ ColumnLayout {
             onClicked: {
                 indicator.configuration.reversed = !indicator.configuration.reversed;
             }
-        }
+        }*/
 
         LatteComponents.CheckBox {
             Layout.maximumWidth: dialog.optionsWidth
@@ -86,7 +122,7 @@ ColumnLayout {
             }
         }
 
-        LatteComponents.CheckBox {
+      /*  LatteComponents.CheckBox {
             Layout.maximumWidth: dialog.optionsWidth
             text: i18n("Show indicators for applets")
             tooltip: i18n("Indicators are shown for applets")
@@ -95,6 +131,6 @@ ColumnLayout {
             onClicked: {
                 indicator.configuration.enabledForApplets = !indicator.configuration.enabledForApplets;
             }
-        }
+        }*/
     }
 }

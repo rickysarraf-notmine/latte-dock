@@ -31,7 +31,7 @@ Item {
     property int lastVisibleIndex: -1
 
     //! do not update during dragging/moving applets inConfigureAppletsMode
-    readonly property bool updateIsBlocked:  appletsInParentChange //||  (root.dragOverlay && root.dragOverlay.pressed)
+    readonly property bool updateIsBlocked:  appletsInParentChange //|| (root.dragOverlay && root.dragOverlay.pressed)
 
     Binding{
         target: appletsContainer
@@ -40,11 +40,9 @@ Item {
         value: {
             var space = 0;
             for (var i=0; i<grid.children.length; ++i){
-                if (grid.children[i]
-                        && !grid.children[i].isAutoFillApplet
-                        && !grid.children[i].isHidden) {
+                if (grid.children[i] && (grid.children[i].isPlaceHolder || (!grid.children[i].isAutoFillApplet && !grid.children[i].isHidden && !grid.children[i].isParabolicEdgeSpacer))) {
 
-                    if (grid.children[i].isInternalViewSplitter) {
+                    if (!grid.children[i].isPlaceHolder && grid.children[i].isInternalViewSplitter) {
                         space += root.maxJustifySplitterSize;
                     } else {
                         space = root.isHorizontal ? space + grid.children[i].width : space + grid.children[i].height;
@@ -60,12 +58,11 @@ Item {
         target: appletsContainer
         property:"lengthWithoutSplitters"
         when: appletsContainer && grid && !updateIsBlocked && inNormalFillCalculationsState
+              && !(dragOverlay && dragOverlay.currentApplet && dragOverlay.currentApplet.isInternalViewSplitter /*avoid binding loop when dragging splitters around*/)
         value: {
             var space = 0;
             for (var i=0; i<grid.children.length; ++i){
-                if (grid.children[i]
-                        && !grid.children[i].isInternalViewSplitter
-                        && !grid.children[i].isHidden) {
+                if (grid.children[i] && (grid.children[i].isPlaceHolder || (!grid.children[i].isInternalViewSplitter && !grid.children[i].isHidden))) {
                     space = root.isHorizontal ? space + grid.children[i].width : space + grid.children[i].height;
                 }
             }
@@ -85,7 +82,7 @@ Item {
             for (var i=0; i<grid.children.length; ++i){
                 if (grid.children[i] && grid.children[i].isHidden) {
                     //do nothing
-                } else if (grid.children[i] && grid.children[i].applet){/*internal splitters are ignored this way*/
+                } else if (grid.children[i] && (grid.children[i].isPlaceHolder || grid.children[i].applet)){/*internal splitters are ignored this way*/
                     res = res + 1;
                 }
             }
@@ -102,7 +99,11 @@ Item {
         value: {
             var no = 0;
             for (var i=0; i<grid.children.length; ++i){
-                if (grid.children[i] && grid.children[i].isAutoFillApplet && !grid.children[i].isHidden) {
+                if (grid.children[i]
+                        && !grid.children[i].isParabolicEdgeSpacer
+                        && !grid.children[i].isPlaceHolder
+                        && grid.children[i].isAutoFillApplet
+                        && !grid.children[i].isHidden) {
                     //console.log("fill :::: " + children[i].applet.pluginName);
                     no++;
                 }
@@ -119,7 +120,12 @@ Item {
         value: {
             var no = 0;
             for (var i=0; i<grid.children.length; ++i){
-                if (grid.children[i] && grid.children[i].isRequestingFill && grid.children[i].applet && !grid.children[i].isHidden) {
+                if (grid.children[i]
+                        && !grid.children[i].isParabolicEdgeSpacer
+                        && !grid.children[i].isPlaceHolder
+                        && grid.children[i].isRequestingFill
+                        && grid.children[i].applet
+                        && !grid.children[i].isHidden) {
                     //console.log("fill :::: " + children[i].applet.pluginName);
                     no++;
                 }
@@ -178,9 +184,10 @@ Item {
 
             for (var i=0; i<grid.children.length; ++i){
                 if (grid.children[i]
-                        && grid.children[i].isPlaceHolder
-                        || (grid.children[i].isInternalViewSplitter
-                            && !grid.children[i].isHidden)) {
+                        && !grid.children[i].isParabolicEdgeSpacer
+                        && !grid.children[i].isPlaceHolder
+                        && grid.children[i].isInternalViewSplitter
+                        && !grid.children[i].isHidden) {
                     intsSplits = intsSplits + 1;
                 }
             }

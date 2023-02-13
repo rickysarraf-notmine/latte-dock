@@ -5,6 +5,9 @@
 
 #include "abstractlayout.h"
 
+// local
+#include "../data/layoutdata.h"
+
 // Qt
 #include <QDir>
 #include <QDebug>
@@ -59,6 +62,7 @@ void AbstractLayout::init()
     connect(this, &AbstractLayout::launchersChanged, this, &AbstractLayout::saveConfig);
     connect(this, &AbstractLayout::preferredForShortcutsTouchedChanged, this, &AbstractLayout::saveConfig);
     connect(this, &AbstractLayout::popUpMarginChanged, this, &AbstractLayout::saveConfig);
+    connect(this, &AbstractLayout::schemeFileChanged, this, &AbstractLayout::saveConfig);
     connect(this, &AbstractLayout::versionChanged, this, &AbstractLayout::saveConfig);
 }
 
@@ -116,6 +120,21 @@ QString AbstractLayout::background() const
     } else {
         return m_customBackground;
     }
+}
+
+QString AbstractLayout::schemeFile() const
+{
+    return m_schemeFile;
+}
+
+void AbstractLayout::setSchemeFile(const QString &file)
+{
+    if (m_schemeFile == file) {
+        return;
+    }
+
+    m_schemeFile = file;
+    emit schemeFileChanged();
 }
 
 QString AbstractLayout::textColor() const
@@ -363,6 +382,15 @@ void AbstractLayout::loadConfig()
     m_color = m_layoutGroup.readEntry("color", QString("blue"));
     m_backgroundStyle = static_cast<BackgroundStyle>(m_layoutGroup.readEntry("backgroundStyle", (int)ColorBackgroundStyle));
 
+    m_schemeFile = m_layoutGroup.readEntry("schemeFile", QString(Data::Layout::DEFAULTSCHEMEFILE));
+
+    if (m_schemeFile.startsWith("~")) {
+        m_schemeFile.remove(0, 1);
+        m_schemeFile = QDir::homePath() + m_schemeFile;
+    }
+
+    m_schemeFile = m_schemeFile.isEmpty() || !QFileInfo(m_schemeFile).exists() ? Data::Layout::DEFAULTSCHEMEFILE : m_schemeFile;
+
     QString deprecatedTextColor = m_layoutGroup.readEntry("textColor", QString());
     QString deprecatedBackground = m_layoutGroup.readEntry("background", QString());
 
@@ -396,6 +424,15 @@ void AbstractLayout::saveConfig()
     m_layoutGroup.writeEntry("lastUsedActivity", m_lastUsedActivity);
     m_layoutGroup.writeEntry("popUpMargin", m_popUpMargin);
     m_layoutGroup.writeEntry("preferredForShortcutsTouched", m_preferredForShortcutsTouched);
+
+    QString scmfile = m_schemeFile;
+
+    if (scmfile.startsWith(QDir::homePath())) {
+        scmfile.remove(0, QDir::homePath().size());
+        scmfile = "~" + scmfile;
+    }
+    m_layoutGroup.writeEntry("schemeFile", scmfile == Data::Layout::DEFAULTSCHEMEFILE ? "" : scmfile);
+
     m_layoutGroup.sync();
 }
 

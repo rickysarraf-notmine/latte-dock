@@ -30,7 +30,8 @@ Grid {
         return 1;
     }
 
-    readonly property int length : root.isHorizontal ? childrenRect.width : childrenRect.height;
+    readonly property real length : root.isHorizontal ? width - ignoredLength : height - ignoredLength
+    property real ignoredLength: 0
 
     property int alignment: LatteCore.Types.BottomEdgeCenterAlign
     property int beginIndex: 0

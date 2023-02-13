@@ -11,6 +11,7 @@ import org.kde.plasma.plasmoid 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
+import org.kde.latte.private.app 0.1 as LatteApp
 import org.kde.latte.core 0.2 as LatteCore
 import org.kde.latte.private.containment 0.1 as LatteContainment
 
@@ -31,6 +32,7 @@ Item{
     readonly property alias startLayout : _startLayout
     readonly property alias mainLayout: _mainLayout
     readonly property alias endLayout: _endLayout
+    readonly property alias contextMenuIsShown: contextMenuLayer.menuIsShown
 
     signal contentsLengthChanged();
 
@@ -166,7 +168,8 @@ Item{
         } else if (root.myView.alignment === LatteCore.Types.Center) {
             bestMatchingPadding = Math.max(background.paddings.left, minimumPadding) - minimumPadding;
         } else if (root.myView.alignment === LatteCore.Types.Justify) {
-            bestMatchingPadding = Math.max(background.paddings.left, minimumPadding) - minimumPadding;
+            var backpadding = root.isHorizontal ? background.paddings.left : background.paddings.top;
+            bestMatchingPadding = Math.max(backpadding, minimumPadding) - minimumPadding;
         }
 
         //shadow is already calculated in Justify mode
@@ -188,7 +191,8 @@ Item{
         } else if (root.myView.alignment === LatteCore.Types.Center) {
             bestMatchingPadding = Math.max(background.paddings.right, minimumPadding) - minimumPadding;
         } else if (root.myView.alignment === LatteCore.Types.Justify) {
-            bestMatchingPadding = Math.max(background.paddings.right, minimumPadding) - minimumPadding;
+            var backpadding = root.isHorizontal ? background.paddings.right : background.paddings.bottom;
+            bestMatchingPadding = Math.max(backpadding, minimumPadding) - minimumPadding;
         }
 
         //shadow is already calculated in Justify mode
@@ -249,8 +253,15 @@ Item{
     onYChanged: root.updateEffectsArea();
 
     EnvironmentActions {
+        id: environmentActions
         active: root.scrollAction !== LatteContainment.Types.ScrollNone || root.dragActiveWindowEnabled || root.closeActiveWindowEnabled
         alignment: _mainLayout.alignment
+    }
+
+    LatteApp.ContextMenuLayer {
+        id: contextMenuLayer
+        anchors.fill: parent
+        view: latteView
     }
 
     AppletsContainer {
@@ -286,15 +297,18 @@ Item{
                 return background.offset + lengthTailPadding;
             }
 
-            return (root.myView.alignment === LatteCore.Types.Justify) ? 0 : background.offset
+            return (root.myView.alignment === LatteCore.Types.Justify) ? inJustifyCenterOffset : background.offset - parabolicOffsetting
         }
+
+        ignoredLength: startParabolicSpacer.length + endParabolicSpacer.length
+
+        readonly property alias startParabolicSpacer: _startParabolicSpacer
+        readonly property alias endParabolicSpacer: _endParabolicSpacer
 
         readonly property bool centered: (root.myView.alignment === LatteCore.Types.Center) || (root.myView.alignment === LatteCore.Types.Justify)
         readonly property bool reversed: Qt.application.layoutDirection === Qt.RightToLeft
-
-        //! do not update during dragging/moving applets inConfigureAppletsMode
-        readonly property bool offsetUpdateIsBlocked: ((root.dragOverlay && root.dragOverlay.pressed) || layouter.appletsInParentChange)
-        property bool isCoveredFromBothSideLayouts: false
+        readonly property real parabolicOffsetting: (startParabolicSpacer.length - endParabolicSpacer.length) / 2
+        property int inJustifyCenterOffset: 0
 
         alignment: {
             if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
@@ -348,19 +362,40 @@ Item{
             }
         }
 
+        ParabolicEdgeSpacer {
+            id: _startParabolicSpacer
+            index: mainLayout.beginIndex - 1
+        }
+
+        ParabolicEdgeSpacer {
+            id: _endParabolicSpacer
+            index: mainLayout.beginIndex + mainLayout.children.length - 2
+        }
+
         Binding{
             target: _mainLayout
-            property:"isCoveredFromBothSideLayouts"
-            when: !_mainLayout.offsetUpdateIsBlocked && layouter.inNormalFillCalculationsState
+            property:"inJustifyCenterOffset"
+            when: !layouter.appletsInParentChange && layouter.inNormalFillCalculationsState
             value: {
-                if (!layouter.mainLayout.onlyInternalSplitters && !_mainLayout.offsetUpdateIsBlocked) {
-                    //! one of side layouts goes underneath the main layout when the main layout contains valid applets
-                    var limit = (root.maxLength - mainLayout.length)/2;
-                    return ((startLayout.length > limit ) && (endLayout.length > limit));
+                if (root.myView.alignment !== LatteCore.Types.Justify) {
+                    return 0;
                 }
 
-                //! start and end layouts length exceed the maximum length
-                return (startLayout.length + endLayout.length) > (root.maxLength);
+                var layoutMaxLength = root.maxLength / 2;
+                var sideLayoutMaxLength = layoutMaxLength - mainLayout.length/2;
+                var sideslength = startLayout.length + endLayout.length;
+
+                if (sideslength > root.maxLength) {
+                    return 0;
+                }
+
+                if (startLayout.length > sideLayoutMaxLength) {
+                    return (startLayout.length - sideLayoutMaxLength);
+                } else if (endLayout.length > sideLayoutMaxLength) {
+                    return -(endLayout.length - sideLayoutMaxLength);
+                }
+
+                return 0;
             }
         }
     }

@@ -34,8 +34,11 @@ public:
     SchemeColors *schemeForWindow(WindowId wId);
     void setColorSchemeForWindow(WindowId wId, QString scheme);
 
+    SchemeColors *schemeForFile(const QString &scheme);
+
 signals:
     void colorSchemeChanged(const WindowId &wid);
+    void defaultSchemeChanged();
 
 private slots:
     void updateDefaultScheme();

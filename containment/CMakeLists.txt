@@ -1,5 +1,4 @@
 add_definitions(-DTRANSLATION_DOMAIN=\"plasma_applet_org.kde.latte.containment\")
-configure_file(metadata.desktop.cmake ${CMAKE_CURRENT_SOURCE_DIR}/package/metadata.desktop)
 
 plasma_install_package(package org.kde.latte.containment)
 
@@ -17,7 +16,8 @@ target_link_libraries(lattecontainmentplugin
                       Qt5::Qml
                       Qt5::Quick
                       KF5::Declarative
-                      KF5::Plasma)
+                      KF5::Plasma
+                      KF5::PlasmaQuick)
 
 install(TARGETS lattecontainmentplugin DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/latte/private/containment)
 install(FILES plugin/qmldir DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/latte/private/containment)

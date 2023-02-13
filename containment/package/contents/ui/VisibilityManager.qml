@@ -166,10 +166,14 @@ Item{
     }
 
     function slotMustBeShown() {
+        if (root.inStartup) {
+            slidingAnimationAutoHiddenIn.init();
+            return;
+        }
+
         //! WindowsCanCover case
         if (latteView && latteView.visibility.mode === LatteCore.Types.WindowsCanCover) {
             latteView.visibility.setViewOnFrontLayer();
-            return;
         }
 
         if (!latteView.visibility.isHidden && latteView.positioner.inSlideAnimation) {
@@ -190,6 +194,11 @@ Item{
     }
 
     function slotMustBeHide() {
+        if (root.inStartup) {
+            slidingAnimationAutoHiddenOut.init();
+            return;
+        }
+
         if (inSlidingIn && !inRelocationHiding) {
             /*consider hiding after sliding in has finished*/
             return;
@@ -308,69 +317,83 @@ Item{
 
         //! Input Mask
         if (updateIsEnabled) {
-            var animated = (animations.needBothAxis.count>0);
+            updateInputGeometry();
+        }
+    }
 
-            if (!LatteCore.WindowSystem.compositingActive || animated || latteView.behaveAsPlasmaPanel) {
-                //! clear input mask
-                latteView.effects.inputMask = Qt.rect(0, 0, -1, -1);
+    function updateInputGeometry() {
+        // VisibilityManager.qml tries to workaround faulty onEntered() signals from ParabolicMouseArea
+        // by specifying inputThickness when ParabolicEffect is applied. (inputThickness->animated scenario)
+        var animated = (animations.needBothAxis.count>0);
+
+        if (!LatteCore.WindowSystem.compositingActive || latteView.behaveAsPlasmaPanel) {
+            //! clear input mask
+            latteView.effects.inputMask = Qt.rect(0, 0, -1, -1);
+        } else {
+            var floatingInternalGapAcceptsInput = behaveAsDockWithMask && floatingInternalGapIsForced;
+            var inputThickness;
+
+            if (latteView.visibility.isHidden) {
+                inputThickness = metrics.mask.thickness.hidden;
+            } else if (root.hasFloatingGapInputEventsDisabled) {
+                inputThickness = animated ? metrics.mask.thickness.zoomedForItems - metrics.margins.screenEdge : metrics.totals.thickness;
             } else {
-                var floatingInternalGapAcceptsInput = behaveAsDockWithMask && floatingInternalGapIsForced;
-                var inputThickness;
-
-                if (latteView.visibility.isHidden) {
-                    inputThickness = metrics.mask.thickness.hidden;
-                } else if (root.hasFloatingGapInputEventsDisabled) {
-                    inputThickness = metrics.totals.thickness;
-                } else {
-                    inputThickness = metrics.mask.screenEdge + metrics.totals.thickness;
-                }
-
-                var subtractedScreenEdge = root.hasFloatingGapInputEventsDisabled && !latteView.visibility.isHidden ? metrics.mask.screenEdge : 0;
-
-                var inputGeometry = Qt.rect(0, 0, root.width, root.height);
-
-                //!use view.localGeometry for length properties
-                if (plasmoid.location === PlasmaCore.Types.TopEdge) {
-                    inputGeometry.x = latteView.localGeometry.x;
-                    inputGeometry.y = subtractedScreenEdge;
-
-                    inputGeometry.width = latteView.localGeometry.width;
-                    inputGeometry.height = inputThickness ;
-                } else if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
-                    inputGeometry.x = latteView.localGeometry.x;
-                    inputGeometry.y = root.height - inputThickness - subtractedScreenEdge;
-
-                    inputGeometry.width = latteView.localGeometry.width;
-                    inputGeometry.height = inputThickness;
-                } else if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
-                    inputGeometry.x = subtractedScreenEdge;
-                    inputGeometry.y = latteView.localGeometry.y;
-
-                    inputGeometry.width = inputThickness;
-                    inputGeometry.height = latteView.localGeometry.height;
-                } else if (plasmoid.location === PlasmaCore.Types.RightEdge) {
-                    inputGeometry.x = root.width - inputThickness - subtractedScreenEdge;
-                    inputGeometry.y = latteView.localGeometry.y;
-
-                    inputGeometry.width = inputThickness;
-                    inputGeometry.height = latteView.localGeometry.height;
-                }
-
-                //set the boundaries for latteView local geometry
-                //qBound = qMax(min, qMin(value, max)).
-
-                inputGeometry.x = Math.max(0, Math.min(inputGeometry.x, latteView.width));
-                inputGeometry.y = Math.max(0, Math.min(inputGeometry.y, latteView.height));
-                inputGeometry.width = Math.min(inputGeometry.width, latteView.width);
-                inputGeometry.height = Math.min(inputGeometry.height, latteView.height);
-
-                if (latteView.visibility.isSidebar && latteView.visibility.isHidden) {
-                    //! this way we make sure than no input is accepted anywhere
-                    inputGeometry = Qt.rect(-1, -1, 1, 1);
-                }
-
-                latteView.effects.inputMask = inputGeometry;
+                inputThickness = animated ? metrics.mask.thickness.zoomedForItems : metrics.mask.screenEdge + metrics.totals.thickness;
             }
+
+            var subtractedScreenEdge = root.hasFloatingGapInputEventsDisabled && !latteView.visibility.isHidden ? metrics.mask.screenEdge : 0;
+
+            var inputGeometry = Qt.rect(0, 0, root.width, root.height);
+
+            //!use view.localGeometry for length properties
+            if (plasmoid.location === PlasmaCore.Types.TopEdge) {
+                if (!animated) {
+                    inputGeometry.x = latteView.localGeometry.x;
+                    inputGeometry.width = latteView.localGeometry.width;
+                }
+
+                inputGeometry.y = subtractedScreenEdge;
+                inputGeometry.height = inputThickness;
+            } else if (plasmoid.location === PlasmaCore.Types.BottomEdge) {
+                if (!animated) {
+                    inputGeometry.x = latteView.localGeometry.x;
+                    inputGeometry.width = latteView.localGeometry.width;
+                }
+
+                inputGeometry.y = root.height - inputThickness - subtractedScreenEdge;
+                inputGeometry.height = inputThickness;
+            } else if (plasmoid.location === PlasmaCore.Types.LeftEdge) {
+                if (!animated) {
+                    inputGeometry.y = latteView.localGeometry.y;
+                    inputGeometry.height = latteView.localGeometry.height;
+                }
+
+                inputGeometry.x = subtractedScreenEdge;
+                inputGeometry.width = inputThickness;
+            } else if (plasmoid.location === PlasmaCore.Types.RightEdge) {
+                if (!animated) {
+                    inputGeometry.y = latteView.localGeometry.y;
+                    inputGeometry.height = latteView.localGeometry.height;
+                }
+
+                inputGeometry.x = root.width - inputThickness - subtractedScreenEdge;
+                inputGeometry.width = inputThickness;
+            }
+
+            //set the boundaries for latteView local geometry
+            //qBound = qMax(min, qMin(value, max)).
+
+            inputGeometry.x = Math.max(0, Math.min(inputGeometry.x, latteView.width));
+            inputGeometry.y = Math.max(0, Math.min(inputGeometry.y, latteView.height));
+            inputGeometry.width = Math.min(inputGeometry.width, latteView.width);
+            inputGeometry.height = Math.min(inputGeometry.height, latteView.height);
+
+            if (latteView.visibility.isSidebar && latteView.visibility.isHidden) {
+                //! this way we make sure than no input is accepted anywhere
+                inputGeometry = Qt.rect(-1, -1, 1, 1);
+            }
+
+            latteView.effects.inputMask = inputGeometry;
         }
     }
 
@@ -458,10 +481,19 @@ Item{
             }
 
             latteView.visibility.slideOutFinished();
+            manager.updateInputGeometry();
+
+            if (root.inStartup) {
+                //! when view is first created slide-outs when that animation ends then
+                //! it flags that startup has ended and first slide-in can be started
+                //! this is important because if it is removed then some views
+                //! wont slide-in after startup.
+                root.inStartup = false;
+            }
         }
 
         function init() {
-            if (manager.inRelocationAnimation || !latteView.visibility.blockHiding) {
+            if (manager.inRelocationAnimation || root.inStartup/*used from recreating views*/ || !latteView.visibility.blockHiding) {
                 start();
             }
         }
@@ -491,6 +523,7 @@ Item{
 
         onStarted: {
             latteView.visibility.show();
+            manager.updateInputGeometry();
 
             if (debug.maskEnabled) {
                 console.log("showing animation started...");
