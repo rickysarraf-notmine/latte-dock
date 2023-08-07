@@ -1,3 +1,9 @@
+latte-dock (0.10.8+git1.76302ee7-2) UNRELEASED; urgency=medium
+
+  * Sync packaging updates from KDE Packaging team
+
+ -- Ritesh Raj Sarraf <ritesh.sarraf@collabora.com>  Mon, 07 Aug 2023 13:50:26 +0530
+
 latte-dock (0.10.9-1) unstable; urgency=medium
 
   * Team upload.
