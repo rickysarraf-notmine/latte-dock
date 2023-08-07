@@ -1,6 +1,6 @@
-Changelog: https://cgit.kde.org/latte-dock.git/tree/CHANGELOG.md
-Repository: https://anongit.kde.org/latte-dock.git
-Repository-Browse: https://cgit.kde.org/latte-dock.git/
+Changelog: https://invent.kde.org/plasma/latte-dock/-/blob/master/CHANGELOG.md
+Repository: https://invent.kde.org/plasma/latte-dock.git
+Repository-Browse: https://invent.kde.org/plasma/latte-dock
 Security-Contact: Michail Vourlakos <mvourlakos@gmail.com>
 Bug-Database: https://bugs.kde.org/buglist.cgi?bug_status=UNCONFIRMED&bug_status=CONFIRMED&bug_status=ASSIGNED&bug_status=REOPENED&list_id=1756244&product=lattedock&query_format=advanced
 Bug-Submit: https://bugs.kde.org/enter_bug.cgi?product=lattedock

@@ -4,7 +4,3 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=+all
 
 %:
 	dh $@ --with kf5
-
-override_dh_auto_install:
-	dh_auto_install
-	find debian/latte-dock -name COPYING -print -delete

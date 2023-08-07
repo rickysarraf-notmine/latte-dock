@@ -1,9 +1,106 @@
+latte-dock (0.10.9-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+  * Update standards version to 4.6.1, no changes needed.
+  * Update the GPG signing key.
+  * Remove inactive Uploaders, adding myself as one to avoid leaving the source
+    with no human maintainers.
+
+ -- Pino Toscano <pino@debian.org>  Fri, 02 Dec 2022 22:09:16 +0100
+
 latte-dock (0.10.8+git1.76302ee7-1) UNRELEASED; urgency=medium
 
   * New upstream version 0.10.8+git1.76302ee7
   * Add qtwayland5 to build dependency
 
  -- Ritesh Raj Sarraf <rrs@debian.org>  Mon, 13 Feb 2023 16:45:45 +0530
+
+latte-dock (0.10.8-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+
+ -- Pino Toscano <pino@debian.org>  Wed, 26 Jan 2022 07:39:46 +0100
+
+latte-dock (0.10.7-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+
+ -- Pino Toscano <pino@debian.org>  Tue, 11 Jan 2022 19:48:28 +0100
+
+latte-dock (0.10.6-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+
+ -- Pino Toscano <pino@debian.org>  Sat, 18 Dec 2021 11:58:36 +0100
+
+latte-dock (0.10.5-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+  * debian/upstream/metadata: fix references to the upstream Git repository.
+
+ -- Pino Toscano <pino@debian.org>  Thu, 16 Dec 2021 22:12:10 +0100
+
+latte-dock (0.10.4-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release.
+  * CI: enable the blhc job again.
+
+ -- Pino Toscano <pino@debian.org>  Thu, 18 Nov 2021 19:31:01 +0100
+
+latte-dock (0.10.3-1) unstable; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream version (0.10.3).
+
+ -- Norbert Preining <norbert@preining.info>  Tue, 26 Oct 2021 06:46:07 +0900
+
+latte-dock (0.10.2-1) unstable; urgency=medium
+
+  [ Pino Toscano ]
+  * New upstream release.
+  * Drop removal of COPYING files, as they are no more installed.
+  * CI: disable the blhc job.
+  * Small fixes in copyright.
+
+ -- Norbert Preining <norbert@preining.info>  Mon, 13 Sep 2021 15:14:54 +0900
+
+latte-dock (0.10.1-1) unstable; urgency=medium
+
+  [ Norbert Preining ]
+  * New upstream version (0.10.1).
+  * Bump standards version to 4.6.0, no changes necessary.
+
+ -- Norbert Preining <norbert@preining.info>  Thu, 26 Aug 2021 01:05:24 +0900
+
+latte-dock (0.10.0-1) experimental; urgency=medium
+
+  [ Pino Toscano ]
+  * Switch the transitional libxcb-util0-dev build dependency to
+    libxcb-util-dev.
+  * Bump Standards-Version to 4.5.1, no changes required.
+  * Set field Upstream-Contact in debian/copyright.
+  * Remove obsolete fields Contact, Name from debian/upstream/metadata (already
+    present in machine-readable debian/copyright).
+
+  [ Scarlett Moore ]
+  * New upstream bugfix release.
+  * Update my email address.
+  * Refresh copyright file <- 0.9.10
+    - ca* moved to same copyright as package
+      from kdeev variation.
+    - Reword KDEeV short format.
+
+  [ Norbert Preining ]
+  * New upstream releases (0.9.97, .98, 0.10.0).
+  * Add myself to uploaders.
+
+ -- Norbert Preining <norbert@preining.info>  Sat, 07 Aug 2021 16:18:19 +0900
 
 latte-dock (0.9.12+git0.af64411d-1) norbert; urgency=medium
 
