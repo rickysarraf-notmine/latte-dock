@@ -12,6 +12,7 @@
   <name xml:lang="de">Latte</name>
   <name xml:lang="el">Latte</name>
   <name xml:lang="en-GB">Latte</name>
+  <name xml:lang="eo">Latte</name>
   <name xml:lang="es">Latte</name>
   <name xml:lang="et">Latte</name>
   <name xml:lang="eu">Latte</name>
@@ -48,12 +49,13 @@
   <summary xml:lang="de">Dock für die Massen</summary>
   <summary xml:lang="el">Πίνακες εφαρμογών για όλον τον κόσμο</summary>
   <summary xml:lang="en-GB">Dock for the masses</summary>
+  <summary xml:lang="eo">Doko por la amasoj</summary>
   <summary xml:lang="es">Un dock para las masas</summary>
   <summary xml:lang="et">Dokk massidele</summary>
   <summary xml:lang="eu">Jendartearen kaia</summary>
   <summary xml:lang="fi">Telakka massoille</summary>
   <summary xml:lang="fr">Une barre des tâches pour tout le monde</summary>
-  <summary xml:lang="gl">Doca para as masas</summary>
+  <summary xml:lang="gl">Doca para as masas.</summary>
   <summary xml:lang="id">Dock untuk mengelompokkan</summary>
   <summary xml:lang="it">Area di aggancio per le masse</summary>
   <summary xml:lang="ko">다수의 프로그램을 위한 도구집</summary>
@@ -70,7 +72,7 @@
   <summary xml:lang="tr">Kitleler için rıhtım</summary>
   <summary xml:lang="uk">Панель для усіх</summary>
   <summary xml:lang="x-test">xxDock for the massesxx</summary>
-  <summary xml:lang="zh-CN">给大众使用的停靠栏</summary>
+  <summary xml:lang="zh-CN">符合大多数人使用习惯的停靠栏程序</summary>
   <summary xml:lang="zh-TW">給大眾使用的 Dock</summary>
   <description>
     <p>Latte is a dock based on plasma frameworks that provides an elegant and intuitive experience for your tasks and plasmoids. It animates its contents by using parabolic zoom effect and tries to be there only when it is needed.</p>
@@ -82,6 +84,7 @@
     <p xml:lang="de">Latte-Dock ist ein auf Plasma-Framework-Technologie basierendes Dock für  Anwendungen und Plasmoide, das ein elegantes und intuitives Nutzererlebnis bietet.Seine Inhalte werden mithilfe parabolischer Zoom-Effekte animiert. Latte versucht, immer zur Stelle zu sein, wenn es benötigt wird.</p>
     <p xml:lang="el">Το Latte είναι ένας πίνακας εφαρμογών βασισμένος στις βιβλιοθήκες plasma που εστιάζει στην καλαισθησία και παρέχει ένα όμορφο περιβάλλον για τις εργασίες και τα γραφικά συστατικά σας. Χρησιμοποιεί το παραβολικό εφέ έτσι ώστε να απεικονίσει τα περιεχόμενα του και προσπαθεί να είναι εκεί μόνο όταν το χρειάζεστε.</p>
     <p xml:lang="en-GB">Latte is a dock based on plasma frameworks that provides an elegant and intuitive experience for your tasks and plasmoids. It animates its contents by using parabolic zoom effect and tries to be there only when it is needed.</p>
+    <p xml:lang="eo">Latte estas doko bazita sur plasma-frameworks kiu provizas elegantan kaj intuician sperton por viaj taskoj kaj plasmoidoj. Ĝi animas sian enhavon uzante parabolan zomefikon kaj provas esti tie nur kiam ĝi estas bezonata.</p>
     <p xml:lang="es">Latte es un dock basado en la infraestructura plasma que proporciona una experiencia intuitiva y elegante para sus tareas y plasmoides. Anima sus contenidos usando un efecto de zoom parabólico e intenta estar presente solo cuando se le necesita.</p>
     <p xml:lang="et">Latte on Plasma raamistikul põhinev dokk, mis pakub elegantset ja loomupärast kogemust ülesannete ja plasmoididega majandamisel. Sisu animeeritakse paraboolse suurenduse efekti abil ning dokk püüab olla alati sinu käsutuses, kui sa seda vajad.</p>
     <p xml:lang="eu">Plasma frameworks-en oinarritutako kaia da Latte, bizipen eder eta intuitiboa hornitzen duena zure ataza eta aplikaziotxoentzat. Honek bere edukiak animatzen ditu zoom parabolikoaren efektua erabiliz eta bertan behar denean bakarrik egoten saiatzen da.</p>
@@ -116,6 +119,7 @@
     <p xml:lang="de">„Art In Coffee“</p>
     <p xml:lang="el">"Τέχνη στον Καφέ"</p>
     <p xml:lang="en-GB">"Art In Coffee"</p>
+    <p xml:lang="eo">"Arto En Kafo"</p>
     <p xml:lang="es">"El arte en el café"</p>
     <p xml:lang="et">"Kohvikunst"</p>
     <p xml:lang="eu">"Artea kafean"</p>
@@ -157,6 +161,7 @@
   <developer_name xml:lang="de">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
   <developer_name xml:lang="el">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
   <developer_name xml:lang="en-GB">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
+  <developer_name xml:lang="eo">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
   <developer_name xml:lang="es">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
   <developer_name xml:lang="et">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>
   <developer_name xml:lang="eu">Michail Vourlakos, Johan Smith Agudelo Rodriguez</developer_name>

@@ -1,20 +1,21 @@
 # Copyright (C) YEAR This_file_is_part_of_KDE
 # This file is distributed under the same license as the PACKAGE package.
+# Adrian Chaves <adrian@chaves.io>, 2018, 2019, 2023.
 #
-# Adrian Chaves <adrian@chaves.io>, 2018, 2019.
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2023-01-24 01:00+0000\n"
-"PO-Revision-Date: 2019-07-13 15:29+0200\n"
+"POT-Creation-Date: 2023-11-05 12:36+0000\n"
+"PO-Revision-Date: 2023-09-03 14:10+0200\n"
 "Last-Translator: Adrián Chaves (Gallaecio) <adrian@chaves.io>\n"
-"Language-Team: Galician <kde-i18n-doc@kde.org>\n"
+"Language-Team: Galician <proxecto@trasno.gal>\n"
 "Language: gl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Lokalize 23.04.3\n"
 
 #: package/contents/config/config.qml:13
 #, kde-format
@@ -32,10 +33,9 @@ msgid "Interaction"
 msgstr "Interacción"
 
 #: package/contents/ui/config/ConfigAppearance.qml:55
-#, fuzzy, kde-format
-#| msgid "Icon size: "
+#, kde-format
 msgid "Maximum icon size: "
-msgstr "Tamaño das iconas: "
+msgstr "Tamaño máximo das iconas: "
 
 #: package/contents/ui/config/ConfigAppearance.qml:139
 #, kde-format
@@ -45,7 +45,7 @@ msgstr "Activar as sombras para iconas"
 #: package/contents/ui/config/ConfigAppearance.qml:145
 #, kde-format
 msgid "Show glow around windows points"
-msgstr "Mostrar brillo arredor dos puntos de xanela"
+msgstr "Amosar brillo arredor dos puntos de xanela"
 
 #: package/contents/ui/config/ConfigAppearance.qml:151
 #, kde-format
@@ -85,7 +85,7 @@ msgstr "Nivel: "
 #: package/contents/ui/config/ConfigAppearance.qml:263
 #, kde-format
 msgid "Show a red line on the limit needed for animations"
-msgstr "Mostrar unha liña vermella no límite necesario para animacións"
+msgstr "Amosar unha liña vermella no límite necesario para animacións"
 
 #: package/contents/ui/config/ConfigAppearance.qml:294
 #: package/contents/ui/config/ConfigPanel.qml:144
@@ -104,18 +104,17 @@ msgstr "Rotar polas tarefas coa roda do rato"
 #: package/contents/ui/config/ConfigInteraction.qml:53
 #, kde-format
 msgid "Show window actions in the context menu"
-msgstr "Mostrar as accións da xanela no menú de contexto"
+msgstr "Amosar as accións da xanela no menú de contexto"
 
 #: package/contents/ui/config/ConfigInteraction.qml:59
 #, kde-format
 msgid "Show progress information for tasks"
-msgstr "Mostrar información de progreso das tarefas"
+msgstr "Amosar información de progreso das tarefas"
 
 #: package/contents/ui/config/ConfigInteraction.qml:66
-#, fuzzy, kde-format
-#| msgid "On middle-click:"
+#, kde-format
 msgid "Middle Click"
-msgstr "Clic central:"
+msgstr "Clic central"
 
 #: package/contents/ui/config/ConfigInteraction.qml:72
 #, kde-format
@@ -141,32 +140,28 @@ msgstr "Minimizar ou restaurar a xanela ou grupo"
 #: package/contents/ui/config/ConfigInteraction.qml:76
 #, kde-format
 msgid "Hover"
-msgstr ""
+msgstr "Pasar por riba"
 
 #: package/contents/ui/config/ConfigInteraction.qml:83
-#, fuzzy, kde-format
-#| msgctxt "The click action"
-#| msgid "None"
+#, kde-format
 msgctxt "none action"
 msgid "None"
 msgstr "Ningunha"
 
 #: package/contents/ui/config/ConfigInteraction.qml:84
-#, fuzzy, kde-format
-#| msgid "Preview windows on hovering"
+#, kde-format
 msgid "Preview Windows"
-msgstr "Vista previa das xanelas ao cubrilas"
+msgstr "Obter unha vista previa das xanelas"
 
 #: package/contents/ui/config/ConfigInteraction.qml:85
-#, fuzzy, kde-format
-#| msgid "Highlight windows on hovering"
+#, kde-format
 msgid "Highlight Windows"
-msgstr "Realzar as xanelas ao cubrilas"
+msgstr "Realzar as xanelas"
 
 #: package/contents/ui/config/ConfigInteraction.qml:86
 #, kde-format
 msgid "Preview and Highlight Windows"
-msgstr ""
+msgstr "Obter unha vista previa e realzar as xanelas"
 
 #: package/contents/ui/config/ConfigInteraction.qml:132
 #, kde-format
@@ -176,22 +171,22 @@ msgstr "Filtros"
 #: package/contents/ui/config/ConfigInteraction.qml:143
 #, kde-format
 msgid "Show only tasks from the current screen"
-msgstr "Mostrar só as tarefas na pantalla actual"
+msgstr "Amosar só as tarefas na pantalla actual"
 
 #: package/contents/ui/config/ConfigInteraction.qml:148
 #, kde-format
 msgid "Show only tasks from the current desktop"
-msgstr "Mostrar só as tarefas no escritorio actual"
+msgstr "Amosar só as tarefas no escritorio actual"
 
 #: package/contents/ui/config/ConfigInteraction.qml:153
 #, kde-format
 msgid "Show only tasks from the current activity"
-msgstr "Mostrar só as tarefas na actividade actual"
+msgstr "Amosar só as tarefas na actividade actual"
 
 #: package/contents/ui/config/ConfigPanel.qml:48
 #, kde-format
 msgid "Show bar line for tasks"
-msgstr "Mostrar a liña de barra para as tarefas"
+msgstr "Amosar a liña de barra para as tarefas"
 
 #: package/contents/ui/config/ConfigPanel.qml:55
 #, kde-format
@@ -209,29 +204,26 @@ msgid "Size: "
 msgstr "Tamaño: "
 
 #: package/contents/ui/ContextMenu.qml:51
-#, fuzzy, kde-format
-#| msgid "Add Separator"
+#, kde-format
 msgid "Top Separator"
-msgstr "Engadir un separador"
+msgstr "Liña superior"
 
 #: package/contents/ui/ContextMenu.qml:52
 #: package/contents/ui/ContextMenu.qml:54
-#, fuzzy, kde-format
-#| msgid "Add Separator"
+#, kde-format
 msgid "Left Separator"
-msgstr "Engadir un separador"
+msgstr "Liña esquerda"
 
 #: package/contents/ui/ContextMenu.qml:52
 #: package/contents/ui/ContextMenu.qml:54
-#, fuzzy, kde-format
-#| msgid "Add Separator"
+#, kde-format
 msgid "Right Separator"
-msgstr "Engadir un separador"
+msgstr "Liña dereita"
 
 #: package/contents/ui/ContextMenu.qml:53
 #, kde-format
 msgid "Bottom Separator"
-msgstr ""
+msgstr "Liña inferior"
 
 #: package/contents/ui/ContextMenu.qml:102
 #, kde-format
@@ -239,10 +231,9 @@ msgid "Places"
 msgstr "Lugares"
 
 #: package/contents/ui/ContextMenu.qml:107
-#, fuzzy, kde-format
-#| msgid "Recent Documents"
+#, kde-format
 msgid "Recent Files"
-msgstr "Documentos recentes"
+msgstr "Ficheiros recentes"
 
 #: package/contents/ui/ContextMenu.qml:112
 #, kde-format
@@ -411,19 +402,19 @@ msgstr "Soltar o iniciador"
 #, kde-format
 msgctxt "add separator"
 msgid "Add %1"
-msgstr ""
+msgstr "Engadir unha %1"
 
 #: package/contents/ui/ContextMenu.qml:809
 #: package/contents/ui/ContextMenu.qml:823
 #, kde-format
 msgctxt "remove separator"
 msgid "Remove %1"
-msgstr ""
+msgstr "Retirar a %1"
 
 #: package/contents/ui/ContextMenu.qml:867
 #, kde-format
 msgid "Window"
-msgstr ""
+msgstr "Xanela"
 
 #: package/contents/ui/ContextMenu.qml:879
 #, kde-format
